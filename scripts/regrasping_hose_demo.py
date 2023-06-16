@@ -1,89 +1,32 @@
 import argparse
 import sys
 import time
-from typing import List, Callable
+from typing import Callable
 
 import bosdyn.client
 import bosdyn.client.util
 import numpy as np
 import rerun as rr
-from bosdyn import geometry
-from bosdyn.api import geometry_pb2, manipulation_api_pb2
+from bosdyn.api import manipulation_api_pb2
 from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
 from bosdyn.api.spot import robot_command_pb2 as spot_command_pb2
 from bosdyn.client import math_helpers
-from bosdyn.client.frame_helpers import ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, get_a_tform_b, get_se2_a_tform_b, \
+from bosdyn.client.frame_helpers import ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, get_se2_a_tform_b, \
     HAND_FRAME_NAME
 from bosdyn.client.image import ImageClient, pixel_to_camera_space
+from bosdyn.client.lease import LeaseKeepAlive, LeaseClient
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
 from bosdyn.client.robot_command import (RobotCommandBuilder, block_for_trajectory_cmd)
 from bosdyn.client.robot_state import RobotStateClient
 from google.protobuf import wrappers_pb2
 
-from bosdyn.client.lease import LeaseKeepAlive
-from regrasping_demo.detect_regrasp_point import DetectionError, min_angle_to_x_axis
-from regrasping_demo.get_detections import GetRetryResult, get_hose_and_head_point, get_hose_and_regrasp_point, get_mess
-from conq.utils import blocking_arm_command, block_for_manipulation_api_command, setup_and_stand, rot_2d, open_gripper
-
-HIGH_FORCE_THRESHOLD = 16
-FORCE_BUFFER_SIZE = 15
-
-
-def look_at_command(robot_state_client, x, y, z, roll=0., pitch=np.pi / 2, yaw=0., duration=0.5):
-    """
-    Move the arm to a pose relative to the body
-
-    Args:
-        robot_state_client: RobotStateClient
-        x: x position in meters in front of the body center
-        y: y position in meters to the left of the body center
-        z: z position in meters above the body center
-        roll: roll in radians
-        pitch: pitch in radians
-        yaw: yaw in radians
-        duration: duration in seconds
-    """
-    transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
-
-    hand_pos_in_body = geometry_pb2.Vec3(x=x, y=y, z=z)
-
-    euler = geometry.EulerZXY(roll=roll, pitch=pitch, yaw=yaw)
-    quat_hand = euler.to_quaternion()
-
-    body_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
-    hand_in_body = geometry_pb2.SE3Pose(position=hand_pos_in_body, rotation=quat_hand)
-
-    hand_in_odom = body_in_odom * math_helpers.SE3Pose.from_proto(hand_in_body)
-
-    arm_command = RobotCommandBuilder.arm_pose_command(
-        hand_in_odom.x, hand_in_odom.y, hand_in_odom.z, hand_in_odom.rot.w, hand_in_odom.rot.x,
-        hand_in_odom.rot.y, hand_in_odom.rot.z, ODOM_FRAME_NAME, duration)
-    return arm_command
-
-
-def force_measure(state_client, command_client, force_buffer: List):
-    state = state_client.get_robot_state()
-    manip_state = state.manipulator_state
-    force_reading = manip_state.estimated_end_effector_force_in_hand
-    total_force = np.sqrt(force_reading.x ** 2 + force_reading.y ** 2 + force_reading.z ** 2)
-
-    # circular buffer
-    force_buffer.append(total_force)
-    if len(force_buffer) > FORCE_BUFFER_SIZE:
-        force_buffer.pop(0)
-    recent_avg_total_force = float(np.mean(force_buffer))
-
-    rr.log_scalar("force/x", force_reading.x)
-    rr.log_scalar("force/y", force_reading.y)
-    rr.log_scalar("force/z", force_reading.z)
-    rr.log_scalar("force/total", total_force)
-    rr.log_scalar("force/recent_avg_total", recent_avg_total_force)
-
-    if recent_avg_total_force > HIGH_FORCE_THRESHOLD and len(force_buffer) == FORCE_BUFFER_SIZE:
-        print(f"large force detected! {recent_avg_total_force:.2f}")
-        command_client.robot_command(RobotCommandBuilder.stop_command())
-        return True
-    return False
+from conq.cameras_utils import rot_2d
+from conq.manipulation import blocking_arm_command, block_for_manipulation_api_command, open_gripper, force_measure, \
+    do_grasp, raise_hand
+from conq.perception import look_at_command, get_point_f_retry
+from conq.utils import setup_and_stand
+from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis
+from regrasping_demo.get_detections import get_hose_and_head_point, get_hose_and_regrasp_point, get_mess
 
 
 def pose_in_start_frame(initial_transforms, x, y, angle):
@@ -99,13 +42,6 @@ def pose_in_start_frame(initial_transforms, x, y, angle):
     pose_in_body = math_helpers.SE2Pose(x=x, y=y, angle=angle)
     pose_in_odom = get_se2_a_tform_b(initial_transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME) * pose_in_body
     return pose_in_odom
-
-
-def look_at_scene(command_client, robot_state_client, x=0.56, y=0.1, z=0.55, pitch=0., yaw=0., dx=0., dy=0., dpitch=0.):
-    look_cmd = look_at_command(robot_state_client, x + dx, y + dy, z,
-                               0, pitch + dpitch, yaw,
-                               duration=0.5)
-    blocking_arm_command(command_client, look_cmd)
 
 
 def drag_rope_to_goal(robot_state_client, command_client, initial_transforms, x, y, angle):
@@ -154,50 +90,6 @@ def walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0., y=0.
     if block:
         block_for_trajectory_cmd(command_client, se2_cmd_id)
     return se2_cmd_id
-
-
-def get_point_f_retry(command_client, robot_state_client, image_client, get_point_f: Callable,
-                      y, z, pitch, yaw, **get_point_f_kwargs) -> GetRetryResult:
-    dx = 0
-    dy = 0
-    dpitch = 0
-    while True:
-        look_at_scene(command_client, robot_state_client, y=y, z=z, pitch=pitch, yaw=yaw, dx=dx, dy=dy, dpitch=dpitch)
-        try:
-            return get_point_f(image_client, **get_point_f_kwargs)
-        except DetectionError:
-            dx = np.random.randn() * 0.05
-            dy = np.random.randn() * 0.05
-            dpitch = np.random.randn() * 0.08
-
-
-def do_grasp(robot, manipulation_api_client, image_res, pick_vec):
-    pick_cmd = manipulation_api_pb2.PickObjectInImage(
-        pixel_xy=pick_vec, transforms_snapshot_for_camera=image_res.shot.transforms_snapshot,
-        frame_name_image_sensor=image_res.shot.frame_name_image_sensor,
-        camera_model=image_res.source.pinhole)
-
-    grasp_request = manipulation_api_pb2.ManipulationApiRequest(pick_object_in_image=pick_cmd)
-    cmd_response = manipulation_api_client.manipulation_api_command(manipulation_api_request=grasp_request)
-
-    # execute grasp
-    t0 = time.time()
-    while time.time() - t0 < 15:
-        feedback_request = manipulation_api_pb2.ManipulationApiFeedbackRequest(
-            manipulation_cmd_id=cmd_response.manipulation_cmd_id)
-
-        # Send the request
-        response = manipulation_api_client.manipulation_api_feedback_command(
-            manipulation_api_feedback_request=feedback_request)
-
-        print('Current state: ',
-              manipulation_api_pb2.ManipulationFeedbackState.Name(response.current_state))
-
-        if response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_SUCCEEDED or response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_FAILED:
-            break
-
-        time.sleep(1)
-    robot.logger.info('Finished grasp.')
 
 
 def walk_to_then_grasp(robot, robot_state_client, image_client, command_client, manipulation_api_client,
@@ -308,17 +200,6 @@ def reset_before_regrasp(command_client, initial_transforms):
     open_gripper(command_client)
     blocking_arm_command(command_client, RobotCommandBuilder.arm_stow_command())
     walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, angle=0.0)
-
-
-def raise_hand(command_client, robot_state_client, dz):
-    transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
-    hand_in_body = get_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
-    raise_cmd = RobotCommandBuilder.arm_pose_command(hand_in_body.x, hand_in_body.y, hand_in_body.z + dz,
-                                                     hand_in_body.rot.w, hand_in_body.rot.x, hand_in_body.rot.y,
-                                                     hand_in_body.rot.z,
-                                                     GRAV_ALIGNED_BODY_FRAME_NAME,
-                                                     0.5)
-    blocking_arm_command(command_client, raise_cmd)
 
 
 def arm_pull_rope(config):

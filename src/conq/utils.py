@@ -1,33 +1,5 @@
-import time
-
-import numpy as np
-from bosdyn.api import manipulation_api_pb2, arm_command_pb2, synchronized_command_pb2, robot_command_pb2
-from bosdyn.client.robot_command import RobotCommandBuilder, RobotCommandClient, blocking_stand, block_until_arm_arrives
-
-
-def blocking_arm_command(command_client, cmd):
-    block_until_arm_arrives(command_client, command_client.robot_command(cmd))
-    # FIXME: why is this needed???
-    command_client.robot_command(RobotCommandBuilder.stop_command())
-
-
-def block_for_manipulation_api_command(robot, manipulation_api_client, cmd_response):
-    while True:
-        time.sleep(0.25)
-        feedback_request = manipulation_api_pb2.ManipulationApiFeedbackRequest(
-            manipulation_cmd_id=cmd_response.manipulation_cmd_id)
-
-        # Send the request
-        response = manipulation_api_client.manipulation_api_feedback_command(
-            manipulation_api_feedback_request=feedback_request)
-
-        state_name = manipulation_api_pb2.ManipulationFeedbackState.Name(response.current_state)
-        robot.logger.info(f'Current state: {state_name}')
-
-        if response.current_state == manipulation_api_pb2.MANIP_STATE_DONE:
-            break
-
-    robot.logger.info('Finished.')
+from bosdyn.api import arm_command_pb2, synchronized_command_pb2, robot_command_pb2
+from bosdyn.client.robot_command import RobotCommandBuilder, RobotCommandClient, blocking_stand
 
 
 def make_robot_command(arm_joint_traj):
@@ -54,28 +26,3 @@ def setup_and_stand(robot):
     return command_client
 
 
-def rotate_image_coordinates(pts, width, height, angle):
-    """
-    Rotate image coordinates by rot degrees around the center of the image.
-
-    Args:
-        pts: Nx2 array of image coordinates
-        width: width of image
-        height: height of image
-        angle: rotation in degrees
-    """
-    center = np.array([width / 2, height / 2])
-    new_pts = center + (pts - center) @ rot_2d(np.deg2rad(angle)).T
-    return new_pts
-
-
-def rot_2d(angle):
-    return np.array([
-        [np.cos(angle), -np.sin(angle)],
-        [np.sin(angle), np.cos(angle)],
-    ])
-
-
-def open_gripper(command_client):
-    command_client.robot_command(RobotCommandBuilder.claw_gripper_open_command())
-    time.sleep(1)  # FIXME: how to block on a gripper command?

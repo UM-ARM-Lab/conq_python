@@ -67,3 +67,25 @@ def get_depth_img(image_client, src):
     depth_res = image_client.get_image([depth_req])[0]
     depth_np = image_to_opencv(depth_res, auto_rotate=True)
     return depth_np, depth_res
+
+
+def rotate_image_coordinates(pts, width, height, angle):
+    """
+    Rotate image coordinates by rot degrees around the center of the image.
+
+    Args:
+        pts: Nx2 array of image coordinates
+        width: width of image
+        height: height of image
+        angle: rotation in degrees
+    """
+    center = np.array([width / 2, height / 2])
+    new_pts = center + (pts - center) @ rot_2d(np.deg2rad(angle)).T
+    return new_pts
+
+
+def rot_2d(angle):
+    return np.array([
+        [np.cos(angle), -np.sin(angle)],
+        [np.sin(angle), np.cos(angle)],
+    ])
