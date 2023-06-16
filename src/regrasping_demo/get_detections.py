@@ -13,9 +13,9 @@ from bosdyn.client.image import pixel_to_camera_space
 
 from conq.cameras_utils import get_color_img, get_depth_img
 from conq.exceptions import DetectionError
+from conq.roboflow_utils import get_predictions
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.detect_regrasp_point import get_polys, detect_object_center, detect_regrasp_point_from_hose
-from conq.roboflow_utils import get_predictions
 
 DEFAULT_IDEAL_DIST_TO_OBS = 70
 

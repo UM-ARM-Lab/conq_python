@@ -67,18 +67,17 @@ def check_is_homotopy_diff(start, end, waypoint1, waypoint2, obstacle_centers):
     return not np.allclose(windings, 0)
 
 
-def get_obstacle_centers(predictions, h, w):
+def get_obstacles(predictions, h, w):
     obstacle_polys = get_polys(predictions, "battery")
     obstacle_centers = []
     inflated_obstacles_mask = np.zeros([h, w], dtype=np.uint8)
     for poly in obstacle_polys:
-        obstcle_mask = np.zeros([h, w], dtype=np.uint8)
-        cv2.drawContours(obstcle_mask, [poly], -1, (255), cv2.FILLED)
-        inflated_obstacle_mask = cv2.dilate(obstcle_mask, np.ones([20, 20], dtype=np.uint8))
-        inflated_obstacles_mask = cv2.bitwise_or(inflated_obstacle_mask, obstcle_mask)
-        center = np.mean(np.stack(np.where(obstcle_mask == 255)), axis=1)
-        # switch from [row, col] to [x, y]
-        center = center[::-1]
+        obstacle_mask = np.zeros([h, w], dtype=np.uint8)
+        cv2.drawContours(obstacle_mask, [poly], -1, (255), cv2.FILLED)
+        inflated_obstacle_mask = cv2.dilate(obstacle_mask, np.ones([20, 20], dtype=np.uint8))
+        inflated_obstacles_mask = cv2.bitwise_or(inflated_obstacles_mask, inflated_obstacle_mask)
+        center = np.mean(np.stack(np.where(obstacle_mask == 255)), axis=1)
+        center = center[::-1]  # switch from [row, col] to [x, y]
         obstacle_centers.append(center)
     obstacle_centers = np.array(obstacle_centers)
     return obstacle_centers, inflated_obstacles_mask
@@ -93,39 +92,28 @@ def is_in_collision(inflated_obstacles_mask, sample_px):
     return bool(inflated_obstacles_mask[int(sample_px[1]), int(sample_px[0])])
 
 
-def main():
-    rgb_pil = Image.open("data/1686855846/rgb.png")
-    rgb_np = np.asarray(rgb_pil)
-    with open("data/1686855846/pred.json") as f:
-        predictions = json.load(f)
-
-    # run CDCPD to get the hose state
-    ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
-
-    # detect regrasp point
-    min_cost_idx, best_px = detect_regrasp_point_from_hose(rgb_np, predictions, 50, ordered_hose_points)
-
-    t0 = time.time()
-    plan(rgb_np, predictions, ordered_hose_points, best_px)
-    print("Planning took %.3f seconds" % (time.time() - t0))
+def sample_point(rng, h, w, extend_px):
+    sample_px = rng.uniform(-extend_px, w + extend_px)
+    sample_py = rng.uniform(-extend_px, h + extend_px)
+    sample_px = np.array([sample_px, sample_py])
+    return sample_px
 
 
-def plan(rgb_np, predictions, ordered_hose_points, best_px,
-         dist_tol_px=0.8, robot_reach_px=700, robot_px=np.array([700, -200])):
+def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, dist_tol_px=0.8, robot_reach_px=700):
     h, w = rgb_np.shape[:2]
-    obstacle_centers, inflated_obstacles_mask = get_obstacle_centers(predictions, h, w)
+    obstacle_centers, inflated_obstacles_mask = get_obstacles(predictions, h, w)
 
     start_px = ordered_hose_points[0]
     end_px = ordered_hose_points[-1]
-    dist_to_start0 = np.linalg.norm(best_px - start_px)
-    dist_to_end0 = np.linalg.norm(best_px - end_px)
+    dist_to_start0 = np.linalg.norm(regrasp_px - start_px)
+    dist_to_end0 = np.linalg.norm(regrasp_px - end_px)
 
     rng = np.random.RandomState(0)
     while True:
         sample_px = sample_point(rng, h, w, extend_px=100)
         # sample_px = np.array([250, 50])
 
-        is_diff = check_is_homotopy_diff(start_px, end_px, best_px, sample_px, obstacle_centers)
+        is_diff = check_is_homotopy_diff(start_px, end_px, regrasp_px, sample_px, obstacle_centers)
 
         # Check against inflated obstacles
         is_collision_free = not is_in_collision(inflated_obstacles_mask, sample_px)
@@ -143,21 +131,32 @@ def plan(rgb_np, predictions, ordered_hose_points, best_px,
             ax.imshow(rgb_np, zorder=0)
             viz_predictions(rgb_np, predictions, fig, ax)
             ax.scatter(ordered_hose_points[:, 0], ordered_hose_points[:, 1], c='yellow', zorder=2)
-            ax.scatter(best_px[0], best_px[1], c='orange', marker='*', s=200, zorder=3)
+            ax.scatter(regrasp_px[0], regrasp_px[1], c='orange', marker='*', s=200, zorder=3)
             # ax.set_xlim(-100, 900)
             # ax.set_ylim(800, -100)
-            ax.plot([start_px[0], best_px[0], end_px[0]], [start_px[1], best_px[1], end_px[1]], c='b')
+            ax.plot([start_px[0], regrasp_px[0], end_px[0]], [start_px[1], regrasp_px[1], end_px[1]], c='b')
             ax.plot([start_px[0], sample_px[0], end_px[0]], [start_px[1], sample_px[1], end_px[1]], c='r')
             ax.scatter(obstacle_centers[:, 0], obstacle_centers[:, 1], c='m')
             fig.show()
-            break
+
+            return sample_px
 
 
-def sample_point(rng, h, w, extend_px):
-    sample_px = rng.uniform(-extend_px, w + extend_px)
-    sample_py = rng.uniform(-extend_px, h + extend_px)
-    sample_px = np.array([sample_px, sample_py])
-    return sample_px
+def main():
+    rgb_pil = Image.open("data/1686855846/rgb.png")
+    rgb_np = np.asarray(rgb_pil)
+    with open("data/1686855846/pred.json") as f:
+        predictions = json.load(f)
+
+    # run CDCPD to get the hose state
+    ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
+
+    # detect regrasp point
+    min_cost_idx, best_px = detect_regrasp_point_from_hose(rgb_np, predictions, 50, ordered_hose_points)
+
+    t0 = time.time()
+    plan(rgb_np, predictions, ordered_hose_points, best_px)
+    print("Planning took %.3f seconds" % (time.time() - t0))
 
 
 if __name__ == '__main__':

@@ -7,26 +7,99 @@ import bosdyn.client
 import bosdyn.client.util
 import numpy as np
 import rerun as rr
+from bosdyn import geometry
+from bosdyn.api import geometry_pb2
 from bosdyn.api import manipulation_api_pb2
 from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
 from bosdyn.api.spot import robot_command_pb2 as spot_command_pb2
 from bosdyn.client import math_helpers
-from bosdyn.client.frame_helpers import ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, get_se2_a_tform_b, \
+from bosdyn.client.frame_helpers import get_a_tform_b, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME
+from bosdyn.client.frame_helpers import get_se2_a_tform_b, \
     HAND_FRAME_NAME
 from bosdyn.client.image import ImageClient, pixel_to_camera_space
 from bosdyn.client.lease import LeaseKeepAlive, LeaseClient
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
-from bosdyn.client.robot_command import (RobotCommandBuilder, block_for_trajectory_cmd)
+from bosdyn.client.robot_command import RobotCommandBuilder
+from bosdyn.client.robot_command import (block_for_trajectory_cmd)
 from bosdyn.client.robot_state import RobotStateClient
 from google.protobuf import wrappers_pb2
 
-from conq.cameras_utils import rot_2d
-from conq.manipulation import blocking_arm_command, block_for_manipulation_api_command, open_gripper, force_measure, \
+from conq.cameras_utils import rot_2d, get_color_img, get_depth_img, camera_space_to_pixel, pos_in_cam_to_pos_in_hand
+from conq.exceptions import DetectionError
+from conq.manipulation import block_for_manipulation_api_command, open_gripper, force_measure, \
     do_grasp, raise_hand
-from conq.perception import look_at_command, get_point_f_retry
+from conq.manipulation import blocking_arm_command
+from conq.roboflow_utils import get_predictions
 from conq.utils import setup_and_stand
-from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis
-from regrasping_demo.get_detections import get_hose_and_head_point, get_hose_and_regrasp_point, get_mess
+from regrasping_demo import homotopy_planner
+from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
+from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis, detect_regrasp_point_from_hose
+from regrasping_demo.get_detections import GetRetryResult, np_to_vec2
+from regrasping_demo.get_detections import save_data
+from regrasping_demo.homotopy_planner import get_obstacles
+from regrasping_demo.viz import viz_predictions
+
+
+def hand_pose_cmd(robot_state_client, x, y, z, roll=0., pitch=np.pi / 2, yaw=0., duration=0.5):
+    """
+    Move the arm to a pose relative to the body
+
+    Args:
+        robot_state_client: RobotStateClient
+        x: x position in meters in front of the body center
+        y: y position in meters to the left of the body center
+        z: z position in meters above the body center
+        roll: roll in radians
+        pitch: pitch in radians
+        yaw: yaw in radians
+        duration: duration in seconds
+    """
+    transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
+
+    hand_pos_in_body = geometry_pb2.Vec3(x=x, y=y, z=z)
+
+    euler = geometry.EulerZXY(roll=roll, pitch=pitch, yaw=yaw)
+    quat_hand = euler.to_quaternion()
+
+    body_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
+    hand_in_body = geometry_pb2.SE3Pose(position=hand_pos_in_body, rotation=quat_hand)
+
+    hand_in_odom = body_in_odom * math_helpers.SE3Pose.from_proto(hand_in_body)
+
+    arm_command = RobotCommandBuilder.arm_pose_command(
+        hand_in_odom.x, hand_in_odom.y, hand_in_odom.z, hand_in_odom.rot.w, hand_in_odom.rot.x,
+        hand_in_odom.rot.y, hand_in_odom.rot.z, ODOM_FRAME_NAME, duration)
+    return arm_command
+
+
+def hand_delta_in_body_frame(command_client, robot_state_client, dx, dy, dz):
+    transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
+    hand_in_body = get_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
+    hand_pos_in_body = hand_in_body.position
+    cmd = hand_pose_cmd(robot_state_client, hand_pos_in_body.x + dx, hand_pos_in_body.y + dy, hand_pos_in_body.z + dz)
+    blocking_arm_command(command_client, cmd)
+
+
+def look_at_scene(command_client, robot_state_client, x=0.56, y=0.1, z=0.55, pitch=0., yaw=0., dx=0., dy=0., dpitch=0.):
+    look_cmd = hand_pose_cmd(robot_state_client, x + dx, y + dy, z,
+                             0, pitch + dpitch, yaw,
+                             duration=0.5)
+    blocking_arm_command(command_client, look_cmd)
+
+
+def get_point_f_retry(command_client, robot_state_client, image_client, get_point_f: Callable,
+                      y, z, pitch, yaw, **get_point_f_kwargs) -> GetRetryResult:
+    dx = 0
+    dy = 0
+    dpitch = 0
+    while True:
+        look_at_scene(command_client, robot_state_client, y=y, z=z, pitch=pitch, yaw=yaw, dx=dx, dy=dy, dpitch=dpitch)
+        try:
+            return get_point_f(image_client, **get_point_f_kwargs)
+        except DetectionError:
+            dx = np.random.randn() * 0.05
+            dy = np.random.randn() * 0.05
+            dpitch = np.random.randn() * 0.08
 
 
 def pose_in_start_frame(initial_transforms, x, y, angle):
@@ -158,8 +231,7 @@ def align_with_hose(command_client, get_point_f, image_client, robot_state_clien
 
     # convert to camera frame and ignore the Z. Assumes the camera is pointed straight down.
     best_pt_in_cam = np.array(pixel_to_camera_space(pick_res.image_res, best_px[0], best_px[1], depth=1.0))[:2]
-    # Camera frame is not the same as the frame of the hand, so we do a hacky conversion
-    best_pt_in_hand = np.array([-best_pt_in_cam[1], -best_pt_in_cam[0]])
+    best_pt_in_hand = pos_in_cam_to_pos_in_hand(best_pt_in_cam)
 
     rotate_around_point_in_hand_frame(command_client, robot_state_client, best_pt_in_hand, angle)
     return pick_res, angle
@@ -202,12 +274,19 @@ def reset_before_regrasp(command_client, initial_transforms):
     walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, angle=0.0)
 
 
-def arm_pull_rope(config):
-    bosdyn.client.util.setup_logging(config.verbose)
+def main(argv):
+    np.seterr(all='raise')
+    parser = argparse.ArgumentParser()
+    bosdyn.client.util.add_base_arguments(parser)
+    args = parser.parse_args(argv)
+    rr.init("rope_pull")
+    rr.connect()
+
+    bosdyn.client.util.setup_logging(args.verbose)
 
     # Creates client, robot, and authenticates, and time syncs
     sdk = bosdyn.client.create_standard_sdk('RopePullClient')
-    robot = sdk.create_robot(config.hostname)
+    robot = sdk.create_robot(args.hostname)
     bosdyn.client.util.authenticate(robot)
     robot.time_sync.wait_for_sync()
 
@@ -239,37 +318,93 @@ def arm_pull_rope(config):
         open_gripper(command_client)
 
         # first detect the goal
-        mess_x, mess_y = get_point_f_retry(command_client, robot_state_client, image_client, get_mess,
-                                           y=-0.05, z=0.5,
-                                           pitch=np.deg2rad(20), yaw=-0.3)
-        # offset from the mess because it looks better
-        pre_mess_x = mess_x - 0.35
-        pre_mess_y = mess_y - 0.4
+        # mess_x, mess_y = get_point_f_retry(command_client, robot_state_client, image_client, get_mess,
+        #                                    y=-0.05, z=0.5,
+        #                                    pitch=np.deg2rad(20), yaw=-0.3)
+        # # offset from the mess because it looks better
+        # pre_mess_x = mess_x - 0.35
+        # pre_mess_y = mess_y - 0.4
 
         while True:
-            # Grasp the hose to DRAG
-            walk_to_then_grasp(robot, robot_state_client, image_client, command_client, manipulation_api_client,
-                               get_hose_and_head_point)
-
-            goal_reached = drag_rope_to_goal(robot_state_client, command_client, initial_transforms,
-                                             pre_mess_x, pre_mess_y,
-                                             np.pi / 2)
-            if goal_reached:
-                break
-
-            reset_before_regrasp(command_client, initial_transforms)
-
-            # Grasp the hose to get it UNSTUCK
-            walk_to_then_grasp(robot, robot_state_client, image_client, command_client, manipulation_api_client,
-                               get_hose_and_regrasp_point,
-                               first_get_point_kwargs={'ideal_dist_to_obs': 5},
-                               second_get_point_kwargs={'ideal_dist_to_obs': 40})
+            # # Grasp the hose to DRAG
+            # walk_to_then_grasp(robot, robot_state_client, image_client, command_client, manipulation_api_client,
+            #                    get_hose_and_head_point)
+            #
+            # goal_reached = drag_rope_to_goal(robot_state_client, command_client, initial_transforms,
+            #                                  pre_mess_x, pre_mess_y,
+            #                                  np.pi / 2)
+            # if goal_reached:
+            #     break
+            #
+            # reset_before_regrasp(command_client, initial_transforms)
+            #
+            # # Grasp the hose to get it UNSTUCK
+            # walk_to_then_grasp(robot, robot_state_client, image_client, command_client, manipulation_api_client,
+            #                    get_hose_and_regrasp_point,
+            #                    first_get_point_kwargs={'ideal_dist_to_obs': 5},
+            #                    second_get_point_kwargs={'ideal_dist_to_obs': 40})
 
             # Move the arm to get the hose unstuck
-            # TODO: use homotopy planner here
-            blocking_arm_command(command_client, look_at_command(robot_state_client, 1.0, 0, 0.2))
-            blocking_arm_command(command_client, look_at_command(robot_state_client, 1.0, -0.4, 0.2))
-            blocking_arm_command(command_client, look_at_command(robot_state_client, 1.0, -0.4, -0.5))
+            look_at_scene(command_client, robot_state_client, y=0.0, z=0.5, pitch=np.deg2rad(85))
+            time.sleep(1)  # reduces motion blur?
+            rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
+            depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
+            predictions = get_predictions(rgb_np)
+            save_data(rgb_np, depth_np, predictions)
+
+            _, obstacles_mask = get_obstacles(predictions, rgb_np.shape[0], rgb_np.shape[1])
+
+            obstacle_mask_with_valid_depth = np.logical_and(obstacles_mask, depth_np.squeeze(-1) > 0)
+            nearest_obs_to_hand = np.min(depth_np[np.where(obstacle_mask_with_valid_depth)]) / 1000
+
+            hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
+
+            _, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, 50, hose_points)
+            regrasp_vec2 = np_to_vec2(regrasp_px)
+            # TODO: use distance from hand to floor? do we know this from FK?
+            regrasp_x_in_cam, regrasp_y_in_cam, _ = pixel_to_camera_space(rgb_res, regrasp_px[0], regrasp_px[1],
+                                                                          depth=1.0)
+            regrasp_x, regrasp_y = pos_in_cam_to_pos_in_hand([regrasp_x_in_cam, regrasp_y_in_cam])
+
+            # TODO: tune these values
+            dist_tol_px = 0.2
+            robot_reach_px = 700
+
+            # Get the robot's position in image space
+            transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
+            body_in_hand = get_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
+            hand_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, HAND_FRAME_NAME)
+            body_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
+            robot_px = np.array(camera_space_to_pixel(rgb_res, body_in_hand.x, body_in_hand.y, body_in_hand.z))
+            place_px = homotopy_planner.plan(rgb_np, predictions, hose_points, regrasp_px, robot_px,
+                                             dist_tol_px=dist_tol_px, robot_reach_px=robot_reach_px)
+            place_x_in_cam, place_y_in_cam, _ = pixel_to_camera_space(rgb_res, place_px[0], place_px[1], depth=1.0)
+            place_x, place_y = pos_in_cam_to_pos_in_hand([place_x_in_cam, place_y_in_cam])
+
+            # Compute the desired poses for the hand
+            nearest_obs_height = hand_in_odom.z - nearest_obs_to_hand
+            lift_height = nearest_obs_height + 0.2
+            dplace_x = place_x - regrasp_x
+            dplace_y = place_y - regrasp_y
+
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots()
+            viz_predictions(rgb_np, predictions, fig, ax)
+            ax.imshow(depth_np, alpha=0.5)
+            ax.imshow(obstacles_mask, alpha=0.5)
+            ax.scatter(robot_px[1], robot_px[0], color='red', s=200)
+            fig.show()
+
+            # Do the grasp
+            do_grasp(robot, manipulation_api_client, rgb_res, regrasp_vec2)
+
+            hand_delta_in_body_frame(command_client, robot_state_client, dx=0, dy=0, dz=nearest_obs_height + 0.3)
+            hand_delta_in_body_frame(command_client, robot_state_client, dx=dplace_x, dy=dplace_y, dz=0)
+
+            # Move down to the floor
+            transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
+            hand_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, HAND_FRAME_NAME)
+            hand_delta_in_body_frame(command_client, robot_state_client, dx=0, dy=0, dz=-hand_in_odom.z)
 
             # Open the gripper
             open_gripper(command_client)
@@ -292,16 +427,6 @@ def arm_pull_rope(config):
         print("Done!")
 
     vr.stop_in_thread()
-
-
-def main(argv):
-    np.seterr(all='raise')
-    parser = argparse.ArgumentParser()
-    bosdyn.client.util.add_base_arguments(parser)
-    options = parser.parse_args(argv)
-    rr.init("rope_pull")
-    rr.connect()
-    arm_pull_rope(options)
 
 
 if __name__ == '__main__':

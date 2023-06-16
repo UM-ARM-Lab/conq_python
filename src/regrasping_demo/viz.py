@@ -12,7 +12,8 @@ def viz_predictions(rgb_np, predictions, fig, ax):
             class_colors[class_name] = cm.hsv(rng.uniform())
         poly = pred_to_poly(pred)
         c = class_colors[class_name]
-        ax.plot(poly[:, 0], poly[:, 1], c=c, linewidth=2, zorder=1)
+        ax.plot(poly[:, 0], poly[:, 1], c=c, linewidth=2, zorder=1, label=class_name)
+    ax.legend()
 
 
 def pred_to_poly(pred):

@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from bosdyn.api import image_pb2
+from bosdyn.api.image_pb2 import ImageResponse
 from bosdyn.client.image import build_image_request
 from scipy import ndimage
 
@@ -57,14 +58,14 @@ def image_to_opencv(image, auto_rotate=True):
 
 def get_color_img(image_client, src):
     rgb_req = build_image_request(src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
-    rgb_res = image_client.get_image([rgb_req])[0]
+    rgb_res: ImageResponse = image_client.get_image([rgb_req])[0]
     rgb_np = image_to_opencv(rgb_res, auto_rotate=True)
     return rgb_np, rgb_res
 
 
 def get_depth_img(image_client, src):
     depth_req = build_image_request(src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_DEPTH_U16)
-    depth_res = image_client.get_image([depth_req])[0]
+    depth_res: ImageResponse = image_client.get_image([depth_req])[0]
     depth_np = image_to_opencv(depth_res, auto_rotate=True)
     return depth_np, depth_res
 
@@ -89,3 +90,26 @@ def rot_2d(angle):
         [np.cos(angle), -np.sin(angle)],
         [np.sin(angle), np.cos(angle)],
     ])
+
+
+def camera_space_to_pixel(image_proto, x, y, z):
+    """ Inverse of pixel_to_camera_space """
+    focal_x = image_proto.source.pinhole.intrinsics.focal_length.x
+    principal_x = image_proto.source.pinhole.intrinsics.principal_point.x
+
+    focal_y = image_proto.source.pinhole.intrinsics.focal_length.y
+    principal_y = image_proto.source.pinhole.intrinsics.principal_point.y
+
+    pixel_x = (x * focal_x) / z + principal_x
+    pixel_y = (y * focal_y) / z + principal_y
+
+    return pixel_x, pixel_y
+
+
+def pos_in_cam_to_pos_in_hand(p_in_cam):
+    """
+    Convert a point in camera space to a point in hand space.
+    This does not account for the offset between the camera sensor and the hand frame,
+    and gives only an approximation of the rotation.
+    """
+    return np.array([-p_in_cam[1], -p_in_cam[0]])
