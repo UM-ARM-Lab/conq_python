@@ -12,8 +12,9 @@ from bosdyn.client.frame_helpers import get_a_tform_b, BODY_FRAME_NAME
 from bosdyn.client.image import pixel_to_camera_space
 
 from conq.cameras_utils import get_color_img, get_depth_img
-from regrasping_demo.detect_regrasp_point import get_polys, DetectionError, hose_points_from_predictions, \
-    detect_object_center, viz_detection, detect_regrasp_point_from_hose
+from conq.exceptions import DetectionError
+from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
+from regrasping_demo.detect_regrasp_point import get_polys, detect_object_center, detect_regrasp_point_from_hose
 from conq.roboflow_utils import get_predictions
 
 DEFAULT_IDEAL_DIST_TO_OBS = 70
@@ -109,20 +110,20 @@ def get_hose_and_head_point(image_client):
     predictions = get_predictions(rgb_np)
     save_data(rgb_np, depth_np, predictions)
 
-    hose_points = hose_points_from_predictions(predictions)
+    hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
     head_detection = detect_object_center(predictions, "vacuum_head")
 
-    fig, ax = viz_detection(rgb_np, head_detection)
-    ax.plot(hose_points[:, 0], hose_points[:, 1], c='w', linewidth=4)
-    fig.show()
+    # fig, ax = viz_detection(rgb_np, head_detection)
+    # ax.plot(hose_points[:, 0], hose_points[:, 1], c='w', linewidth=4)
+    # fig.show()
 
     dists = np.linalg.norm(hose_points - head_detection.grasp_px, axis=-1)
     best_idx = int(np.argmin(dists))
     best_px = hose_points[best_idx]
     best_vec2 = np_to_vec2(best_px)
 
-    ax.scatter(best_px[0], best_px[1], c='m', marker='*', s=100, zorder=10)
-    fig.show()
+    # ax.scatter(best_px[0], best_px[1], c='m', marker='*', s=100, zorder=10)
+    # fig.show()
 
     return GetRetryResult(rgb_res, hose_points, best_idx, best_vec2)
 
@@ -134,7 +135,7 @@ def get_hose_and_regrasp_point(image_client, ideal_dist_to_obs=DEFAULT_IDEAL_DIS
     predictions = get_predictions(rgb_np)
     save_data(rgb_np, depth_np, predictions)
 
-    hose_points = hose_points_from_predictions(predictions)
+    hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
 
     best_idx, best_px = detect_regrasp_point_from_hose(rgb_np, predictions, ideal_dist_to_obs, hose_points)
     best_vec2 = np_to_vec2(best_px)

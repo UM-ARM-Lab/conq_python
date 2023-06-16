@@ -1,18 +1,15 @@
-import itertools
 from dataclasses import dataclass
 from typing import List, Dict
 
 import cv2
 import matplotlib.cm as cm
-import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
+from conq.exceptions import DetectionError
 from conq.roboflow_utils import get_predictions
-
-
-class DetectionError(Exception):
-    pass
+from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
+from regrasping_demo.viz import pred_to_poly
 
 
 @dataclass
@@ -20,31 +17,6 @@ class DetectionResult:
     grasp_px: np.ndarray
     candidates_pxs: np.ndarray
     predictions: List[Dict[str, np.ndarray]]
-
-
-def viz_detection(rgb_np, detection):
-    fig, ax = plt.subplots()
-    ax.imshow(rgb_np)
-    rng = np.random.RandomState(0)
-    class_colors = {}
-    for pred in detection.predictions:
-        points = pred["points"]
-        class_name = pred["class"]
-        if class_name not in class_colors:
-            class_colors[class_name] = cm.hsv(rng.uniform())
-        x = [p['x'] for p in points]
-        y = [p['y'] for p in points]
-        c = class_colors[class_name]
-        ax.plot(x, y, c=c, linewidth=2, zorder=1)
-    ax.scatter(detection.candidates_pxs[:, 0], detection.candidates_pxs[:, 1], color="y", marker="x", s=100,
-               label='candidates',
-               zorder=2)
-    ax.scatter(detection.grasp_px[0], detection.grasp_px[1], color="green", marker="o", s=100, label='grasp point',
-               zorder=3)
-    ax.legend()
-    fig.show()
-
-    return fig, ax
 
 
 def get_polys(predictions, desired_class_name):
@@ -59,12 +31,6 @@ def get_polys(predictions, desired_class_name):
         elif class_name == desired_class_name:
             polys.append(points)
     return polys
-
-
-def pred_to_poly(pred):
-    points = pred["points"]
-    points = np.array([(p['x'], p['y']) for p in points], dtype=int)
-    return points
 
 
 def detect_object_center(predictions, class_name):
@@ -86,44 +52,8 @@ def detect_object_center(predictions, class_name):
     return detection
 
 
-def fit_hose_model(hose_polygons, n_clusters=8):
-    from sklearn.cluster import KMeans
-
-    # 8 is the max we can do exhaustively, since it grows exponentially!
-    hose_points = np.concatenate(hose_polygons, 0)
-    n_clusters = int(min(n_clusters, hose_points.shape[0] / 2))
-    kmeans = KMeans(n_clusters=n_clusters, random_state=0, n_init="auto").fit(hose_points)
-    clusters = kmeans.cluster_centers_
-
-    # organize the points into line segments with the shortest total length
-    def _len_cost(points):
-        deltas = points[1:] - points[:-1]
-        lengths = np.linalg.norm(deltas, axis=-1)
-        return lengths.sum()
-
-    min_length = np.inf
-    best_ordered_hose_points = None
-    for permutation in itertools.permutations(range(clusters.shape[0])):
-        ordered_hose_points = clusters[list(permutation)]
-        cost = _len_cost(ordered_hose_points)
-        if cost < min_length:
-            min_length = cost
-            best_ordered_hose_points = ordered_hose_points
-
-    return best_ordered_hose_points
-
-
-def hose_points_from_predictions(predictions):
-    # FIXME: remove blue_rope class!
-    hose_polys = get_polys(predictions, ["vacuum_hose", "vacuum_neck", "blue_rope"])
-    if len(hose_polys) == 0:
-        raise DetectionError("No hose detected")
-    ordered_hose_points = fit_hose_model(hose_polys)
-    return ordered_hose_points
-
-
 def detect_regrasp_point(rgb_np, predictions, ideal_dist_to_obs):
-    ordered_hose_points = hose_points_from_predictions(predictions)
+    ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
     min_cost_idx, best_px = detect_regrasp_point_from_hose(rgb_np, predictions, ideal_dist_to_obs, ordered_hose_points)
 
     return DetectionResult(best_px, ordered_hose_points, predictions)

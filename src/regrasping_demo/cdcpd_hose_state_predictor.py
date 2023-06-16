@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Dict
 
 import cv2
 import matplotlib.pyplot as plt
@@ -14,7 +15,7 @@ from cdcpd_torch.modules.cdcpd_module_arguments import CDCPDModuleArguments
 from cdcpd_torch.modules.cdcpd_network import CDCPDModule
 from cdcpd_torch.modules.cdcpd_parameters import CDCPDParamValues
 from cdcpd_torch.modules.post_processing.configuration import PostProcConfig, PostProcModuleChoice
-from regrasping_demo.detect_regrasp_point import DetectionError
+from conq.exceptions import DetectionError
 
 NUM_POINTS = 15
 METERS_TO_MILLIMETERS = 1e3
@@ -58,8 +59,8 @@ def load_predictions(pred_filepath):
     return predictions
 
 
-def get_masks_and_polygons(predictions, img, rope_classes=["vacuum_hose", "vacuum_neck"],
-                           obstacle_class_name="battery", verbose=False):
+def get_masks_dict(predictions, img, rope_classes=["vacuum_hose", "vacuum_neck"],
+                   obstacle_class_name="battery", verbose=False):
     # create masks based on the polygons for each class
     rope_masks = []
     obstacle_masks = []
@@ -82,8 +83,6 @@ def get_masks_and_polygons(predictions, img, rope_classes=["vacuum_hose", "vacuu
             obstacle_polygons.append(points)
             obstacle_masks.append(mask)
 
-    # if len(obstacle_masks) == 0:
-    #     raise DetectionError("No obstacles detected")
     if len(rope_masks) == 0:
         raise DetectionError("No rope detected")
 
@@ -91,12 +90,8 @@ def get_masks_and_polygons(predictions, img, rope_classes=["vacuum_hose", "vacuu
         "rope": rope_masks,
         "obstacle": obstacle_masks
     }
-    polygons = {
-        "rope": rope_polygons,
-        "obstacle": obstacle_polygons
-    }
 
-    return masks, polygons
+    return masks
 
 
 def show_img_and_mask(img, mask, mask_name):
@@ -256,41 +251,44 @@ def project_tracking_results_to_image_coords(cdcpd_output: torch.Tensor):
     return vertex_uv_coords
 
 
-def visualize_2d_results(bgr_img: np.ndarray, rope_mask_full: np.ndarray,
-                         vertex_uv_coords: np.ndarray, saved_name=None):
+def draw_results(rgb_img: np.ndarray, rope_mask_full: np.ndarray,
+                 vertex_uv_coords: np.ndarray, saved_name=None):
     num_uv_coords = vertex_uv_coords.shape[1]
-    img_viz = bgr_img.copy()
+    img_viz = rgb_img.copy()
 
     img_viz[rope_mask_full.astype(bool), 2] = 255
 
     pt_color = (255, 0, 0)
     for i in range(num_uv_coords):
         pt_coords = vertex_uv_coords[:, i]
-        # img_viz[pt_coords[1], pt_coords[0], :] = pt_color
         cv2.circle(img_viz, center=pt_coords, radius=5, color=pt_color, thickness=-1)
 
-    fig, ax = plt.subplots()
-    ax.imshow(img_viz)
     if saved_name:
+        fig, ax = plt.subplots()
+        ax.imshow(img_viz)
         ax.set_title(saved_name.stem)
         fig.savefig(saved_name)
+        fig.close()
         print("Saved results figure to:", saved_name)
-        plt.close(fig)
+
+    return img_viz
 
 
-def do_single_frame_cdcpd_prediction(bgr_img: np.ndarray, depth_img: np.ndarray, masks,
-                                     do_visualization=False, saved_fig_name=None):
+def single_frame_planar_cdcpd(rgb_np: np.ndarray, predictions: Dict,
+                              do_visualization=False, saved_fig_name=None):
     """Does full CDCPD single frame prediction given input images, predictions, and masks"""
-    rope_mask_full = combine_masks(bgr_img, masks["rope"])
+    masks_dict = get_masks_dict(predictions, rgb_np)
+    rope_mask_full = combine_masks(rgb_np, masks_dict['rope'])
+    depth_np = np.ones((rgb_np.shape[0], rgb_np.shape[1]), dtype=float) * METERS_TO_MILLIMETERS
 
-    if bgr_img.dtype != float:
-        bgr_img = bgr_img.astype(float)
+    if rgb_np.dtype != float:
+        rgb_np = rgb_np.astype(float)
 
-    if bgr_img.max() > 1.0:
-        bgr_img_normed = bgr_img / 255.
+    if rgb_np.max() > 1.0:
+        rgb_np_normed = rgb_np / 255.
 
     # Convert images to clouds and downsample.
-    cloud_unfiltered, cloud_filtered = imgs_to_clouds_np(bgr_img_normed, depth_img, INTRINSIC,
+    cloud_unfiltered, cloud_filtered = imgs_to_clouds_np(rgb_np_normed, depth_np, INTRINSIC,
                                                          rope_mask_full.astype(bool))
     cloud_filtered.downsample(voxel_size=0.02)
 
@@ -320,13 +318,11 @@ def do_single_frame_cdcpd_prediction(bgr_img: np.ndarray, depth_img: np.ndarray,
 
         print(f"Cov: {sigma2} | Cov Best {best_sigma2}")
 
-        Y_cpd = best_Y_cpd
-
     # Project tracking result back to image space coordinates.
-    vertex_uv_coords = project_tracking_results_to_image_coords(Y_cpd)
+    vertex_uv_coords = project_tracking_results_to_image_coords(best_Y_cpd)
 
     if do_visualization:
-        visualize_2d_results(bgr_img.astype(np.uint8), rope_mask_full, vertex_uv_coords,
-                             saved_name=saved_fig_name)
+        draw_results(rgb_np.astype(np.uint8), rope_mask_full, vertex_uv_coords,
+                     saved_name=saved_fig_name)
 
-    return vertex_uv_coords
+    return vertex_uv_coords.T

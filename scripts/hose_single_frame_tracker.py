@@ -5,11 +5,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from regrasping_demo.cdcpd_hose_state_predictor import do_single_frame_cdcpd_prediction, METERS_TO_MILLIMETERS, load_predictions, \
-    get_masks_and_polygons
+from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd, METERS_TO_MILLIMETERS, \
+    load_predictions, \
+    get_masks_dict
 from regrasping_demo.detect_regrasp_point import DetectionError
 
-IMAGE_ROOT = Path("data/1686845198/")
+IMAGE_ROOT = Path("data/1686855846/")
 
 
 def main():
@@ -22,22 +23,23 @@ def main():
         img_path_dict[k] = IMAGE_ROOT / filename
         assert (img_path_dict[k].exists())
 
-    bgr_img = np.array(Image.open(img_path_dict["rgb"].as_posix()))
-    print("BGR Image shape:", bgr_img.shape)
-    print("BGR Image dtype:", bgr_img.dtype)
+    rgb_pil = Image.open(str(img_path_dict["rgb"]))
+    rgb_np = np.array(rgb_pil)
+    print("Image shape:", rgb_np.shape)
+    print("Image dtype:", rgb_np.dtype)
 
     # Not using the depth image as the depth horizontal FOV is too tight. Using single depth value method instead.
-    depth_img = np.ones((bgr_img.shape[0], bgr_img.shape[1]), dtype=float) * METERS_TO_MILLIMETERS
+    depth_img = np.ones((rgb_np.shape[0], rgb_np.shape[1]), dtype=float) * METERS_TO_MILLIMETERS
 
     preds_dict = load_predictions(img_path_dict["pred"])
 
-    masks, polygons = get_masks_and_polygons(preds_dict, bgr_img)
+    masks_dict = get_masks_dict(preds_dict, rgb_np)
 
     # Run The full pipeline on this one example
 
     saved_fig_name = IMAGE_ROOT / "cdcpd_output.png"
-    vertex_uv_coords = do_single_frame_cdcpd_prediction(bgr_img, depth_img, masks, do_visualization=True,
-                                                        saved_fig_name=saved_fig_name)
+    vertex_uv_coords = single_frame_planar_cdcpd(rgb_np, depth_img, masks_dict, do_visualization=True,
+                                                 saved_fig_name=saved_fig_name)
 
     # Run full pipeline on all data
     data_dir = Path("data/")
@@ -59,22 +61,22 @@ def main():
             print("skipping ", subdir)
             continue
 
-        bgr_img = np.array(Image.open(img_path_dict["rgb"].as_posix()))
+        rgb_np = np.array(Image.open(img_path_dict["rgb"].as_posix()))
 
         # Not using the depth image as the depth horizontal FOV is too tight. Using single depth value method instead.
-        depth_img = np.ones((bgr_img.shape[0], bgr_img.shape[1]), dtype=float) * METERS_TO_MILLIMETERS
+        depth_img = np.ones((rgb_np.shape[0], rgb_np.shape[1]), dtype=float) * METERS_TO_MILLIMETERS
 
         preds_dict = load_predictions(img_path_dict["pred"])
 
         try:
-            masks, polygons = get_masks_and_polygons(preds_dict, bgr_img, verbose=False)
+            masks_dict = get_masks_dict(preds_dict, rgb_np, verbose=False)
         except DetectionError:
             print("failed on ", subdir)
             continue
 
         saved_fig_name = subdir / "cdcpd_output.png"
-        ordered_hose_points = do_single_frame_cdcpd_prediction(bgr_img, depth_img, masks, do_visualization=True,
-                                                               saved_fig_name=saved_fig_name)
+        ordered_hose_points = single_frame_planar_cdcpd(rgb_np, depth_img, masks_dict, do_visualization=True,
+                                                        saved_fig_name=saved_fig_name)
 
 
 if __name__ == "__main__":
