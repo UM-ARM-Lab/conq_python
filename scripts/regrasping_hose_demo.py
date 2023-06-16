@@ -361,14 +361,9 @@ def main(argv):
 
             _, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, 50, hose_points)
             regrasp_vec2 = np_to_vec2(regrasp_px)
-            # TODO: use distance from hand to floor? do we know this from FK?
             regrasp_x_in_cam, regrasp_y_in_cam, _ = pixel_to_camera_space(rgb_res, regrasp_px[0], regrasp_px[1],
                                                                           depth=1.0)
             regrasp_x, regrasp_y = pos_in_cam_to_pos_in_hand([regrasp_x_in_cam, regrasp_y_in_cam])
-
-            # TODO: tune these values
-            dist_tol_px = 0.2
-            robot_reach_px = 700
 
             # Get the robot's position in image space
             transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
@@ -376,8 +371,7 @@ def main(argv):
             hand_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, HAND_FRAME_NAME)
             body_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
             robot_px = np.array(camera_space_to_pixel(rgb_res, body_in_hand.x, body_in_hand.y, body_in_hand.z))
-            place_px = homotopy_planner.plan(rgb_np, predictions, hose_points, regrasp_px, robot_px,
-                                             dist_tol_px=dist_tol_px, robot_reach_px=robot_reach_px)
+            place_px = homotopy_planner.plan(rgb_np, predictions, hose_points, regrasp_px, robot_px)
             place_x_in_cam, place_y_in_cam, _ = pixel_to_camera_space(rgb_res, place_px[0], place_px[1], depth=1.0)
             place_x, place_y = pos_in_cam_to_pos_in_hand([place_x_in_cam, place_y_in_cam])
 

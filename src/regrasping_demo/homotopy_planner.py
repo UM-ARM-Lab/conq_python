@@ -5,6 +5,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
+from matplotlib.patches import Circle
 
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.detect_regrasp_point import get_polys, detect_regrasp_point_from_hose
@@ -99,7 +100,7 @@ def sample_point(rng, h, w, extend_px):
     return sample_px
 
 
-def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, dist_tol_px=0.8, robot_reach_px=700):
+def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, dist_tol_px=0.5, robot_reach_px=700):
     h, w = rgb_np.shape[:2]
     obstacle_centers, inflated_obstacles_mask = get_obstacles(predictions, h, w)
 
@@ -108,10 +109,23 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, dist_to
     dist_to_start0 = np.linalg.norm(regrasp_px - start_px)
     dist_to_end0 = np.linalg.norm(regrasp_px - end_px)
 
+    fig, ax = plt.subplots()
+    ax.imshow(rgb_np, zorder=0)
+    viz_predictions(rgb_np, predictions, fig, ax)
+    ax.scatter(ordered_hose_points[:, 0], ordered_hose_points[:, 1], c='yellow', zorder=2)
+    ax.scatter(regrasp_px[0], regrasp_px[1], c='orange', marker='*', s=200, zorder=3)
+    ax.add_patch(Circle((robot_px[0], robot_px[1]), robot_reach_px, color='g', fill=False, linewidth=4, alpha=0.5))
+    ax.add_patch(Circle((start_px[0], start_px[1]), dist_to_start0, color='g', fill=False, linewidth=4, alpha=0.5))
+    ax.add_patch(Circle((end_px[0], end_px[1]), dist_to_end0, color='g', fill=False, linewidth=4, alpha=0.5))
+    ax.plot([start_px[0], regrasp_px[0], end_px[0]], [start_px[1], regrasp_px[1], end_px[1]], c='b')
+    ax.scatter(obstacle_centers[:, 0], obstacle_centers[:, 1], c='m')
+    ax.set_xlim(0, w)
+    ax.set_ylim(h, 0)
+    fig.show()
+
     rng = np.random.RandomState(0)
     while True:
         sample_px = sample_point(rng, h, w, extend_px=100)
-        # sample_px = np.array([250, 50])
 
         is_diff = check_is_homotopy_diff(start_px, end_px, regrasp_px, sample_px, obstacle_centers)
 
@@ -126,17 +140,7 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, dist_to
 
         if all([is_collision_free, is_diff, is_near_start, is_near_end, is_near_robot]):
             print(sample_px)
-
-            fig, ax = plt.subplots()
-            ax.imshow(rgb_np, zorder=0)
-            viz_predictions(rgb_np, predictions, fig, ax)
-            ax.scatter(ordered_hose_points[:, 0], ordered_hose_points[:, 1], c='yellow', zorder=2)
-            ax.scatter(regrasp_px[0], regrasp_px[1], c='orange', marker='*', s=200, zorder=3)
-            # ax.set_xlim(-100, 900)
-            # ax.set_ylim(800, -100)
-            ax.plot([start_px[0], regrasp_px[0], end_px[0]], [start_px[1], regrasp_px[1], end_px[1]], c='b')
             ax.plot([start_px[0], sample_px[0], end_px[0]], [start_px[1], sample_px[1], end_px[1]], c='r')
-            ax.scatter(obstacle_centers[:, 0], obstacle_centers[:, 1], c='m')
             fig.show()
 
             return sample_px
@@ -155,7 +159,7 @@ def main():
     min_cost_idx, best_px = detect_regrasp_point_from_hose(rgb_np, predictions, 50, ordered_hose_points)
 
     t0 = time.time()
-    plan(rgb_np, predictions, ordered_hose_points, best_px)
+    plan(rgb_np, predictions, ordered_hose_points, best_px, robot_px=np.array([320, 700]))
     print("Planning took %.3f seconds" % (time.time() - t0))
 
 
