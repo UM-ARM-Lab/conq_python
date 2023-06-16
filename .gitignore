@@ -1,0 +1,12 @@
+*.idea
+*.jpg
+*.png
+*.swp
+*.pyc
+__pycache__
+*.mp4
+**/venv
+*.avi
+**/data
+**/video
+*.zip
