@@ -267,7 +267,8 @@ def main(argv):
             estop_client = robot.ensure_client(EstopClient.default_service_name)
 
             exit(build_and_run_app(options.hostname, estop_client, options))
-        except Exception:
+        except Exception as e:
+            print(e)
             print("Failed to connect to robot. Retrying in 10 seconds.")
             sleep(10)
 

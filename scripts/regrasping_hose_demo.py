@@ -13,7 +13,8 @@ from bosdyn.api import manipulation_api_pb2
 from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
 from bosdyn.api.spot import robot_command_pb2 as spot_command_pb2
 from bosdyn.client import math_helpers
-from bosdyn.client.frame_helpers import get_a_tform_b, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME
+from bosdyn.client.frame_helpers import get_a_tform_b, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, \
+    GROUND_PLANE_FRAME_NAME
 from bosdyn.client.frame_helpers import get_se2_a_tform_b, \
     HAND_FRAME_NAME
 from bosdyn.client.image import ImageClient, pixel_to_camera_space
@@ -25,7 +26,7 @@ from bosdyn.client.robot_state import RobotStateClient
 from google.protobuf import wrappers_pb2
 
 from conq.cameras_utils import rot_2d, get_color_img, get_depth_img, camera_space_to_pixel, pos_in_cam_to_pos_in_hand
-from conq.exceptions import DetectionError
+from conq.exceptions import DetectionError, GraspingException
 from conq.manipulation import block_for_manipulation_api_command, open_gripper, force_measure, \
     do_grasp, raise_hand
 from conq.manipulation import blocking_arm_command
@@ -35,10 +36,9 @@ from regrasping_demo import homotopy_planner
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.center_object import center_object_step
 from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis, detect_regrasp_point_from_hose
-from regrasping_demo.get_detections import GetRetryResult, np_to_vec2
+from regrasping_demo.get_detections import GetRetryResult, np_to_vec2, get_hose_and_regrasp_point
 from regrasping_demo.get_detections import save_data
 from regrasping_demo.homotopy_planner import get_obstacles
-from regrasping_demo.viz import viz_predictions
 
 
 def hand_pose_cmd(robot_state_client, x, y, z, roll=0., pitch=np.pi / 2, yaw=0., duration=0.5):
@@ -89,14 +89,14 @@ def look_at_scene(command_client, robot_state_client, x=0.56, y=0.1, z=0.55, pit
 
 
 def get_point_f_retry(command_client, robot_state_client, image_client, get_point_f: Callable,
-                      y, z, pitch, yaw, **get_point_f_kwargs) -> GetRetryResult:
+                      y, z, pitch, yaw, **get_point_kwargs) -> GetRetryResult:
     dx = 0
     dy = 0
     dpitch = 0
     while True:
         look_at_scene(command_client, robot_state_client, y=y, z=z, pitch=pitch, yaw=yaw, dx=dx, dy=dy, dpitch=dpitch)
         try:
-            return get_point_f(image_client, **get_point_f_kwargs)
+            return get_point_f(image_client, **get_point_kwargs)
         except DetectionError:
             dx = np.random.randn() * 0.05
             dy = np.random.randn() * 0.05
@@ -166,24 +166,13 @@ def walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0., y=0.
     return se2_cmd_id
 
 
-def walk_to_then_grasp(robot, robot_state_client, image_client, command_client, manipulation_api_client,
-                       get_point_f: Callable, first_get_point_kwargs=None,
-                       second_get_point_kwargs=None):
-    if first_get_point_kwargs is None:
-        first_get_point_kwargs = {}
-    if second_get_point_kwargs is None:
-        second_get_point_kwargs = {}
-
+def walk_to(robot_state_client, image_client, command_client, manipulation_api_client, get_point_f, **get_point_kwargs):
     walk_to_res = get_point_f_retry(command_client, robot_state_client, image_client, get_point_f,
                                     y=0., z=0.4,
-                                    pitch=np.deg2rad(25), yaw=0,
-                                    **first_get_point_kwargs)
+                                    pitch=np.deg2rad(25), yaw=0, **get_point_kwargs)
 
-    # NOTE: if we are going to use the body cameras, which are rotated, we also need to rotate the image coordinates
     # First just walk to in front of that point
     offset_distance = wrappers_pb2.FloatValue(value=1.00)
-    # TODO: what we use ordered_hose_points to walk to a pose?
-    #  the position should be relative to walk_vec we
     walk_to_cmd = manipulation_api_pb2.WalkToObjectInImage(
         pixel_xy=walk_to_res.best_vec2,
         transforms_snapshot_for_camera=walk_to_res.image_res.shot.transforms_snapshot,
@@ -192,17 +181,10 @@ def walk_to_then_grasp(robot, robot_state_client, image_client, command_client, 
         offset_distance=offset_distance)
     walk_to_request = manipulation_api_pb2.ManipulationApiRequest(walk_to_object_in_image=walk_to_cmd)
     walk_response = manipulation_api_client.manipulation_api_command(manipulation_api_request=walk_to_request)
-    block_for_manipulation_api_command(robot, manipulation_api_client, walk_response)
-
-    # Before calling do_grasp, re-orient so the hand stays in place but the body rotates to align Y with the hose
-    align_with_hose(command_client, get_point_f, image_client, robot_state_client, second_get_point_kwargs)
-
-    pick_res = get_point_f_retry(command_client, robot_state_client, image_client,
-                                 get_point_f, y=0., z=0.5, pitch=np.deg2rad(85), yaw=0)
-    do_grasp(robot, manipulation_api_client, pick_res.image_res, pick_res.best_vec2)
+    block_for_manipulation_api_command(manipulation_api_client, walk_response)
 
 
-def align_with_hose(command_client, get_point_f, image_client, robot_state_client, get_point_kwargs):
+def align_with_hose(command_client, robot_state_client, image_client, get_point_f, **get_point_kwargs):
     pick_res = get_point_f_retry(command_client, robot_state_client, image_client,
                                  get_point_f, y=0., z=0.5, pitch=np.deg2rad(85), yaw=0, **get_point_kwargs)
     hose_points = pick_res.hose_points
@@ -269,15 +251,29 @@ def rotate_around_point_in_hand_frame(command_client, robot_state_client, pos: n
     block_for_trajectory_cmd(command_client, se2_cmd_id)
 
 
+def retry_do_grasp(command_client, robot_state_client, manipulation_api_client, image_client, get_point_f,
+                   **get_point_kwargs):
+    for _ in range(3):
+        # Try repeatedly to get a valid point in the image to grasp
+        pick_res = get_point_f_retry(command_client, robot_state_client, image_client, get_point_f, y=0., z=0.5,
+                                     pitch=np.deg2rad(85), yaw=0, **get_point_kwargs)
+        # Try to do the grasp
+        success = do_grasp(manipulation_api_client, robot_state_client, pick_res.image_res, pick_res.best_vec2)
+        if success:
+            return
+
+    raise GraspingException("Failed to grasp")
+
+
 def reset_before_regrasp(command_client, initial_transforms):
     open_gripper(command_client)
     blocking_arm_command(command_client, RobotCommandBuilder.arm_stow_command())
     walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, angle=0.0)
 
 
-def center_obstacles(command_client, robot_state_client, image_client):
+def center_obstacles(command_client, robot_state_client, image_client, motion_scale=0.0004):
     rng = np.random.RandomState(0)
-    while True:
+    for _ in range(5):
         rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
         depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
         predictions = get_predictions(rgb_np)
@@ -290,8 +286,10 @@ def center_obstacles(command_client, robot_state_client, image_client):
             break
 
         # TODO: move by delta_px
-        # NOTE: this assumes body and hand are aligned in terms of X/Y
-        hand_delta_in_body_frame(command_client, robot_state_client, delta_px[0], delta_px[1], dz=0)
+        # FIXME: generalize this math/transform. This assumes that +x in image (column) is -Y in body, etc.
+        # FIXME: should be using camera intrinsics here so motion scale makes more sense
+        dx_in_body, dy_in_body = np.array([-delta_px[1], -delta_px[0]]) * motion_scale
+        hand_delta_in_body_frame(command_client, robot_state_client, dx_in_body, dy_in_body, dz=0)
 
 
 def main(argv):
@@ -323,11 +321,11 @@ def main(argv):
     lease_client.take()
 
     # Video recording
-    from conq.video_recording import VideoRecorder
-    device_num = 4
-    vr = VideoRecorder(device_num, 'video/')
-    vr.start_new_recording(f'demo_{int(time.time())}.mp4')
-    vr.start_in_thread()
+    # from conq.video_recording import VideoRecorder
+    # device_num = 4
+    # vr = VideoRecorder(device_num, 'video/')
+    # vr.start_new_recording(f'demo_{int(time.time())}.mp4')
+    # vr.start_in_thread()
 
     with (LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True)):
         command_client = setup_and_stand(robot)
@@ -347,8 +345,9 @@ def main(argv):
 
         while True:
             # # Grasp the hose to DRAG
-            # walk_to_then_grasp(robot, robot_state_client, image_client, command_client, manipulation_api_client,
-            #                    get_hose_and_head_point)
+            # walk_to(robot_state_client, image_client, command_client, manipulation_api_client, get_hose_and_head_point)
+            # align_with_hose(command_client, robot_state_client, image_client, get_hose_and_head_point)
+            # retry_do_grasp(command_client, robot_state_client, manipulation_api_client, image_client, get_hose_and_head_point)
             #
             # goal_reached = drag_rope_to_goal(robot_state_client, command_client, initial_transforms,
             #                                  pre_mess_x, pre_mess_y,
@@ -359,17 +358,15 @@ def main(argv):
             # reset_before_regrasp(command_client, initial_transforms)
             #
             # # Grasp the hose to get it UNSTUCK
-            # walk_to_then_grasp(robot, robot_state_client, image_client, command_client, manipulation_api_client,
-            #                    get_hose_and_regrasp_point,
-            #                    first_get_point_kwargs={'ideal_dist_to_obs': 5},
-            #                    second_get_point_kwargs={'ideal_dist_to_obs': 40})
+            walk_to(robot_state_client, image_client, command_client, manipulation_api_client,
+                    get_hose_and_regrasp_point, ideal_dist_to_obs=5)
+            align_with_hose(command_client, robot_state_client, image_client, get_hose_and_regrasp_point,
+                            ideal_dist_to_obs=40)
 
             # Center the objects
             center_obstacles(command_client, robot_state_client, image_client)
 
             # Move the arm to get the hose unstuck
-            look_at_scene(command_client, robot_state_client, y=0.0, z=0.5, pitch=np.deg2rad(85))
-            time.sleep(1)  # reduces motion blur?
             rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
             depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
             predictions = get_predictions(rgb_np)
@@ -382,7 +379,7 @@ def main(argv):
 
             hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
 
-            _, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, 50, hose_points)
+            _, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, hose_points, ideal_dist_to_obs=70)
             regrasp_vec2 = np_to_vec2(regrasp_px)
             regrasp_x_in_cam, regrasp_y_in_cam, _ = pixel_to_camera_space(rgb_res, regrasp_px[0], regrasp_px[1],
                                                                           depth=1.0)
@@ -390,36 +387,30 @@ def main(argv):
 
             # Get the robot's position in image space
             transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
-            body_in_hand = get_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
-            hand_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, HAND_FRAME_NAME)
-            robot_px = np.array(camera_space_to_pixel(rgb_res, body_in_hand.x, body_in_hand.y, body_in_hand.z))
-            place_px = homotopy_planner.plan(rgb_np, predictions, hose_points, regrasp_px, robot_px)
+            body_in_hand = get_a_tform_b(transforms, HAND_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
+            hand_in_gpe = get_a_tform_b(transforms, GROUND_PLANE_FRAME_NAME, HAND_FRAME_NAME)
+            hand_to_floor = hand_in_gpe.z
+            body_in_cam = np.array([-body_in_hand.y, -body_in_hand.z])
+            robot_px = np.array(camera_space_to_pixel(rgb_res, body_in_cam[0], body_in_cam[1], hand_to_floor))
+            place_px = homotopy_planner.plan(rgb_np, predictions, hose_points, regrasp_px, robot_px, near_tol=0.1)
             place_x_in_cam, place_y_in_cam, _ = pixel_to_camera_space(rgb_res, place_px[0], place_px[1], depth=1.0)
             place_x, place_y = pos_in_cam_to_pos_in_hand([place_x_in_cam, place_y_in_cam])
 
             # Compute the desired poses for the hand
-            nearest_obs_height = hand_in_odom.z - nearest_obs_to_hand
+            nearest_obs_height = hand_to_floor - nearest_obs_to_hand
             dplace_x = place_x - regrasp_x
             dplace_y = place_y - regrasp_y
 
-            import matplotlib.pyplot as plt
-            fig, ax = plt.subplots()
-            viz_predictions(rgb_np, predictions, fig, ax)
-            ax.imshow(depth_np, alpha=0.5)
-            ax.imshow(obstacles_mask, alpha=0.5)
-            ax.scatter(robot_px[1], robot_px[0], color='red', s=200)
-            fig.show()
-
             # Do the grasp
-            do_grasp(robot, manipulation_api_client, rgb_res, regrasp_vec2)
+            do_grasp(manipulation_api_client, robot_state_client, rgb_res, regrasp_vec2)
 
             hand_delta_in_body_frame(command_client, robot_state_client, dx=0, dy=0, dz=nearest_obs_height + 0.3)
             hand_delta_in_body_frame(command_client, robot_state_client, dx=dplace_x, dy=dplace_y, dz=0)
 
             # Move down to the floor
             transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
-            hand_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, HAND_FRAME_NAME)
-            hand_delta_in_body_frame(command_client, robot_state_client, dx=0, dy=0, dz=-hand_in_odom.z)
+            hand_in_gpe = get_a_tform_b(transforms, GROUND_PLANE_FRAME_NAME, HAND_FRAME_NAME)
+            hand_delta_in_body_frame(command_client, robot_state_client, dx=0, dy=0, dz=-hand_in_gpe.z)
 
             # Open the gripper
             open_gripper(command_client)
@@ -441,7 +432,7 @@ def main(argv):
         walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, angle=0.0)
         print("Done!")
 
-    vr.stop_in_thread()
+        # vr.stop_in_thread()
 
 
 if __name__ == '__main__':

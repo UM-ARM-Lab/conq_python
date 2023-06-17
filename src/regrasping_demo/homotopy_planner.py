@@ -111,7 +111,7 @@ def sample_point(rng, h, w, extend_px):
     return sample_px
 
 
-def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_reach_px=700, extend_px=100,
+def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_reach_px=750, extend_px=100,
          near_tol=0.4):
     h, w = rgb_np.shape[:2]
     obstacle_centers, inflated_obstacles_mask = get_obstacles(predictions, h, w)
@@ -126,6 +126,7 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
     viz_predictions(rgb_np, predictions, fig, ax)
     ax.scatter(ordered_hose_points[:, 0], ordered_hose_points[:, 1], c='yellow', zorder=2)
     ax.scatter(regrasp_px[0], regrasp_px[1], c='orange', marker='*', s=200, zorder=3)
+    ax.scatter(robot_px[0], robot_px[1], c='k', s=500)
     ax.add_patch(Circle((robot_px[0], robot_px[1]), robot_reach_px, color='g', fill=False, linewidth=4, alpha=0.5))
     ax.add_patch(Circle((start_px[0], start_px[1]), dist_to_start0, color='g', fill=False, linewidth=4, alpha=0.5))
     ax.add_patch(Circle((end_px[0], end_px[1]), dist_to_end0, color='g', fill=False, linewidth=4, alpha=0.5))
@@ -214,7 +215,7 @@ def main():
         try:
             t0 = time.time()
             ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
-            min_cost_idx, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, 50, ordered_hose_points,
+            min_cost_idx, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, ordered_hose_points, 50,
                                                                       viz=False)
             plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px + rng.uniform(-25, 25, 2).astype(int))
             print("Planning took %.3f seconds" % (time.time() - t0))

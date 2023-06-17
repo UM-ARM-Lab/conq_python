@@ -15,12 +15,11 @@ def blocking_arm_command(command_client, cmd):
     command_client.robot_command(RobotCommandBuilder.stop_command())
 
 
-def block_for_manipulation_api_command(robot, manipulation_api_client, cmd_response, period=0.25):
+def block_for_manipulation_api_command(manipulation_api_client, cmd_response, period=0.25):
     """
     Block until the manipulation API command is done.
 
     Args:
-        robot: Robot
         manipulation_api_client: ManipulationApiClient
         cmd_response: ManipulationApiCommandResponse
         period: float, seconds to wait between checking the command status
@@ -33,12 +32,12 @@ def block_for_manipulation_api_command(robot, manipulation_api_client, cmd_respo
             manipulation_api_feedback_request=feedback_request)
 
         state_name = manipulation_api_pb2.ManipulationFeedbackState.Name(response.current_state)
-        robot.logger.info(f'Current state: {state_name}')
+        print(f'Current state: {state_name}')
 
         if response.current_state == manipulation_api_pb2.MANIP_STATE_DONE:
             break
 
-    robot.logger.info('Finished.')
+    print('Finished.')
 
 
 def open_gripper(command_client):
@@ -75,7 +74,7 @@ def force_measure(state_client, command_client, force_buffer: List):
     return False
 
 
-def do_grasp(robot, manipulation_api_client, image_res, pick_vec):
+def do_grasp(manipulation_api_client, robot_state_client, image_res, pick_vec):
     pick_cmd = manipulation_api_pb2.PickObjectInImage(
         pixel_xy=pick_vec, transforms_snapshot_for_camera=image_res.shot.transforms_snapshot,
         frame_name_image_sensor=image_res.shot.frame_name_image_sensor,
@@ -94,14 +93,23 @@ def do_grasp(robot, manipulation_api_client, image_res, pick_vec):
         response = manipulation_api_client.manipulation_api_feedback_command(
             manipulation_api_feedback_request=feedback_request)
 
-        print('Current state: ',
-              manipulation_api_pb2.ManipulationFeedbackState.Name(response.current_state))
+        print(manipulation_api_pb2.ManipulationFeedbackState.Name(response.current_state))
 
-        if response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_SUCCEEDED or response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_FAILED:
+        if response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_SUCCEEDED:
+            break
+        elif response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_FAILED:
             break
 
         time.sleep(1)
-    robot.logger.info('Finished grasp.')
+
+    # Now check if we're actually holding something
+    robot_state = robot_state_client.get_robot_state()
+    if robot_state.manipulator_state.is_gripper_holding_item:
+        print('Grasp succeeded')
+        return True
+
+    print('Grasp failed')
+    return False
 
 
 def raise_hand(command_client, robot_state_client, dz):

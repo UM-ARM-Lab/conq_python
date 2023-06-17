@@ -106,9 +106,13 @@ def camera_space_to_pixel(image_proto, x, y, z):
     return pixel_x, pixel_y
 
 
+# FIXME: this functions may be wrong or misleadingly named???
 def pos_in_cam_to_pos_in_hand(p_in_cam):
     """
     Convert a point in camera space to a point in hand space.
+    Camera space is like image space, with +X pointing along the columns and +Y pointing along the rows.
+    Hand space is defined by BD's hand frame, as shown here:
+        https://dev.bostondynamics.com/docs/concepts/arm/arm_concepts.html?#hand-frame
     This does not account for the offset between the camera sensor and the hand frame,
     and gives only an approximation of the rotation.
     """

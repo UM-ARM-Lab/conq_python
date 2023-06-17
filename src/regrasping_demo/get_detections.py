@@ -136,6 +136,6 @@ def get_hose_and_regrasp_point(image_client, ideal_dist_to_obs=DEFAULT_IDEAL_DIS
 
     hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
 
-    best_idx, best_px = detect_regrasp_point_from_hose(rgb_np, predictions, ideal_dist_to_obs, hose_points)
+    best_idx, best_px = detect_regrasp_point_from_hose(rgb_np, predictions, hose_points, ideal_dist_to_obs)
     best_vec2 = np_to_vec2(best_px)
     return GetRetryResult(rgb_res, hose_points, best_idx, best_vec2)

@@ -59,12 +59,12 @@ def get_poly_centroid(x):
 
 def detect_regrasp_point(rgb_np, predictions, ideal_dist_to_obs):
     ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
-    min_cost_idx, best_px = detect_regrasp_point_from_hose(rgb_np, predictions, ideal_dist_to_obs, ordered_hose_points)
+    min_cost_idx, best_px = detect_regrasp_point_from_hose(rgb_np, predictions, ordered_hose_points, ideal_dist_to_obs)
 
     return DetectionResult(best_px, ordered_hose_points, predictions)
 
 
-def detect_regrasp_point_from_hose(rgb_np, predictions, ideal_dist_to_obs, ordered_hose_points, viz=True):
+def detect_regrasp_point_from_hose(rgb_np, predictions, ordered_hose_points, ideal_dist_to_obs, viz=True):
     n = ordered_hose_points.shape[0]
 
     dist_costs = np.zeros(n)
