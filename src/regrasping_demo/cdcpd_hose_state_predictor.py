@@ -59,17 +59,16 @@ def load_predictions(pred_filepath):
     return predictions
 
 
-def get_masks_dict(predictions, img, rope_classes=["vacuum_hose", "vacuum_neck"],
-                   obstacle_class_name="battery", verbose=False):
+def get_masks_dict(predictions, img, rope_classes=None, obstacle_class_name="battery"):
     # create masks based on the polygons for each class
+    if rope_classes is None:
+        rope_classes = ["vacuum_hose", "vacuum_neck"]
     rope_masks = []
     obstacle_masks = []
     rope_polygons = []
     obstacle_polygons = []
     for pred in predictions:
         class_name = pred["class"]
-        if verbose:
-            print("Detected object with class:", class_name)
 
         points = pred["points"]
         points = np.array([(p['x'], p['y']) for p in points], dtype=int)
@@ -117,7 +116,6 @@ def find_rope_start_end_points(cloud_filtered: PointCloud):
     # the far lower right of the robot for the start and end points.
     cloud_pts = cloud_filtered.xyz
     cloud_mean_z_val = cloud_filtered.xyz[2, :].mean()
-    # print("Cloud mean z value:", cloud_mean_z_val)
     upper_left_pt = np.array((-1e5, -1e5, cloud_mean_z_val)).reshape(3, 1)
     lower_right_pt = np.array((1e5, 1e5, cloud_mean_z_val)).reshape(3, 1)
 
@@ -129,9 +127,6 @@ def find_rope_start_end_points(cloud_filtered: PointCloud):
 
     cloud_upper_left_pt = cloud_pts[:, cloud_upper_left_pt_idx]
     cloud_lower_right_pt = cloud_pts[:, cloud_lower_right_pt_idx]
-    # print("Cloud Upper Left Point = ", cloud_upper_left_pt)
-    # print("Cloud Lower Right Point = ", cloud_lower_right_pt)
-    # print("Cloud mean =", cloud_filtered.xyz.mean(axis=1))
 
     return cloud_upper_left_pt, cloud_lower_right_pt
 
@@ -143,7 +138,6 @@ def generate_multiple_start_end_points(cloud_filtered: PointCloud):
     cloud_mins = cloud_pts.min(axis=1)
     cloud_maxes = cloud_pts.max(axis=1)
 
-    print("Cloud mins:", cloud_mins)
 
     # Generate configurations that go from:
     # - top left to bottom right
@@ -315,8 +309,6 @@ def single_frame_planar_cdcpd(rgb_np: np.ndarray, predictions: Dict,
         if sigma2 < best_sigma2:
             best_sigma2 = sigma2
             best_Y_cpd = Y_cpd_candidate
-
-        print(f"Cov: {sigma2} | Cov Best {best_sigma2}")
 
     # Project tracking result back to image space coordinates.
     vertex_uv_coords = project_tracking_results_to_image_coords(best_Y_cpd)

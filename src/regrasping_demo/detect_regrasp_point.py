@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import matplotlib.pyplot as plt
 from typing import List, Dict
 
 import cv2
@@ -59,7 +60,7 @@ def detect_regrasp_point(rgb_np, predictions, ideal_dist_to_obs):
     return DetectionResult(best_px, ordered_hose_points, predictions)
 
 
-def detect_regrasp_point_from_hose(rgb_np, predictions, ideal_dist_to_obs, ordered_hose_points):
+def detect_regrasp_point_from_hose(rgb_np, predictions, ideal_dist_to_obs, ordered_hose_points, viz=True):
     n = ordered_hose_points.shape[0]
 
     dist_costs = np.zeros(n)
@@ -76,18 +77,18 @@ def detect_regrasp_point_from_hose(rgb_np, predictions, ideal_dist_to_obs, order
     min_cost_idx = np.argmin(total_cost)
     best_px = ordered_hose_points[min_cost_idx]
 
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    ax.imshow(rgb_np)
-    for pred in predictions:
-        points = pred_to_poly(pred)
-        ax.plot(points[:, 0], points[:, 1])
-    cost_normalized = (total_cost - total_cost.min()) / (total_cost.max() - total_cost.min())
-    for cost, p in zip(cost_normalized, ordered_hose_points):
-        color = cm.hsv(cost)
-        ax.scatter(p[0], p[1], color=color, zorder=3)
-    ax.scatter(best_px[0], best_px[1], s=100, marker='*', c='m', zorder=4)
-    fig.show()
+    if viz:
+        fig, ax = plt.subplots()
+        ax.imshow(rgb_np)
+        for pred in predictions:
+            points = pred_to_poly(pred)
+            ax.plot(points[:, 0], points[:, 1])
+        cost_normalized = (total_cost - total_cost.min()) / (total_cost.max() - total_cost.min())
+        for cost, p in zip(cost_normalized, ordered_hose_points):
+            color = cm.hsv(cost)
+            ax.scatter(p[0], p[1], color=color, zorder=3)
+        ax.scatter(best_px[0], best_px[1], s=100, marker='*', c='m', zorder=4)
+        fig.show()
 
     return min_cost_idx, best_px
 

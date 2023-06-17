@@ -6,8 +6,7 @@ import numpy as np
 from PIL import Image
 
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd, METERS_TO_MILLIMETERS, \
-    load_predictions, \
-    get_masks_dict
+    load_predictions, get_masks_dict
 from regrasping_demo.detect_regrasp_point import DetectionError
 
 IMAGE_ROOT = Path("data/1686855846/")
@@ -25,8 +24,6 @@ def main():
 
     rgb_pil = Image.open(str(img_path_dict["rgb"]))
     rgb_np = np.array(rgb_pil)
-    print("Image shape:", rgb_np.shape)
-    print("Image dtype:", rgb_np.dtype)
 
     # Not using the depth image as the depth horizontal FOV is too tight. Using single depth value method instead.
     depth_img = np.ones((rgb_np.shape[0], rgb_np.shape[1]), dtype=float) * METERS_TO_MILLIMETERS
