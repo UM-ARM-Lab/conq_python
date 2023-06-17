@@ -15,7 +15,9 @@ from conq.cameras_utils import get_color_img, get_depth_img
 from conq.exceptions import DetectionError
 from conq.roboflow_utils import get_predictions
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
-from regrasping_demo.detect_regrasp_point import get_polys, detect_object_center, detect_regrasp_point_from_hose
+from regrasping_demo.detect_regrasp_point import get_polys, detect_object_center, detect_regrasp_point_from_hose, \
+    get_poly_centroid
+from regrasping_demo.homotopy_planner import poly_to_mask, inflate_mask
 
 DEFAULT_IDEAL_DIST_TO_OBS = 70
 
@@ -68,18 +70,15 @@ def get_mess(image_client):
     fig.show()
 
     # NOTE: we would need to handle the rotate if we used the body cameras
-    mess_mask = np.zeros(depth_np.shape[:2])
-    cv2.drawContours(mess_mask, mess_polys, -1, (1), 1)
+    mess_mask = poly_to_mask(mess_polys, h=rgb_np.shape[0], w=rgb_np.shape[1])
     # expand the mask a bit
-    mess_mask = cv2.dilate(mess_mask, np.ones((5, 5), np.uint8), iterations=1)
+    mess_mask = inflate_mask(mess_mask)
     depths_m = depth_np[np.where(mess_mask == 1)] / 1000
     nonzero_depths_m = depths_m[np.where(np.logical_and(depths_m > 0, np.isfinite(depths_m)))]
 
     depth_m = get_mess_depth(nonzero_depths_m)
 
-    M = cv2.moments(mess_polys[0])
-    mess_px = int(M["m10"] / M["m00"])
-    mess_py = int(M["m01"] / M["m00"])
+    mess_px, mess_py = get_poly_centroid(mess_polys[0])
 
     mess_pos_in_cam = np.array(pixel_to_camera_space(rgb_res, mess_px, mess_py, depth=depth_m))  # [x, y, z]
 

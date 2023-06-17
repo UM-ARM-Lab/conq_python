@@ -70,14 +70,23 @@ def is_homotopy_diff(start, end, waypoint1, waypoint2, obstacle_centers):
     return not np.allclose(windings, 0)
 
 
+def poly_to_mask(polys, h, w):
+    mask = np.zeros([h, w], dtype=np.uint8)
+    cv2.drawContours(mask, polys, -1, (255), cv2.FILLED)
+    return mask
+
+
+def inflate_mask(mask):
+    return cv2.dilate(mask, np.ones((20, 20), np.uint8), iterations=1)
+
+
 def get_obstacles(predictions, h, w):
     obstacle_polys = get_polys(predictions, "battery")
     obstacle_centers = []
     inflated_obstacles_mask = np.zeros([h, w], dtype=np.uint8)
     for poly in obstacle_polys:
-        obstacle_mask = np.zeros([h, w], dtype=np.uint8)
-        cv2.drawContours(obstacle_mask, [poly], -1, (255), cv2.FILLED)
-        inflated_obstacle_mask = cv2.dilate(obstacle_mask, np.ones([20, 20], dtype=np.uint8))
+        obstacle_mask = poly_to_mask([poly], h, w)
+        inflated_obstacle_mask = inflate_mask(obstacle_mask)
         inflated_obstacles_mask = cv2.bitwise_or(inflated_obstacles_mask, inflated_obstacle_mask)
         center = np.mean(np.stack(np.where(obstacle_mask == 255)), axis=1)
         center = center[::-1]  # switch from [row, col] to [x, y]

@@ -43,14 +43,18 @@ def detect_object_center(predictions, class_name):
         print("Warning: multiple objects detected")
 
     poly = polygons[0]
-    M = cv2.moments(poly)
-    cx = int(M["m10"] / M["m00"])
-    cy = int(M["m01"] / M["m00"])
-    grasp_point = np.array([cx, cy])
+    grasp_point = np.array(get_poly_centroid(poly))
 
     detection = DetectionResult(grasp_point, np.array([grasp_point]), predictions)
 
     return detection
+
+
+def get_poly_centroid(x):
+    M = cv2.moments(x)
+    mess_px = int(M["m10"] / M["m00"])
+    mess_py = int(M["m01"] / M["m00"])
+    return mess_px, mess_py
 
 
 def detect_regrasp_point(rgb_np, predictions, ideal_dist_to_obs):

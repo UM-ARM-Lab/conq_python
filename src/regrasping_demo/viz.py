@@ -10,8 +10,8 @@ def viz_predictions(rgb_np, predictions, fig, ax):
         class_name = pred["class"]
         if class_name not in class_colors:
             class_colors[class_name] = cm.hsv(rng.uniform())
-        poly = pred_to_poly(pred)
         c = class_colors[class_name]
+        poly = pred_to_poly(pred)
         ax.plot(poly[:, 0], poly[:, 1], c=c, linewidth=2, zorder=1, label=class_name)
     ax.legend()
 
