@@ -33,6 +33,7 @@ from conq.roboflow_utils import get_predictions
 from conq.utils import setup_and_stand
 from regrasping_demo import homotopy_planner
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
+from regrasping_demo.center_object import center_object_step
 from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis, detect_regrasp_point_from_hose
 from regrasping_demo.get_detections import GetRetryResult, np_to_vec2
 from regrasping_demo.get_detections import save_data
@@ -274,6 +275,25 @@ def reset_before_regrasp(command_client, initial_transforms):
     walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, angle=0.0)
 
 
+def center_obstacles(command_client, robot_state_client, image_client):
+    rng = np.random.RandomState(0)
+    while True:
+        rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
+        depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
+        predictions = get_predictions(rgb_np)
+        save_data(rgb_np, depth_np, predictions)
+
+        delta_px = center_object_step(rgb_np, predictions, rng)
+
+        if delta_px is None:
+            print("success!")
+            break
+
+        # TODO: move by delta_px
+        # NOTE: this assumes body and hand are aligned in terms of X/Y
+        hand_delta_in_body_frame(command_client, robot_state_client, delta_px[0], delta_px[1], dz=0)
+
+
 def main(argv):
     np.seterr(all='raise')
     parser = argparse.ArgumentParser()
@@ -344,6 +364,9 @@ def main(argv):
             #                    first_get_point_kwargs={'ideal_dist_to_obs': 5},
             #                    second_get_point_kwargs={'ideal_dist_to_obs': 40})
 
+            # Center the objects
+            center_obstacles(command_client, robot_state_client, image_client)
+
             # Move the arm to get the hose unstuck
             look_at_scene(command_client, robot_state_client, y=0.0, z=0.5, pitch=np.deg2rad(85))
             time.sleep(1)  # reduces motion blur?
@@ -369,7 +392,6 @@ def main(argv):
             transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
             body_in_hand = get_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
             hand_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, HAND_FRAME_NAME)
-            body_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
             robot_px = np.array(camera_space_to_pixel(rgb_res, body_in_hand.x, body_in_hand.y, body_in_hand.z))
             place_px = homotopy_planner.plan(rgb_np, predictions, hose_points, regrasp_px, robot_px)
             place_x_in_cam, place_y_in_cam, _ = pixel_to_camera_space(rgb_res, place_px[0], place_px[1], depth=1.0)
@@ -377,7 +399,6 @@ def main(argv):
 
             # Compute the desired poses for the hand
             nearest_obs_height = hand_in_odom.z - nearest_obs_to_hand
-            lift_height = nearest_obs_height + 0.2
             dplace_x = place_x - regrasp_x
             dplace_y = place_y - regrasp_y
 

@@ -38,20 +38,13 @@ def main():
         print(delta_px)
 
 
-def center_object(ax, fig, h, predictions, rgb_np, rng, w):
-    while True:
-        delta_px = center_object_step(rgb_np, predictions, rng)
-
-        if delta_px is None:
-            print("success!")
-            break
-
-        # TODO: move by delta_px
-        print(delta_px)
-        pass
-
-
 def center_object_step(rgb_np, predictions, rng, padding=25):
+    """
+    Returns a delta_px that shows the direction the camera should move to bring the center of the camera
+    closer to the center of obstacles that are touching the edge of the frame.
+
+    It also checks for bad perception of the hose, in which case small random delta is used.
+    """
     fig, ax = plt.subplots()
     viz_predictions(rgb_np, predictions, fig, ax)
 
