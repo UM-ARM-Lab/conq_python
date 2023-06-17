@@ -2,13 +2,11 @@ import json
 import time
 from pathlib import Path
 
-import cma
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 from matplotlib.patches import Circle
-from scipy.optimize import minimize
 
 from conq.exceptions import DetectionError, PlanningException
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
@@ -97,7 +95,15 @@ def is_in_collision(inflated_obstacles_mask, sample_px):
     return bool(inflated_obstacles_mask[int(sample_px[1]), int(sample_px[0])])
 
 
-def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_reach_px=700, extend_px=100):
+def sample_point(rng, h, w, extend_px):
+    sample_px = rng.uniform(-extend_px, w + extend_px)
+    sample_py = rng.uniform(-extend_px, h + extend_px)
+    sample_px = np.array([sample_px, sample_py])
+    return sample_px
+
+
+def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_reach_px=700, extend_px=100,
+         near_tol=0.4):
     h, w = rgb_np.shape[:2]
     obstacle_centers, inflated_obstacles_mask = get_obstacles(predictions, h, w)
 
@@ -126,30 +132,23 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
         fig.show()
         raise PlanningException("end_px is too close to regrasp_px")
 
-    def _cost(sample_px):
-        homotopy_cost = 0 if is_homotopy_diff(start_px, end_px, regrasp_px, sample_px, obstacle_centers) else 1000
-        collision_cost = 1000 if is_in_collision(inflated_obstacles_mask, sample_px) else 0
-        reachability_cost = np.linalg.norm(robot_px - sample_px)
-        near_start_cost = relative_distance_deviation(dist_to_start0, sample_px, start_px)
-        near_end_cost = relative_distance_deviation(dist_to_end0, sample_px, end_px)
+    rng = np.random.RandomState(0)
+    for _ in range(5000):
+        sample_px = sample_point(rng, h, w, extend_px)
 
-        total_cost = near_start_cost + near_end_cost + 0.01 * reachability_cost + homotopy_cost + collision_cost
+        homotopy_diff = is_homotopy_diff(start_px, end_px, regrasp_px, sample_px, obstacle_centers)
+        in_collision = is_in_collision(inflated_obstacles_mask, sample_px)
+        reachable = np.linalg.norm(robot_px - sample_px) < robot_reach_px
+        near_start = relative_distance_deviation(dist_to_start0, sample_px, start_px) < near_tol
+        near_end = relative_distance_deviation(dist_to_end0, sample_px, end_px) < near_tol
 
-        ax.plot([start_px[0], sample_px[0], end_px[0]], [start_px[1], sample_px[1], end_px[1]], c='r', zorder=5)
-        fig.show()
+        if all([homotopy_diff, not in_collision, near_start, near_end, reachable]):
+            ax.plot([start_px[0], sample_px[0], end_px[0]], [start_px[1], sample_px[1], end_px[1]], c='r')
+            fig.show()
+            return sample_px
 
-        return total_cost
-
-    x0 = np.array([w / 2, h / 2])
-    es = cma.fmin2(_cost, x0, 100, {'bounds': [(-extend_px, -extend_px), (w + extend_px, h + extend_px)]})
-    es.optimize(_cost)
-    print(es.result_pretty())
-    es.plot()
-
-    best_px = sln.x
-    ax.plot([start_px[0], best_px[0], end_px[0]], [start_px[1], best_px[1], end_px[1]], c='r')
     fig.show()
-    return best_px
+    raise PlanningException("Failed to find a solution")
 
 
 def get_filenames(subdir):
@@ -172,7 +171,7 @@ def main():
     rgb_np = np.asarray(rgb_pil)
     with open("data/1686855846/pred.json") as f:
         predictions = json.load(f)
-    robot_px = np.array([320, 700])
+    robot_px = np.array([320, 650])
 
     # # run CDCPD to get the hose state
     # ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
@@ -208,7 +207,7 @@ def main():
             ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
             min_cost_idx, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, 50, ordered_hose_points,
                                                                       viz=False)
-            plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px + rng.uniform(-50, 50, 2).astype(int))
+            plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px + rng.uniform(-25, 25, 2).astype(int))
             print("Planning took %.3f seconds" % (time.time() - t0))
             n_success += 1
         except DetectionError as e:
@@ -218,7 +217,7 @@ def main():
             print(f"planning error {subdir}, {e}")
             continue
 
-    print(f"success rate: {n_success / n_total}")
+    print(f"success rate: {n_success / n_total:%}")
 
 
 if __name__ == '__main__':
