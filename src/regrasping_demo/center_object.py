@@ -91,6 +91,9 @@ def center_object_step(rgb_np, predictions, rng, padding=25):
 def get_obs_masks_near_hose(predictions: Dict, h, w, min_dist_thresh=250):
     obstacle_polys = get_polys(predictions, "battery")
     hose_polys = get_polys(predictions, ['vacuum_hose', 'vacuum_neck', 'vacuum_head'])
+    if len(hose_polys) == 0:
+        raise DetectionError("No hose detected")
+
     obs_near_hose = []
     for obstacle_poly in obstacle_polys:
         min_dist = min([dist_to_nearest_poly(obstacle_p, hose_polys) for obstacle_p in obstacle_poly])

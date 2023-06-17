@@ -87,10 +87,8 @@ def detect_regrasp_point_from_hose(rgb_np, predictions, ordered_hose_points, ide
         for pred in predictions:
             points = pred_to_poly(pred)
             ax.plot(points[:, 0], points[:, 1])
-        cost_normalized = (total_cost - total_cost.min()) / (total_cost.max() - total_cost.min())
-        for cost, p in zip(cost_normalized, ordered_hose_points):
-            color = cm.hsv(cost)
-            ax.scatter(p[0], p[1], color=color, zorder=3)
+        for p in ordered_hose_points:
+            ax.scatter(p[0], p[1], color='y', zorder=3)
         ax.scatter(best_px[0], best_px[1], s=100, marker='*', c='m', zorder=4)
         fig.show()
 

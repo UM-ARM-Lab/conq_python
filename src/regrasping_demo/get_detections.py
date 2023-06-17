@@ -3,10 +3,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-import cv2
 import numpy as np
 from PIL import Image
-from bosdyn.api import image_pb2, geometry_pb2
+from bosdyn.api import image_pb2, geometry_pb2, ray_cast_pb2
 from bosdyn.client import math_helpers
 from bosdyn.client.frame_helpers import get_a_tform_b, BODY_FRAME_NAME
 from bosdyn.client.image import pixel_to_camera_space
@@ -17,7 +16,6 @@ from conq.roboflow_utils import get_predictions
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.detect_regrasp_point import get_polys, detect_object_center, detect_regrasp_point_from_hose, \
     get_poly_centroid
-from regrasping_demo.homotopy_planner import poly_to_mask, inflate_mask
 
 DEFAULT_IDEAL_DIST_TO_OBS = 70
 
@@ -34,6 +32,10 @@ def np_to_vec2(a):
     return geometry_pb2.Vec2(x=a[0], y=a[1])
 
 
+def vec3_to_np(v):
+    return np.array([v.x, v.y, v.z])
+
+
 def save_data(rgb_np, depth_np, predictions):
     now = int(time.time())
     Path(f"data/{now}").mkdir(exist_ok=True, parents=True)
@@ -44,8 +46,7 @@ def save_data(rgb_np, depth_np, predictions):
         json.dump(predictions, f)
 
 
-def get_mess(image_client):
-    time.sleep(1)  # reduces motion blur?
+def get_mess(robot_state_client, rc_client, image_client):
     rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
     depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
 
@@ -69,41 +70,33 @@ def get_mess(image_client):
         ax.plot(mess_poly[:, 0], mess_poly[:, 1], zorder=2, linewidth=3)
     fig.show()
 
-    # NOTE: we would need to handle the rotate if we used the body cameras
-    mess_mask = poly_to_mask(mess_polys, h=rgb_np.shape[0], w=rgb_np.shape[1])
-    # expand the mask a bit
-    mess_mask = inflate_mask(mess_mask)
-    depths_m = depth_np[np.where(mess_mask == 1)] / 1000
-    nonzero_depths_m = depths_m[np.where(np.logical_and(depths_m > 0, np.isfinite(depths_m)))]
-
-    depth_m = get_mess_depth(nonzero_depths_m)
-
     mess_px, mess_py = get_poly_centroid(mess_polys[0])
 
-    mess_pos_in_cam = np.array(pixel_to_camera_space(rgb_res, mess_px, mess_py, depth=depth_m))  # [x, y, z]
+    # compute position in camera frame of the pixel given a fixed depth, which has the right direction in 3D
+    # but may be the wrong length.
+    mess_dir_in_cam = np.array(pixel_to_camera_space(rgb_res, mess_px, mess_py, 1))
+    mess_dir_in_cam = mess_dir_in_cam / np.linalg.norm(mess_dir_in_cam)
+    cam_in_body = get_a_tform_b(rgb_res.shot.transforms_snapshot, BODY_FRAME_NAME, rgb_res.shot.frame_name_image_sensor)
+    mess_dir_in_body = vec3_to_np(cam_in_body.rot * math_helpers.Vec3(*mess_dir_in_cam))
+    mess_origin_in_body = vec3_to_np(cam_in_body.position)
 
-    mess_in_cam = math_helpers.SE3Pose(*mess_pos_in_cam, math_helpers.Quat())
-    # FIXME: why can't we use "GRAV_ALIGNED_BODY_FRAME_NAME" here?
-    cam2body = get_a_tform_b(rgb_res.shot.transforms_snapshot, BODY_FRAME_NAME,
-                             rgb_res.shot.frame_name_image_sensor)
-    mess_in_body = cam2body * mess_in_cam
-    mess_x = mess_in_body.x
-    mess_y = mess_in_body.y
+    # Ray-cast to the floor (or whatever is nearest based on the robot's perception of the world)
+    response = rc_client.raycast(mess_origin_in_body, mess_dir_in_body,
+                                 [ray_cast_pb2.RayIntersection.Type.TYPE_GROUND_PLANE],
+                                 min_distance=1.0, frame_name=BODY_FRAME_NAME)
+
+    if len(response.hits) == 0:
+        raise DetectionError("No raycast hits")
+
+    hit = response.hits[0]
+    mess_x = hit.hit_position_in_hit_frame.x
+    mess_y = hit.hit_position_in_hit_frame.y
 
     print(f"Mess detected at {mess_x:.2f}, {mess_y:.2f}")
     return mess_x, mess_y
 
 
-def get_mess_depth(nonzero_depths_m):
-    if len(nonzero_depths_m) > 0:
-        depth_m = nonzero_depths_m.mean()
-        if np.isfinite(depth_m):
-            return depth_m
-    return 3.5
-
-
 def get_hose_and_head_point(image_client):
-    time.sleep(1)  # reduces motion blur?
     rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
     depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
     predictions = get_predictions(rgb_np)
@@ -128,7 +121,6 @@ def get_hose_and_head_point(image_client):
 
 
 def get_hose_and_regrasp_point(image_client, ideal_dist_to_obs=DEFAULT_IDEAL_DIST_TO_OBS):
-    time.sleep(1)  # reduces motion blur?
     rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
     depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
     predictions = get_predictions(rgb_np)

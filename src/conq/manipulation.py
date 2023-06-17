@@ -9,8 +9,8 @@ from bosdyn.client.frame_helpers import get_a_tform_b, GRAV_ALIGNED_BODY_FRAME_N
 from bosdyn.client.robot_command import block_until_arm_arrives, RobotCommandBuilder
 
 
-def blocking_arm_command(command_client, cmd):
-    block_until_arm_arrives(command_client, command_client.robot_command(cmd))
+def blocking_arm_command(command_client, cmd, timeout_sec=3):
+    block_until_arm_arrives(command_client, command_client.robot_command(cmd), timeout_sec)
     # FIXME: why is this needed???
     command_client.robot_command(RobotCommandBuilder.stop_command())
 
@@ -74,7 +74,7 @@ def force_measure(state_client, command_client, force_buffer: List):
     return False
 
 
-def do_grasp(manipulation_api_client, robot_state_client, image_res, pick_vec):
+def do_grasp(command_client, manipulation_api_client, robot_state_client, image_res, pick_vec):
     pick_cmd = manipulation_api_pb2.PickObjectInImage(
         pixel_xy=pick_vec, transforms_snapshot_for_camera=image_res.shot.transforms_snapshot,
         frame_name_image_sensor=image_res.shot.frame_name_image_sensor,
@@ -104,11 +104,14 @@ def do_grasp(manipulation_api_client, robot_state_client, image_res, pick_vec):
 
     # Now check if we're actually holding something
     robot_state = robot_state_client.get_robot_state()
-    if robot_state.manipulator_state.is_gripper_holding_item:
+    open_enough = robot_state.manipulator_state.gripper_open_percentage > 5
+    # is_gripper_holding_item is NOT reliable
+    if robot_state.manipulator_state.is_gripper_holding_item and open_enough:
         print('Grasp succeeded')
         return True
 
     print('Grasp failed')
+    open_gripper(command_client)
     return False
 
 
@@ -121,3 +124,10 @@ def raise_hand(command_client, robot_state_client, dz):
                                                      GRAV_ALIGNED_BODY_FRAME_NAME,
                                                      0.5)
     blocking_arm_command(command_client, raise_cmd)
+
+
+def add_follow_with_body(arm_command):
+    """ Takes an arm command and combines it with a command to move the body to follow the arm """
+    follow_cmd = RobotCommandBuilder.follow_arm_command()
+    arm_and_follow_cmd = RobotCommandBuilder.build_synchro_command(follow_cmd, arm_command)
+    return arm_and_follow_cmd

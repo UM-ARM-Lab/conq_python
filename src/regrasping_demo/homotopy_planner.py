@@ -112,7 +112,7 @@ def sample_point(rng, h, w, extend_px):
 
 
 def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_reach_px=750, extend_px=100,
-         near_tol=0.4):
+         near_tol=0.25):
     h, w = rgb_np.shape[:2]
     obstacle_centers, inflated_obstacles_mask = get_obstacles(predictions, h, w)
 
@@ -135,12 +135,12 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
     ax.set_xlim(-extend_px, w + extend_px)
     ax.set_ylim(h + extend_px, -extend_px)
 
-    if np.allclose(regrasp_px, start_px):
+    random_place_px = regrasp_px + np.random.uniform(-200, 200, [2])
+    if np.allclose(regrasp_px, start_px) or np.allclose(regrasp_px, end_px):
+        ax.scatter(random_place_px[0], random_place_px[1], c='r', marker='*', s=200, zorder=3)
         fig.show()
-        raise PlanningException("start_px is too close to regrasp_px")
-    if np.allclose(regrasp_px, end_px):
-        fig.show()
-        raise PlanningException("end_px is too close to regrasp_px")
+        print("Planning failed, using random place point")
+        return False, random_place_px
 
     rng = np.random.RandomState(0)
     for _ in range(5000):
@@ -155,10 +155,12 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
         if all([homotopy_diff, not in_collision, near_start, near_end, reachable]):
             ax.plot([start_px[0], sample_px[0], end_px[0]], [start_px[1], sample_px[1], end_px[1]], c='r')
             fig.show()
-            return sample_px
+            return True, sample_px
 
+    print("Failed to find a place point, using random place point")
+    ax.scatter(random_place_px[0], random_place_px[1], c='r', marker='*', s=200, zorder=3)
     fig.show()
-    raise PlanningException("Failed to find a solution")
+    return False, random_place_px
 
 
 def get_filenames(subdir):
@@ -217,9 +219,10 @@ def main():
             ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
             min_cost_idx, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, ordered_hose_points, 50,
                                                                       viz=False)
-            plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px + rng.uniform(-25, 25, 2).astype(int))
+            success, _ = plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px + rng.uniform(-25, 25, 2).astype(int))
             print("Planning took %.3f seconds" % (time.time() - t0))
-            n_success += 1
+            if success:
+                n_success += 1
         except DetectionError as e:
             print(f"detection error {subdir}, {e}")
             continue
