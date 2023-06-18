@@ -85,7 +85,7 @@ def do_grasp(command_client, manipulation_api_client, robot_state_client, image_
 
     # execute grasp
     t0 = time.time()
-    while time.time() - t0 < 15:
+    while time.time() - t0 < 13:
         feedback_request = manipulation_api_pb2.ManipulationApiFeedbackRequest(
             manipulation_cmd_id=cmd_response.manipulation_cmd_id)
 

@@ -112,7 +112,7 @@ def sample_point(rng, h, w, extend_px):
 
 
 def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_reach_px=750, extend_px=100,
-         near_tol=0.25):
+         near_tol=0.30):
     h, w = rgb_np.shape[:2]
     obstacle_centers, inflated_obstacles_mask = get_obstacles(predictions, h, w)
 
@@ -135,7 +135,8 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
     ax.set_xlim(-extend_px, w + extend_px)
     ax.set_ylim(h + extend_px, -extend_px)
 
-    random_place_px = regrasp_px + np.random.uniform(-200, 200, [2])
+    random_place_px = regrasp_px + np.random.uniform(-150, 150, [2])
+    random_place_px = np.clip(random_place_px, 0, [w, h])
     if np.allclose(regrasp_px, start_px) or np.allclose(regrasp_px, end_px):
         ax.scatter(random_place_px[0], random_place_px[1], c='r', marker='*', s=200, zorder=3)
         fig.show()

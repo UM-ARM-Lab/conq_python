@@ -1,9 +1,8 @@
 from dataclasses import dataclass
-import matplotlib.pyplot as plt
 from typing import List, Dict
 
 import cv2
-import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
