@@ -98,7 +98,7 @@ def get_point_f_retry(command_client, robot_state_client, image_client, get_poin
             dpitch = np.random.randn() * 0.08
 
 
-def pose_in_start_frame(initial_transforms, x, y, angle):
+def pose_in_start_frame(initial_transforms, x, y, yaw):
     """
     The start frame is where the robot starts.
 
@@ -106,21 +106,22 @@ def pose_in_start_frame(initial_transforms, x, y, angle):
         initial_transforms: The initial transforms of the robot, this should be created at the beginning.
         x: The x position of the pose in the start frame.
         y: The y position of the pose in the start frame.
-        angle: The angle of the pose in the start frame.
+        yaw: The angle of the pose in the start frame.
     """
-    pose_in_body = math_helpers.SE2Pose(x=x, y=y, angle=angle)
+    pose_in_body = math_helpers.SE2Pose(x=x, y=y, angle=yaw)
     pose_in_odom = get_se2_a_tform_b(initial_transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME) * pose_in_body
     return pose_in_odom
 
 
 def drag_rope_to_goal(robot_state_client, command_client, initial_transforms, x, y, angle):
-    """
-    Move the robot to a pose relative to the body while dragging the hose
-    """
+    """ Move the robot to a pose relative to the body while dragging the hose """
     force_buffer = []
 
+    # Raise arm a bit
+    raise_hand(command_client, robot_state_client, 0.1)
+
     # Create the se2 trajectory for the dragging motion
-    walk_cmd_id = walk_to_pose_in_initial_frame(command_client, initial_transforms, x=x, y=y, angle=angle,
+    walk_cmd_id = walk_to_pose_in_initial_frame(command_client, initial_transforms, x=x, y=y, yaw=angle,
                                                 block=False, crawl=True)
 
     # loop to check forces
@@ -142,11 +143,11 @@ def drag_rope_to_goal(robot_state_client, command_client, initial_transforms, x,
         time.sleep(0.25)
 
 
-def walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0., y=0., angle=0., block=True, crawl=False):
+def walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0., y=0., yaw=0., block=True, crawl=False):
     """
     Non-blocking, returns the command id
     """
-    goal_pose_in_odom = pose_in_start_frame(initial_transforms, x=x, y=y, angle=angle)
+    goal_pose_in_odom = pose_in_start_frame(initial_transforms, x=x, y=y, yaw=yaw)
     if crawl:
         locomotion_hint = spot_command_pb2.HINT_CRAWL
     else:
@@ -274,7 +275,7 @@ def retry_do_grasp(command_client, robot_state_client, manipulation_api_client, 
 def reset_before_regrasp(command_client, initial_transforms):
     open_gripper(command_client)
     blocking_arm_command(command_client, RobotCommandBuilder.arm_stow_command())
-    walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, angle=0.0)
+    walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, yaw=0.0)
 
 
 def center_obstacles(command_client, robot_state_client, image_client, motion_scale=0.0004):
@@ -328,11 +329,11 @@ def main(argv):
     lease_client.take()
 
     # Video recording
-    # from conq.video_recording import VideoRecorder
-    # device_num = 4
-    # vr = VideoRecorder(device_num, 'video/')
-    # vr.start_new_recording(f'demo_{int(time.time())}.mp4')
-    # vr.start_in_thread()
+    from conq.video_recording import VideoRecorder
+    device_num = 4
+    vr = VideoRecorder(device_num, 'video/')
+    vr.start_new_recording(f'demo_{int(time.time())}.mp4')
+    vr.start_in_thread()
 
     with (LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True)):
         command_client = setup_and_stand(robot)
@@ -342,22 +343,18 @@ def main(argv):
         # open the hand, so we can see more with the depth sensor
         open_gripper(command_client)
 
-        while True:
-            # first detect the goal
-            mess_x, mess_y = get_point_f_retry(command_client, robot_state_client, image_client,
-                                               partial(get_mess, robot_state_client, rc_client),
-                                               y=-0.10, z=0.5, pitch=np.deg2rad(20), yaw=-0.4,
-                                               )
-            # # offset from the mess because it looks better
-            pre_mess_x = mess_x - 0.5
-            pre_mess_y = mess_y - 0.60
-
-            walk_to_pose_in_initial_frame(command_client, initial_transforms, x=pre_mess_x, y=pre_mess_y, angle=np.pi / 2,
-                                          crawl=True)
-
-            # Go home, you're done!
-            walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, angle=0.0)
-            return
+        # first detect the goal
+        handedness = 1  # 1 for when the mess is on the left, -1 for when the mess is on the right
+        mess_yaw = handedness * -np.pi / 2
+        mess_x, mess_y = get_point_f_retry(command_client, robot_state_client, image_client,
+                                           partial(get_mess, robot_state_client, rc_client),
+                                           y=handedness * 0.10, z=0.5, pitch=np.deg2rad(20), yaw=handedness * 0.4,
+                                           )
+        # # offset from the mess because it looks better
+        pre_mess_x = mess_x - 0.5
+        pre_mess_y = mess_y + handedness * 0.55
+        post_mess_x = mess_x
+        post_mess_y = mess_y + handedness * 0.55
 
         while True:
             # Grasp the hose to DRAG
@@ -368,7 +365,7 @@ def main(argv):
 
             goal_reached = drag_rope_to_goal(robot_state_client, command_client, initial_transforms,
                                              pre_mess_x, pre_mess_y,
-                                             np.pi / 2)
+                                             mess_yaw)
             if goal_reached:
                 break
 
@@ -393,13 +390,17 @@ def main(argv):
 
                 _, obstacles_mask = get_obstacles(predictions, rgb_np.shape[0], rgb_np.shape[1])
                 if np.sum(obstacles_mask) == 0:
-                    walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, angle=0)
+                    walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, yaw=0)
                     continue
 
                 obstacle_mask_with_valid_depth = np.logical_and(obstacles_mask, depth_np.squeeze(-1) > 0)
                 nearest_obs_to_hand = np.min(depth_np[np.where(obstacle_mask_with_valid_depth)]) / 1000
 
-                hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
+                try:
+                    hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
+                except DetectionError:
+                    walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, yaw=0)
+                    continue
 
                 _, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, hose_points, ideal_dist_to_obs=70)
                 regrasp_vec2 = np_to_vec2(regrasp_px)
@@ -430,7 +431,7 @@ def main(argv):
                 if success:
                     break
             else:
-                walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, angle=0)
+                walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, yaw=0)
                 continue
 
             hand_delta_in_body_frame(command_client, robot_state_client, dx=0, dy=0, dz=nearest_obs_height + 0.2,
@@ -445,22 +446,22 @@ def main(argv):
             blocking_arm_command(command_client, RobotCommandBuilder.arm_stow_command())
 
             # reset before trying again
-            walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, angle=0)
+            walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, yaw=0)
 
-        # raise arm a bit
-        raise_hand(command_client, robot_state_client, 0.1)
-        # rotate to give a better view
-        walk_to_pose_in_initial_frame(command_client, initial_transforms, x=mess_x + 0.7, y=mess_y + 0.15,
-                                      angle=np.deg2rad(180), crawl=True)
+        # some finishing walking commands to make it look pretty
+        walk_to_pose_in_initial_frame(command_client, initial_transforms, x=post_mess_x, y=post_mess_y, yaw=mess_yaw,
+                                      crawl=True)
 
         open_gripper(command_client)
         blocking_arm_command(command_client, RobotCommandBuilder.arm_stow_command())
 
-        # Go home, you're done!
-        walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, angle=0.0)
-        print("Done!")
+        walk_to_pose_in_initial_frame(command_client, initial_transforms, x=pre_mess_x, y=pre_mess_y, yaw=mess_yaw,
+                                      crawl=True)
 
-        # vr.stop_in_thread()
+        # Go home, you're done!
+        walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, yaw=0.0)
+
+        vr.stop_in_thread()
 
 
 if __name__ == '__main__':
