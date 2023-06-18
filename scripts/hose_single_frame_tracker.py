@@ -30,13 +30,12 @@ def main():
 
     preds_dict = load_predictions(img_path_dict["pred"])
 
-    masks_dict = get_masks_dict(preds_dict, rgb_np)
+    masks_dict = get_masks_dict(preds_dict)
 
     # Run The full pipeline on this one example
 
     saved_fig_name = IMAGE_ROOT / "cdcpd_output.png"
-    vertex_uv_coords = single_frame_planar_cdcpd(rgb_np, depth_img, masks_dict, do_visualization=True,
-                                                 saved_fig_name=saved_fig_name)
+    vertex_uv_coords = single_frame_planar_cdcpd(rgb_np, depth_img)
 
     # Run full pipeline on all data
     data_dir = Path("data/")
@@ -66,14 +65,13 @@ def main():
         preds_dict = load_predictions(img_path_dict["pred"])
 
         try:
-            masks_dict = get_masks_dict(preds_dict, rgb_np, verbose=False)
+            masks_dict = get_masks_dict(preds_dict)
         except DetectionError:
             print("failed on ", subdir)
             continue
 
         saved_fig_name = subdir / "cdcpd_output.png"
-        ordered_hose_points = single_frame_planar_cdcpd(rgb_np, depth_img, masks_dict, do_visualization=True,
-                                                        saved_fig_name=saved_fig_name)
+        ordered_hose_points = single_frame_planar_cdcpd(rgb_np, depth_img)
 
 
 if __name__ == "__main__":

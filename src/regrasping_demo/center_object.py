@@ -3,15 +3,13 @@ from pathlib import Path
 from typing import Dict
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
 from conq.exceptions import DetectionError
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
-from regrasping_demo.detect_regrasp_point import get_polys
+from regrasping_demo.detect_regrasp_point import get_masks
 from regrasping_demo.homotopy_planner import poly_to_mask, get_filenames
-from regrasping_demo.viz import viz_predictions
 
 
 def main():
@@ -45,19 +43,9 @@ def center_object_step(rgb_np, predictions, rng, padding=25):
 
     It also checks for bad perception of the hose, in which case small random delta is used.
     """
-    fig, ax = plt.subplots()
-    viz_predictions(rgb_np, predictions, fig, ax)
-
     h, w = rgb_np.shape[:2]
     # filter out small instances of obstacles
     obstacle_masks = get_obs_masks_near_hose(predictions, h, w, min_dist_thresh=150)
-
-    # for viz only
-    combined_mask = np.zeros([h, w], dtype=np.uint8)
-    for m in obstacle_masks:
-        combined_mask = cv2.bitwise_or(combined_mask, m)
-    ax.imshow(combined_mask, alpha=0.7)
-    fig.show()
 
     # check if any obstacle is touching the edge
     for mask in obstacle_masks:
@@ -67,8 +55,6 @@ def center_object_step(rgb_np, predictions, rng, padding=25):
         if np.any(x_edge) or np.any(y_edge):
             centroid = np.stack([xs, ys], -1).mean(0)
             delta_px = centroid - np.array([w / 2, h / 2])
-            ax.arrow(w / 2, h / 2, delta_px[0], delta_px[1], color='r')
-            fig.show()
 
             return delta_px
 
@@ -89,8 +75,8 @@ def center_object_step(rgb_np, predictions, rng, padding=25):
 
 
 def get_obs_masks_near_hose(predictions: Dict, h, w, min_dist_thresh=250):
-    obstacle_polys = get_polys(predictions, "battery")
-    hose_polys = get_polys(predictions, ['vacuum_hose', 'vacuum_neck', 'vacuum_head'])
+    obstacle_polys = get_masks(predictions, "battery")
+    hose_polys = get_masks(predictions, ['vacuum_hose', 'vacuum_neck', 'vacuum_head'])
     if len(hose_polys) == 0:
         raise DetectionError("No hose detected")
 

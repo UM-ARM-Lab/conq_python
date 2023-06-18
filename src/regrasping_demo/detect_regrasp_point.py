@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from typing import List, Dict
 
-import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
+from arm_segmentation.predictor import get_combined_mask
 from conq.exceptions import DetectionError
 from conq.roboflow_utils import get_predictions
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
@@ -19,41 +19,45 @@ class DetectionResult:
     predictions: List[Dict[str, np.ndarray]]
 
 
-def get_polys(predictions, desired_class_name):
-    polys = []
+def get_masks(predictions, desired_class_name):
+    masks = []
     for pred in predictions:
         class_name = pred["class"]
-        points = pred_to_poly(pred)
+        mask = pred["mask"]
 
         if isinstance(desired_class_name, list):
             if class_name in desired_class_name:
-                polys.append(points)
+                masks.append(mask)
         elif class_name == desired_class_name:
-            polys.append(points)
-    return polys
+            masks.append(mask)
+    return masks
 
 
 def detect_object_center(predictions, class_name):
-    polygons = get_polys(predictions, class_name)
-
-    if len(polygons) == 0:
-        raise DetectionError(f"No {class_name} detected")
-    if len(polygons) > 1:
-        print("Warning: multiple objects detected")
-
-    poly = polygons[0]
-    grasp_point = np.array(get_poly_centroid(poly))
-
+    mask = get_combined_mask(predictions, class_name),
+    grasp_point = np.array(get_center_of_mass(mask))
     detection = DetectionResult(grasp_point, np.array([grasp_point]), predictions)
-
     return detection
 
 
-def get_poly_centroid(x):
-    M = cv2.moments(x)
-    mess_px = int(M["m10"] / M["m00"])
-    mess_py = int(M["m01"] / M["m00"])
-    return mess_px, mess_py
+def get_center_of_mass(x):
+    """
+    Returns the center of mass of the given map of probabilities.
+    This works by weighting each pixel coordinates by its probability,
+    then summing all of these weighted coordinates and dividing by the sum of the probabilities.
+    """
+    total_p_mass = x.sum()
+    coordinates = np.indices(x.shape)
+    # sum over the x and y coordinates
+    com = np.sum(np.sum(coordinates * x, 1), 1) / total_p_mass
+
+    # Check the probability of the center of mass, if it's low that indicates a problem!
+    if x[int(com[0]), int(com[1])] < 0.5:
+        plt.imshow(x)
+        plt.show()
+        raise DetectionError("The COM has low probability!")
+
+    return com
 
 
 def detect_regrasp_point(rgb_np, predictions, ideal_dist_to_obs):
@@ -68,12 +72,12 @@ def detect_regrasp_point_from_hose(rgb_np, predictions, ordered_hose_points, ide
 
     dist_costs = np.zeros(n)
 
-    obstacle_class_name = "battery"
-    obstacle_polygons = get_polys(predictions, obstacle_class_name)
-    if len(obstacle_polygons) == 0:
-        raise DetectionError(f"No {obstacle_class_name} detected")
+    obstacles_mask = get_combined_mask(predictions, "battery")
+    if obstacles_mask is None:
+        raise DetectionError(f"No obstacles detected")
+
     for i, p in enumerate(ordered_hose_points):
-        min_d_to_any_obstacle = min_dist_to_obstacles(obstacle_polygons, p)
+        min_d_to_any_obstacle = min_dist_to_obstacles(obstacles_mask, p)
         dist_costs[i] = abs(min_d_to_any_obstacle - ideal_dist_to_obs)
 
     total_cost = dist_costs
@@ -94,14 +98,10 @@ def detect_regrasp_point_from_hose(rgb_np, predictions, ordered_hose_points, ide
     return min_cost_idx, best_px
 
 
-def min_dist_to_obstacles(obstacle_polygons, p):
-    min_d_to_any_obstacle = np.inf
-    for obstacle_poly in obstacle_polygons:
-        # dist is positive if the point is outside the polygon
-        dist = -cv2.pointPolygonTest(obstacle_poly, p.tolist(), True)
-        if dist < min_d_to_any_obstacle:
-            min_d_to_any_obstacle = dist
-    return min_d_to_any_obstacle
+def min_dist_to_obstacles(obstacles_mask, p):
+    obstacle_pixels = np.argwhere(obstacles_mask)
+    distances = np.sqrt((obstacle_pixels[:, 0] - p[0]) ** 2 + (obstacle_pixels[:, 1] - p[1]) ** 2)
+    return distances.min()
 
 
 def min_angle_to_x_axis(delta):

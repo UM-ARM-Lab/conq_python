@@ -1,4 +1,3 @@
-import json
 import time
 from pathlib import Path
 
@@ -8,10 +7,11 @@ import numpy as np
 from PIL import Image
 from matplotlib.patches import Circle
 
+from arm_segmentation.predictor import Predictor, get_combined_mask
+from arm_segmentation.viz import viz_predictions
 from conq.exceptions import DetectionError, PlanningException
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
-from regrasping_demo.detect_regrasp_point import get_polys, detect_regrasp_point_from_hose
-from regrasping_demo.viz import viz_predictions
+from regrasping_demo.detect_regrasp_point import get_masks, detect_regrasp_point_from_hose, get_center_of_mass
 
 
 def make_tau(start, end, waypoint):
@@ -77,22 +77,18 @@ def poly_to_mask(polys, h, w):
 
 
 def inflate_mask(mask):
-    return cv2.dilate(mask, np.ones((20, 20), np.uint8), iterations=1)
+    return cv2.dilate(mask, np.ones((20, 20), mask.dtype), iterations=1)
 
 
-def get_obstacles(predictions, h, w):
-    obstacle_polys = get_polys(predictions, "battery")
-    obstacle_centers = []
-    inflated_obstacles_mask = np.zeros([h, w], dtype=np.uint8)
-    for poly in obstacle_polys:
-        obstacle_mask = poly_to_mask([poly], h, w)
-        inflated_obstacle_mask = inflate_mask(obstacle_mask)
-        inflated_obstacles_mask = cv2.bitwise_or(inflated_obstacles_mask, inflated_obstacle_mask)
-        center = np.mean(np.stack(np.where(obstacle_mask == 255)), axis=1)
-        center = center[::-1]  # switch from [row, col] to [x, y]
-        obstacle_centers.append(center)
-    obstacle_centers = np.array(obstacle_centers)
-    return obstacle_centers, inflated_obstacles_mask
+def get_obstacle_coms(predictions):
+    obstacles_masks = get_masks(predictions, "battery")
+    obstacle_coms = []
+    for obstacle_mask in obstacles_masks:
+        com = get_center_of_mass(obstacle_mask)
+        com = com[::-1]  # switch from [row, col] to [x, y]
+        obstacle_coms.append(com)
+    obstacle_coms = np.array(obstacle_coms)
+    return obstacle_coms
 
 
 def is_in_collision(inflated_obstacles_mask, sample_px):
@@ -111,10 +107,12 @@ def sample_point(rng, h, w, extend_px):
     return sample_px
 
 
-def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_reach_px=750, extend_px=100,
-         near_tol=0.30):
+def plan(rgb_np, predictions, class_colors, ordered_hose_points, regrasp_px, robot_px,
+         robot_reach_px=750, extend_px=100, near_tol=0.30):
     h, w = rgb_np.shape[:2]
-    obstacle_centers, inflated_obstacles_mask = get_obstacles(predictions, h, w)
+    obstacles_mask = get_combined_mask(predictions, "battery")
+    inflated_obstacles_mask = inflate_mask(obstacles_mask)
+    obstacle_coms = get_obstacle_coms(predictions)
 
     start_px = ordered_hose_points[0]
     end_px = ordered_hose_points[-1]
@@ -123,7 +121,7 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
 
     fig, ax = plt.subplots()
     ax.imshow(rgb_np, zorder=0)
-    viz_predictions(rgb_np, predictions, fig, ax)
+    viz_predictions(rgb_np, predictions, class_colors, fig, ax, legend=False)
     ax.scatter(ordered_hose_points[:, 0], ordered_hose_points[:, 1], c='yellow', zorder=2)
     ax.scatter(regrasp_px[0], regrasp_px[1], c='orange', marker='*', s=200, zorder=3)
     ax.scatter(robot_px[0], robot_px[1], c='k', s=500)
@@ -131,7 +129,7 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
     ax.add_patch(Circle((start_px[0], start_px[1]), dist_to_start0, color='g', fill=False, linewidth=4, alpha=0.5))
     ax.add_patch(Circle((end_px[0], end_px[1]), dist_to_end0, color='g', fill=False, linewidth=4, alpha=0.5))
     ax.plot([start_px[0], regrasp_px[0], end_px[0]], [start_px[1], regrasp_px[1], end_px[1]], c='b')
-    ax.scatter(obstacle_centers[:, 0], obstacle_centers[:, 1], c='m')
+    ax.scatter(obstacle_coms[:, 0], obstacle_coms[:, 1], c='m')
     ax.set_xlim(-extend_px, w + extend_px)
     ax.set_ylim(h + extend_px, -extend_px)
 
@@ -147,7 +145,7 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
     for _ in range(5000):
         sample_px = sample_point(rng, h, w, extend_px)
 
-        homotopy_diff = is_homotopy_diff(start_px, end_px, regrasp_px, sample_px, obstacle_centers)
+        homotopy_diff = is_homotopy_diff(start_px, end_px, regrasp_px, sample_px, obstacle_coms)
         in_collision = is_in_collision(inflated_obstacles_mask, sample_px)
         reachable = np.linalg.norm(robot_px - sample_px) < robot_reach_px
         near_start = relative_distance_deviation(dist_to_start0, sample_px, start_px) < near_tol
@@ -166,9 +164,9 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
 
 def get_filenames(subdir):
     img_path_dict = {
-        "rgb": "rgb.png",
+        "rgb":   "rgb.png",
         "depth": "depth.png",
-        "pred": "pred.json"
+        "pred":  "pred.json"
     }
     for k, filename in img_path_dict.items():
         img_path_dict[k] = subdir / filename
@@ -180,22 +178,9 @@ def get_filenames(subdir):
 def main():
     np.seterr(all='raise')
     np.set_printoptions(precision=2, suppress=True)
-    rgb_pil = Image.open("data/1686855846/rgb.png")
-    rgb_np = np.asarray(rgb_pil)
-    with open("data/1686855846/pred.json") as f:
-        predictions = json.load(f)
-    robot_px = np.array([320, 650])
 
-    # # run CDCPD to get the hose state
-    # ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
-    #
-    # # detect regrasp point
-    # min_cost_idx, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, 50, ordered_hose_points)
-    #
-    #
-    # t0 = time.time()
-    # plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px)
-    # print("Planning took %.3f seconds" % (time.time() - t0))
+    predictor = Predictor()
+    robot_px = np.array([320, 650])
 
     rng = np.random.RandomState(0)
     data_dir = Path("homotopy_test_data/")
@@ -212,15 +197,16 @@ def main():
         n_total += 1
         rgb_pil = Image.open(img_path_dict["rgb"])
         rgb_np = np.asarray(rgb_pil)
-        with open(img_path_dict["pred"]) as f:
-            predictions = json.load(f)
+
+        predictions = predictor.predict(rgb_np)
 
         try:
             t0 = time.time()
             ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
             min_cost_idx, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, ordered_hose_points, 50,
                                                                       viz=False)
-            success, _ = plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px + rng.uniform(-25, 25, 2).astype(int))
+            success, _ = plan(rgb_np, predictions, predictor.colors, ordered_hose_points, regrasp_px,
+                              robot_px + rng.uniform(-25, 25, 2).astype(int))
             print("Planning took %.3f seconds" % (time.time() - t0))
             if success:
                 n_success += 1

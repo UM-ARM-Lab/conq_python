@@ -2,8 +2,6 @@ import json
 from pathlib import Path
 from typing import Dict
 
-import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
@@ -16,16 +14,17 @@ from cdcpd_torch.modules.cdcpd_network import CDCPDModule
 from cdcpd_torch.modules.cdcpd_parameters import CDCPDParamValues
 from cdcpd_torch.modules.post_processing.configuration import PostProcConfig, PostProcModuleChoice
 from conq.exceptions import DetectionError
+from arm_segmentation.predictor import get_combined_mask
 
 NUM_POINTS = 15
 METERS_TO_MILLIMETERS = 1e3
 
 INTRINSIC_INFO = {
-    "cols": 640,
-    "rows": 480,
+    "cols":    640,
+    "rows":    480,
     "pinhole": {
         "intrinsics": {
-            "focal_length": {
+            "focal_length":    {
                 "x": 552.02910121610671,
                 "y": 552.02910121610671
             },
@@ -59,60 +58,8 @@ def load_predictions(pred_filepath):
     return predictions
 
 
-def get_masks_dict(predictions, img, rope_classes=None, obstacle_class_name="battery"):
-    # create masks based on the polygons for each class
-    if rope_classes is None:
-        rope_classes = ["vacuum_hose", "vacuum_neck"]
-    rope_masks = []
-    obstacle_masks = []
-    rope_polygons = []
-    obstacle_polygons = []
-    for pred in predictions:
-        class_name = pred["class"]
-
-        points = pred["points"]
-        points = np.array([(p['x'], p['y']) for p in points], dtype=int)
-        mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
-        cv2.fillPoly(mask, [points], 255)
-
-        if class_name in rope_classes:
-            rope_polygons.append(points)
-            rope_masks.append(mask)
-        elif class_name == obstacle_class_name:
-            obstacle_polygons.append(points)
-            obstacle_masks.append(mask)
-
-    if len(rope_masks) == 0:
-        raise DetectionError("No rope detected")
-
-    masks = {
-        "rope": rope_masks,
-        "obstacle": obstacle_masks
-    }
-
-    return masks
-
-
-def show_img_and_mask(img, mask, mask_name):
-    fig, ax = plt.subplots(ncols=2)
-    ax[0].imshow(img)
-    ax[1].imshow(mask)
-    ax[1].set_title(mask_name)
-    # fig.show()
-
-
-def combine_masks(img, masks):
-    combined_mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
-    for mask in masks:
-        combined_mask = cv2.bitwise_or(combined_mask, mask)
-    return combined_mask
-
-
-## CDCPD Helper Functions
-## ----------------------
-
 def find_rope_start_end_points(cloud_filtered: PointCloud):
-    # Find the point of the "rope" closest to the far upper left of the robot and the point closeset to
+    # Find the point of the "rope" closest to the far upper left of the robot and the point closest to
     # the far lower right of the robot for the start and end points.
     cloud_pts = cloud_filtered.xyz
     cloud_mean_z_val = cloud_filtered.xyz[2, :].mean()
@@ -137,7 +84,6 @@ def generate_multiple_start_end_points(cloud_filtered: PointCloud):
 
     cloud_mins = cloud_pts.min(axis=1)
     cloud_maxes = cloud_pts.max(axis=1)
-
 
     # Generate configurations that go from:
     # - top left to bottom right
@@ -245,34 +191,14 @@ def project_tracking_results_to_image_coords(cdcpd_output: torch.Tensor):
     return vertex_uv_coords
 
 
-def draw_results(rgb_img: np.ndarray, rope_mask_full: np.ndarray,
-                 vertex_uv_coords: np.ndarray, saved_name=None):
-    num_uv_coords = vertex_uv_coords.shape[1]
-    img_viz = rgb_img.copy()
-
-    img_viz[rope_mask_full.astype(bool), 2] = 255
-
-    pt_color = (255, 0, 0)
-    for i in range(num_uv_coords):
-        pt_coords = vertex_uv_coords[:, i]
-        cv2.circle(img_viz, center=pt_coords, radius=5, color=pt_color, thickness=-1)
-
-    if saved_name:
-        fig, ax = plt.subplots()
-        ax.imshow(img_viz)
-        ax.set_title(saved_name.stem)
-        fig.savefig(saved_name)
-        fig.close()
-        print("Saved results figure to:", saved_name)
-
-    return img_viz
-
-
-def single_frame_planar_cdcpd(rgb_np: np.ndarray, predictions: Dict,
-                              do_visualization=False, saved_fig_name=None):
+def single_frame_planar_cdcpd(rgb_np: np.ndarray, predictions: Dict):
     """Does full CDCPD single frame prediction given input images, predictions, and masks"""
-    masks_dict = get_masks_dict(predictions, rgb_np)
-    rope_mask_full = combine_masks(rgb_np, masks_dict['rope'])
+    rope_mask = get_combined_mask(predictions, ['vacuum_hose', 'vacuum_neck'])
+    binary_rope_mask = rope_mask > 0.5
+    if rope_mask is None:
+        raise DetectionError("No rope masks found")
+
+    # Combine masks by adding and clipping the probabilities.
     depth_np = np.ones((rgb_np.shape[0], rgb_np.shape[1]), dtype=float) * METERS_TO_MILLIMETERS
 
     if rgb_np.dtype != float:
@@ -281,9 +207,9 @@ def single_frame_planar_cdcpd(rgb_np: np.ndarray, predictions: Dict,
     if rgb_np.max() > 1.0:
         rgb_np_normed = rgb_np / 255.
 
-    # Convert images to clouds and downsample.
+    # Convert images to clouds and down-sample.
     cloud_unfiltered, cloud_filtered = imgs_to_clouds_np(rgb_np_normed, depth_np, INTRINSIC,
-                                                         rope_mask_full.astype(bool))
+                                                         binary_rope_mask)
     cloud_filtered.downsample(voxel_size=0.02)
 
     start_pts, end_pts = generate_multiple_start_end_points(cloud_filtered)
@@ -312,9 +238,5 @@ def single_frame_planar_cdcpd(rgb_np: np.ndarray, predictions: Dict,
 
     # Project tracking result back to image space coordinates.
     vertex_uv_coords = project_tracking_results_to_image_coords(best_Y_cpd)
-
-    if do_visualization:
-        draw_results(rgb_np.astype(np.uint8), rope_mask_full, vertex_uv_coords,
-                     saved_name=saved_fig_name)
 
     return vertex_uv_coords.T

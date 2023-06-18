@@ -41,7 +41,7 @@ from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis, detect_reg
 from regrasping_demo.get_detections import GetRetryResult, np_to_vec2, get_hose_and_regrasp_point, \
     get_hose_and_head_point, get_mess
 from regrasping_demo.get_detections import save_data
-from regrasping_demo.homotopy_planner import get_obstacles
+from regrasping_demo.homotopy_planner import get_obstacle_coms
 
 
 def hand_pose_cmd(robot_state_client, x, y, z, roll=0., pitch=np.pi / 2, yaw=0., duration=0.5):
@@ -388,7 +388,7 @@ def main(argv):
                 predictions = get_predictions(rgb_np)
                 save_data(rgb_np, depth_np, predictions)
 
-                _, obstacles_mask = get_obstacles(predictions, rgb_np.shape[0], rgb_np.shape[1])
+                _, obstacles_mask = get_obstacle_coms(predictions, rgb_np.shape[0], rgb_np.shape[1])
                 if np.sum(obstacles_mask) == 0:
                     walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, yaw=0)
                     continue

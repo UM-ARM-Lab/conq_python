@@ -14,8 +14,8 @@ from conq.cameras_utils import get_color_img, get_depth_img
 from conq.exceptions import DetectionError
 from conq.roboflow_utils import get_predictions
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
-from regrasping_demo.detect_regrasp_point import get_polys, detect_object_center, detect_regrasp_point_from_hose, \
-    get_poly_centroid
+from regrasping_demo.detect_regrasp_point import get_masks, detect_object_center, detect_regrasp_point_from_hose, \
+    get_center_of_mass
 
 DEFAULT_IDEAL_DIST_TO_OBS = 70
 
@@ -54,7 +54,7 @@ def get_mess(robot_state_client, rc_client, image_client):
 
     save_data(rgb_np, depth_np, predictions)
 
-    mess_polys = get_polys(predictions, "mess")
+    mess_polys = get_masks(predictions, "mess")
 
     if len(mess_polys) == 0:
         raise DetectionError("No mess detected")
@@ -70,7 +70,7 @@ def get_mess(robot_state_client, rc_client, image_client):
         ax.plot(mess_poly[:, 0], mess_poly[:, 1], zorder=2, linewidth=3)
     fig.show()
 
-    mess_px, mess_py = get_poly_centroid(mess_polys[0])
+    mess_px, mess_py = get_center_of_mass(mess_polys[0])
 
     # compute position in camera frame of the pixel given a fixed depth, which has the right direction in 3D
     # but may be the wrong length.

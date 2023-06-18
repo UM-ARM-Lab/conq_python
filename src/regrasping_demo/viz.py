@@ -2,7 +2,7 @@ import matplotlib.cm as cm
 import numpy as np
 
 
-def viz_predictions(rgb_np, predictions, fig, ax):
+def viz_roboflow_predictions(rgb_np, predictions, fig, ax):
     ax.imshow(rgb_np)
     rng = np.random.RandomState(0)
     class_colors = {}
