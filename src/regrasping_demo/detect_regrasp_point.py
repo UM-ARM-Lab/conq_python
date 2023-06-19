@@ -77,7 +77,7 @@ def detect_regrasp_point_from_hose(rgb_np, predictions, ordered_hose_points, ide
         raise DetectionError(f"No obstacles detected")
 
     for i, p in enumerate(ordered_hose_points):
-        min_d_to_any_obstacle = min_dist_to_obstacles(obstacles_mask, p)
+        min_d_to_any_obstacle = min_dist_to_mask(obstacles_mask, p)
         dist_costs[i] = abs(min_d_to_any_obstacle - ideal_dist_to_obs)
 
     total_cost = dist_costs
@@ -98,9 +98,15 @@ def detect_regrasp_point_from_hose(rgb_np, predictions, ordered_hose_points, ide
     return min_cost_idx, best_px
 
 
-def min_dist_to_obstacles(obstacles_mask, p):
-    obstacle_pixels = np.argwhere(obstacles_mask)
-    distances = np.sqrt((obstacle_pixels[:, 0] - p[0]) ** 2 + (obstacle_pixels[:, 1] - p[1]) ** 2)
+def min_dist_to_mask(mask, p, threshold=0.5):
+    """
+    Returns the minimum distance from the given point to any obstacle in the given mask.
+
+    Args:
+        mask: A mask of probabilities.
+    """
+    mask_ys, mask_xs = np.where(mask > threshold)
+    distances = np.sqrt((mask_xs - p[0]) ** 2 + (mask_ys - p[1]) ** 2)
     return distances.min()
 
 

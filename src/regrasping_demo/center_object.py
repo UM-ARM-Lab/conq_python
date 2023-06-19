@@ -1,39 +1,17 @@
-import json
 from pathlib import Path
 from typing import Dict
 
 import cv2
 import numpy as np
 from PIL import Image
+from matplotlib import pyplot as plt
 
+from arm_segmentation.predictor import get_combined_mask, Predictor
+from arm_segmentation.viz import viz_predictions
 from conq.exceptions import DetectionError
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
-from regrasping_demo.detect_regrasp_point import get_masks
-from regrasping_demo.homotopy_planner import poly_to_mask, get_filenames
-
-
-def main():
-    np.seterr(all='raise')
-    np.set_printoptions(precision=2, suppress=True)
-
-    rng = np.random.RandomState(0)
-
-    data_dir = Path("homotopy_test_data/")
-    for subdir in data_dir.iterdir():
-        if not subdir.is_dir():
-            continue
-        img_path_dict = get_filenames(subdir)
-        if not img_path_dict:
-            print("skipping ", subdir)
-            continue
-
-        rgb_pil = Image.open(img_path_dict["rgb"])
-        rgb_np = np.asarray(rgb_pil)
-        with open(img_path_dict["pred"]) as f:
-            predictions = json.load(f)
-
-        delta_px = center_object_step(rgb_np, predictions, rng)
-        print(delta_px)
+from regrasping_demo.detect_regrasp_point import get_masks, min_dist_to_mask
+from regrasping_demo.homotopy_planner import get_filenames
 
 
 def center_object_step(rgb_np, predictions, rng, padding=25):
@@ -45,7 +23,7 @@ def center_object_step(rgb_np, predictions, rng, padding=25):
     """
     h, w = rgb_np.shape[:2]
     # filter out small instances of obstacles
-    obstacle_masks = get_obs_masks_near_hose(predictions, h, w, min_dist_thresh=150)
+    obstacle_masks = get_obsacles_near_hose(predictions, min_dist_thresh=150)
 
     # check if any obstacle is touching the edge
     for mask in obstacle_masks:
@@ -74,23 +52,54 @@ def center_object_step(rgb_np, predictions, rng, padding=25):
     return None
 
 
-def get_obs_masks_near_hose(predictions: Dict, h, w, min_dist_thresh=250):
-    obstacle_polys = get_masks(predictions, "battery")
-    hose_polys = get_masks(predictions, ['vacuum_hose', 'vacuum_neck', 'vacuum_head'])
-    if len(hose_polys) == 0:
+def get_obsacles_near_hose(predictions: Dict, min_dist_thresh=250):
+    obstacle_masks = get_masks(predictions, "battery")
+    hose_mask = get_combined_mask(predictions, ['vacuum_hose', 'vacuum_neck', 'vacuum_head'])
+    if hose_mask is None:
         raise DetectionError("No hose detected")
 
-    obs_near_hose = []
-    for obstacle_poly in obstacle_polys:
-        min_dist = min([dist_to_nearest_poly(obstacle_p, hose_polys) for obstacle_p in obstacle_poly])
-        mask = poly_to_mask([obstacle_poly], h, w)
+    obstacles_near_hose = []
+    for obstacle_mask in obstacle_masks:
+        # Look at all points on all contours, since we only are about the "outside" points of the obstacle
+        binary_obstacle_mask = (obstacle_mask > 0.5).astype(np.uint8)
+        contours, _ = cv2.findContours(binary_obstacle_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        obstacle_points = np.concatenate(contours, 0).squeeze()
+        min_dist = min([min_dist_to_mask(hose_mask, obstacle_p) for obstacle_p in obstacle_points])
         if min_dist < min_dist_thresh:
-            obs_near_hose.append(mask)
-    return obs_near_hose
+            obstacles_near_hose.append(obstacle_mask)
+    return obstacles_near_hose
 
 
-def dist_to_nearest_poly(p, polys):
-    return min([-cv2.pointPolygonTest(poly, tuple(map(int, p)), True) for poly in polys])
+def main():
+    np.seterr(all='raise')
+    np.set_printoptions(precision=2, suppress=True)
+
+    rng = np.random.RandomState(0)
+    predictor = Predictor()
+
+    data_dir = Path("homotopy_test_data/")
+    for subdir in data_dir.iterdir():
+        if not subdir.is_dir():
+            continue
+        img_path_dict = get_filenames(subdir)
+        if not img_path_dict:
+            print("skipping ", subdir)
+            continue
+
+        rgb_pil = Image.open(img_path_dict["rgb"])
+        rgb_np = np.asarray(rgb_pil)
+
+        predictions = predictor.predict(rgb_np)
+
+        delta_px = center_object_step(rgb_np, predictions, rng)
+        print(delta_px)
+
+        fig, ax = plt.subplots()
+        ax.imshow(rgb_np, zorder=0)
+        viz_predictions(rgb_np, predictions, predictor.colors, fig, ax, legend=False)
+        if delta_px is not None:
+            ax.arrow(rgb_np.shape[1] / 2, rgb_np.shape[0] / 2, delta_px[0], delta_px[1], width=5, color='r', zorder=2)
+        fig.show()
 
 
 if __name__ == '__main__':
