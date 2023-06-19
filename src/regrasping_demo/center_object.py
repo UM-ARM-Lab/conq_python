@@ -1,17 +1,15 @@
-from pathlib import Path
 from typing import Dict
 
 import cv2
 import numpy as np
-from PIL import Image
 from matplotlib import pyplot as plt
 
-from arm_segmentation.predictor import get_combined_mask, Predictor
+from arm_segmentation.predictor import get_combined_mask
 from arm_segmentation.viz import viz_predictions
 from conq.exceptions import DetectionError
+from regrasping_demo import testing
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.detect_regrasp_point import get_masks, min_dist_to_mask
-from regrasping_demo.homotopy_planner import get_filenames
 
 
 def center_object_step(rgb_np, predictions, rng, padding=25):
@@ -71,26 +69,9 @@ def get_obsacles_near_hose(predictions: Dict, min_dist_thresh=250):
 
 
 def main():
-    np.seterr(all='raise')
-    np.set_printoptions(precision=2, suppress=True)
-
     rng = np.random.RandomState(0)
-    predictor = Predictor()
 
-    data_dir = Path("homotopy_test_data/")
-    for subdir in data_dir.iterdir():
-        if not subdir.is_dir():
-            continue
-        img_path_dict = get_filenames(subdir)
-        if not img_path_dict:
-            print("skipping ", subdir)
-            continue
-
-        rgb_pil = Image.open(img_path_dict["rgb"])
-        rgb_np = np.asarray(rgb_pil)
-
-        predictions = predictor.predict(rgb_np)
-
+    for predictor, subdir, rgb_np, predictions in testing.get_test_examples():
         delta_px = center_object_step(rgb_np, predictions, rng)
         print(delta_px)
 

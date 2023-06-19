@@ -348,7 +348,7 @@ def go_to_goal_and_reset(command_client, robot_state_client, image_client, manip
                 walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, yaw=0)
                 continue
 
-            _, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, hose_points, ideal_dist_to_obs=70)
+            _, regrasp_px = detect_regrasp_point_from_hose(predictions, hose_points, ideal_dist_to_obs=70)
             regrasp_vec2 = np_to_vec2(regrasp_px)
             regrasp_x_in_cam, regrasp_y_in_cam, _ = pixel_to_camera_space(rgb_res, regrasp_px[0], regrasp_px[1],
                                                                           depth=1.0)
