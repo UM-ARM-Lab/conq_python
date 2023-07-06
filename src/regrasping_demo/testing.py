@@ -13,7 +13,8 @@ def get_test_examples():
     predictor = Predictor()
 
     data_dir = Path("homotopy_test_data/")
-    for subdir in data_dir.iterdir():
+    for subdir in sorted(data_dir.iterdir()):
+        print(subdir)
         if not subdir.is_dir():
             continue
         img_path_dict = get_filenames(subdir)

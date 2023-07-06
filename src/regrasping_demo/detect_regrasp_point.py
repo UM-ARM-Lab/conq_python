@@ -102,11 +102,13 @@ def main():
 
         fig, ax = plt.subplots()
         ax.imshow(rgb_np)
-        viz_predictions(rgb_np, predictions, predictor.colors, fig, ax)
+        # viz_predictions(rgb_np, predictions, predictor.colors, fig, ax)
         for p in hose_points:
             ax.scatter(p[0], p[1], color='y', zorder=3)
-        ax.scatter(regrasp_px[0], regrasp_px[1], s=100, marker='*', c='m', zorder=4)
+        ax.scatter(regrasp_px[0], regrasp_px[1], s=200, marker='*', c='orange', zorder=4)
+        ax.axis("off")
         fig.show()
+        fig.savefig("regrasp_point.png")
 
 
 if __name__ == "__main__":

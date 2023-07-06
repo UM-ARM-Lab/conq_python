@@ -8,8 +8,6 @@ import bosdyn.client
 import bosdyn.client.util
 import numpy as np
 import rerun as rr
-from bosdyn import geometry
-from bosdyn.api import geometry_pb2
 from bosdyn.api import manipulation_api_pb2
 from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
 from bosdyn.api.spot import robot_command_pb2 as spot_command_pb2
@@ -30,8 +28,9 @@ from google.protobuf import wrappers_pb2
 from arm_segmentation.predictor import Predictor
 from conq.cameras_utils import rot_2d, get_color_img, get_depth_img, camera_space_to_pixel, pos_in_cam_to_pos_in_hand
 from conq.exceptions import DetectionError, GraspingException
+from conq.hand_motion import hand_pose_cmd, hand_delta_in_body_frame
 from conq.manipulation import block_for_manipulation_api_command, open_gripper, force_measure, \
-    do_grasp, raise_hand, add_follow_with_body
+    do_grasp, raise_hand
 from conq.manipulation import blocking_arm_command
 from conq.utils import setup_and_stand
 from regrasping_demo import homotopy_planner
@@ -42,38 +41,6 @@ from regrasping_demo.get_detections import GetRetryResult, np_to_vec2, get_hose_
     get_hose_and_head_point, get_mess
 from regrasping_demo.get_detections import save_data
 from regrasping_demo.homotopy_planner import get_obstacle_coms
-
-
-def hand_pose_cmd(robot_state_client, x, y, z, roll=0., pitch=np.pi / 2, yaw=0., duration=0.5):
-    """
-    Move the arm to a pose relative to the body
-
-    Args:
-        robot_state_client: RobotStateClient
-        x: x position in meters in front of the body center
-        y: y position in meters to the left of the body center
-        z: z position in meters above the body center
-        roll: roll in radians
-        pitch: pitch in radians
-        yaw: yaw in radians
-        duration: duration in seconds
-    """
-    transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
-
-    hand_pos_in_body = geometry_pb2.Vec3(x=x, y=y, z=z)
-
-    euler = geometry.EulerZXY(roll=roll, pitch=pitch, yaw=yaw)
-    quat_hand = euler.to_quaternion()
-
-    body_in_odom = get_a_tform_b(transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
-    hand_in_body = geometry_pb2.SE3Pose(position=hand_pos_in_body, rotation=quat_hand)
-
-    hand_in_odom = body_in_odom * math_helpers.SE3Pose.from_proto(hand_in_body)
-
-    arm_command = RobotCommandBuilder.arm_pose_command(
-        hand_in_odom.x, hand_in_odom.y, hand_in_odom.z, hand_in_odom.rot.w, hand_in_odom.rot.x,
-        hand_in_odom.rot.y, hand_in_odom.rot.z, ODOM_FRAME_NAME, duration)
-    return arm_command
 
 
 def look_at_scene(command_client, robot_state_client, x=0.56, y=0.1, z=0.55, pitch=0., yaw=0., dx=0., dy=0., dpitch=0.):
@@ -180,16 +147,6 @@ def walk_to(robot_state_client, image_client, command_client, manipulation_api_c
     block_for_manipulation_api_command(manipulation_api_client, walk_response)
 
 
-def hand_delta_in_body_frame(command_client, robot_state_client, dx, dy, dz, follow=True):
-    transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
-    hand_in_body = get_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
-    hand_pos_in_body = hand_in_body.position
-    cmd = hand_pose_cmd(robot_state_client, hand_pos_in_body.x + dx, hand_pos_in_body.y + dy, hand_pos_in_body.z + dz)
-    if follow:
-        cmd = add_follow_with_body(cmd)
-    blocking_arm_command(command_client, cmd)
-
-
 def align_with_hose(command_client, robot_state_client, image_client, get_point_f):
     pick_res = get_point_f_retry(command_client, robot_state_client, image_client,
                                  get_point_f, y=0., z=0.5, pitch=np.deg2rad(85), yaw=0)
@@ -292,7 +249,6 @@ def center_obstacles(predictor, command_client, robot_state_client, image_client
             print("success!")
             break
 
-        # TODO: move by delta_px
         # FIXME: generalize this math/transform. This assumes that +x in image (column) is -Y in body, etc.
         # FIXME: should be using camera intrinsics here so motion scale makes more sense
         dx_in_body, dy_in_body = np.array([-delta_px[1], -delta_px[0]]) * motion_scale
@@ -418,7 +374,8 @@ def main(argv):
                 body_in_cam = np.array([-body_in_hand.y, -body_in_hand.z])
                 robot_px = np.array(camera_space_to_pixel(rgb_res, body_in_cam[0], body_in_cam[1], hand_to_floor))
 
-                _, place_px = homotopy_planner.plan(rgb_np, predictions, predictor.colors, hose_points, regrasp_px, robot_px)
+                _, place_px = homotopy_planner.plan(rgb_np, predictions, predictor.colors, hose_points, regrasp_px,
+                                                    robot_px)
 
                 place_x_in_cam, place_y_in_cam, _ = pixel_to_camera_space(rgb_res, place_px[0], place_px[1], depth=1.0)
                 place_x, place_y = pos_in_cam_to_pos_in_hand([place_x_in_cam, place_y_in_cam])
