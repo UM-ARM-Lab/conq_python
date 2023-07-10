@@ -21,6 +21,8 @@ For running demos, user the ARM Razer laptop:
 # Create virtual environment
 virtualenv venv # give this a good name
 source venv/bin/activate
+git clone git@github.com:UM-ARM-Lab/conq_python.git
+cd conq_python
 pip install -e .  # installs in editable mode so your IDE knows where the conq_python packages are
 ```
 
@@ -29,7 +31,10 @@ pip install -e .  # installs in editable mode so your IDE knows where the conq_p
 Some demos have other dependencies that need to be setup. For example, for the regrasping demo, start with the general setup steps, then run:
 ```
 # Install cdcpd_torch into some other folder (outside conq_python)
+cd ..
 git clone git@github.com:UM-ARM-Lab/cdcpd_torch.git -b conq_no_ros
+cd cdcpd_torch
 pip install . # inside cdcpd_torch
+cd conq_python
 pip install -e .[regrasping_demo]
 ```
