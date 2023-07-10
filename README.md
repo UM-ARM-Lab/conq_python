@@ -23,7 +23,7 @@ virtualenv venv # give this a good name
 source venv/bin/activate
 git clone git@github.com:UM-ARM-Lab/conq_python.git
 cd conq_python
-pip install -e .  # installs in editable mode so your IDE knows where the conq_python packages are
+pip install .  # installs in editable mode so your IDE knows where the conq_python packages are
 ```
 
 ## Additional setup for demos
