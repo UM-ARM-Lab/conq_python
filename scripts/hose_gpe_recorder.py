@@ -80,71 +80,7 @@ def main(argv):
 
     info_dict = {"rgb_np": rgb_np, "rgb_res": rgb_res, "gpe_in_hand": gpe_in_hand}
 
-    file_name = save_data(info_dict)
-
-    info_dict_loaded = load_data(file_name)
-    print(type(info_dict_loaded["rgb_np"]))
-    print(type(info_dict_loaded["rgb_res"]))
-    print(type(info_dict_loaded["gpe_in_hand"]))
-    '''
-    # Vec3 describing a point on the plane
-    p0 = gpe_in_hand.position
-    # 4x4 rotation matrix of gpe
-    rot_mat_gpe = gpe_in_hand.rotation.to_matrix()
-    # normal vector of gpe
-    n = rot_mat_gpe[0:3,2]
-
-    # sample point in camera frame
-    point_in_cam = pixel_to_camera_space(rgb_res.shot.image, 40, 50, 1)
-    
-    #TODO: modify this to be the appropriate type
-    # A point on the line intersecting the plane, in this case the origin of the camera frame
-    l0 = geometry_pb2.Vec3(0,0,0)
-
-    # vector of arbitrary length to point in cam
-    l = geometry_pb2.Vec3(point_in_cam(0), point_in_cam(1), point_in_cam(2))
-    predictions = get_predictions(rgb_np)
-
     save_data(info_dict)
-    # for every pixel in the image (or once we have the hose, every corresponding point in the hose)    
-    
-
-    predictor = Predictor(Path("hose_regrasping.pth"))
-    data_dir = Path("conq_hose")
-    for subdir in data_dir.iterdir():
-        if not subdir.is_dir():
-            continue
-        img_path_dict = {
-            "rgb": "rgb.png",
-            "depth": "depth.png",
-            "pred": "pred.json"
-        }
-        all_found = True
-        for k, filename in img_path_dict.items():
-            img_path_dict[k] = subdir / filename
-            if not img_path_dict[k].exists():
-                all_found = False
-                break
-        if not all_found:
-            print("skipping ", subdir)
-            continue
-
-        rgb_np = np.array(Image.open(img_path_dict["rgb"].as_posix()))
-
-        # Not using the depth image as the depth horizontal FOV is too tight. Using single depth value method instead.
-        depth_img = np.ones((rgb_np.shape[0], rgb_np.shape[1]), dtype=float) * METERS_TO_MILLIMETERS
-
-        predictions = predictor.predict(rgb_np)
-
-        saved_fig_name = subdir / "cdcpd_output.png"
-        ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
-
-        fig, ax = plt.subplots()
-        ax.imshow(rgb_np, zorder=0)
-        viz_predictions(rgb_np, predictions, predictor.colors, fig, ax, legend=False)
-        ax.scatter(ordered_hose_points[:, 0], ordered_hose_points[:, 1], c='yellow', zorder=2)
-        plt.show()
-        '''    
 
 
 if __name__ == "__main__":
