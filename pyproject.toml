@@ -18,6 +18,7 @@ maintainers = [
 
 dependencies = [
     "Pillow",
+    "arm_segmentation",
     "bosdyn-choreography-client",
     "bosdyn-client",
     "bosdyn-mission",

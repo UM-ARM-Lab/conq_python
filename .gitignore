@@ -10,5 +10,7 @@ __pycache__
 **/data
 **/video
 *.zip
+*.pth
+models
 homotopy_test_data
 model.pth

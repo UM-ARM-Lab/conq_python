@@ -26,12 +26,12 @@ from bosdyn.client.robot_command import (block_for_trajectory_cmd)
 from bosdyn.client.robot_state import RobotStateClient
 from google.protobuf import wrappers_pb2
 
+from arm_segmentation.predictor import Predictor
 from conq.cameras_utils import rot_2d, get_color_img, get_depth_img, camera_space_to_pixel, pos_in_cam_to_pos_in_hand
 from conq.exceptions import DetectionError, GraspingException
 from conq.manipulation import block_for_manipulation_api_command, open_gripper, force_measure, \
     do_grasp, raise_hand, add_follow_with_body
 from conq.manipulation import blocking_arm_command
-from conq.roboflow_utils import get_predictions
 from conq.utils import setup_and_stand
 from regrasping_demo import homotopy_planner
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
@@ -75,7 +75,8 @@ def hand_pose_cmd(robot_state_client, x, y, z, roll=0., pitch=np.pi / 2, yaw=0.,
     return arm_command
 
 
-def look_at_scene(command_client, robot_state_client, x=0.56, y=0.1, z=0.55, pitch=0., yaw=0., dx=0., dy=0., dpitch=0., dyaw=0.):
+def look_at_scene(command_client, robot_state_client, x=0.56, y=0.1, z=0.55, pitch=0., yaw=0., dx=0., dy=0., dpitch=0.,
+                  dyaw=0.):
     look_cmd = hand_pose_cmd(robot_state_client, x + dx, y + dy, z,
                              0, pitch + dpitch, yaw + dyaw,
                              duration=0.5)
@@ -89,7 +90,8 @@ def get_point_f_retry(command_client, robot_state_client, image_client, get_poin
     dpitch = 0
     dyaw = 0
     while True:
-        look_at_scene(command_client, robot_state_client, y=y, z=z, pitch=pitch, yaw=yaw, dx=dx, dy=dy, dpitch=dpitch, dyaw=dyaw)
+        look_at_scene(command_client, robot_state_client, y=y, z=z, pitch=pitch, yaw=yaw, dx=dx, dy=dy, dpitch=dpitch,
+                      dyaw=dyaw)
         try:
             return get_point_f(image_client)
         except DetectionError:
@@ -97,7 +99,6 @@ def get_point_f_retry(command_client, robot_state_client, image_client, get_poin
             dy = np.random.randn() * 0.15
             dpitch = np.random.randn() * 0.08
             dyaw = np.random.randn() * 0.5
-
 
 
 def pose_in_start_frame(initial_transforms, x, y, yaw):
@@ -280,12 +281,12 @@ def reset_before_regrasp(command_client, initial_transforms):
     walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0.0, y=0.0, yaw=0.0)
 
 
-def center_obstacles(command_client, robot_state_client, image_client, motion_scale=0.0004):
+def center_obstacles(predictor, command_client, robot_state_client, image_client, motion_scale=0.0004):
     rng = np.random.RandomState(0)
     for _ in range(5):
         rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
         depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
-        predictions = get_predictions(rgb_np)
+        predictions = predictor.predict(rgb_np)
         save_data(rgb_np, depth_np, predictions)
 
         delta_px = center_object_step(rgb_np, predictions, rng)
@@ -301,7 +302,7 @@ def center_obstacles(command_client, robot_state_client, image_client, motion_sc
         hand_delta_in_body_frame(command_client, robot_state_client, dx_in_body, dy_in_body, dz=0, follow=False)
 
 
-def go_to_goal_and_reset(command_client, robot_state_client, image_client, manipulation_api_client,
+def go_to_goal_and_reset(predictor, command_client, robot_state_client, image_client, manipulation_api_client,
                          initial_transforms, goal_x, goal_y, goal_yaw):
     while True:
         # Grasp the hose to DRAG
@@ -319,22 +320,22 @@ def go_to_goal_and_reset(command_client, robot_state_client, image_client, manip
 
         # Grasp the hose to get it UNSTUCK
         walk_to(robot_state_client, image_client, command_client, manipulation_api_client,
-                partial(get_hose_and_regrasp_point, ideal_dist_to_obs=5))
+                partial(get_hose_and_regrasp_point, predictor, ideal_dist_to_obs=5))
 
         # Move the arm to get the hose unstuck
         for _ in range(3):
             align_with_hose(command_client, robot_state_client, image_client,
-                            partial(get_hose_and_regrasp_point, ideal_dist_to_obs=40))
+                            partial(get_hose_and_regrasp_point, predictor, ideal_dist_to_obs=40))
 
             # Center the obstacles in the frame
             center_obstacles(command_client, robot_state_client, image_client)
 
             rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
             depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
-            predictions = get_predictions(rgb_np)
+            predictions = predictor.predict(rgb_np)
             save_data(rgb_np, depth_np, predictions)
 
-            _, obstacles_mask = get_obstacle_coms(predictions, rgb_np.shape[0], rgb_np.shape[1])
+            _, obstacles_mask = get_obstacle_coms(predictions)
             if np.sum(obstacles_mask) == 0:
                 walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, yaw=0)
                 continue
@@ -348,7 +349,7 @@ def go_to_goal_and_reset(command_client, robot_state_client, image_client, manip
                 walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, yaw=0)
                 continue
 
-            _, regrasp_px = detect_regrasp_point_from_hose(rgb_np, predictions, hose_points, ideal_dist_to_obs=70)
+            _, regrasp_px = detect_regrasp_point_from_hose(predictions, hose_points, ideal_dist_to_obs=70)
             regrasp_vec2 = np_to_vec2(regrasp_px)
             regrasp_x_in_cam, regrasp_y_in_cam, _ = pixel_to_camera_space(rgb_res, regrasp_px[0], regrasp_px[1],
                                                                           depth=1.0)
@@ -412,6 +413,8 @@ def main(argv):
     rr.init("rope_pull")
     rr.connect()
 
+    predictor = Predictor()
+
     bosdyn.client.util.setup_logging(args.verbose)
 
     # Creates client, robot, and authenticates, and time syncs
@@ -449,18 +452,17 @@ def main(argv):
 
         # first detect the goal
         handedness = 1  # 1 for when the mess is on the left, -1 for when the mess is on the right
-        mess_yaw = handedness * -np.pi / 2
         goal_1_x = 1.5
         goal_1_y = 1.5
         goal_1_yaw = -np.pi / 2
         goal_2_x = 1.5
         goal_2_y = -1.5
-        goal_2_yaw = -np.pi / 2
+        goal_2_yaw = np.pi / 2
 
-        while True:
-            go_to_goal_and_reset(command_client, robot_state_client, image_client, manipulation_api_client,
+        for _ in range(5):
+            go_to_goal_and_reset(predictor, command_client, robot_state_client, image_client, manipulation_api_client,
                                  initial_transforms, goal_1_x, goal_1_y, goal_1_yaw)
-            go_to_goal_and_reset(command_client, robot_state_client, image_client, manipulation_api_client,
+            go_to_goal_and_reset(predictor, command_client, robot_state_client, image_client, manipulation_api_client,
                                  initial_transforms, goal_2_x, goal_2_y, goal_2_yaw)
 
         vr.stop_in_thread()

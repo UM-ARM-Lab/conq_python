@@ -10,9 +10,9 @@ from bosdyn.client import math_helpers
 from bosdyn.client.frame_helpers import get_a_tform_b, BODY_FRAME_NAME
 from bosdyn.client.image import pixel_to_camera_space
 
+from arm_segmentation.viz import viz_predictions
 from conq.cameras_utils import get_color_img, get_depth_img
 from conq.exceptions import DetectionError
-from conq.roboflow_utils import get_predictions
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.detect_regrasp_point import get_masks, detect_object_center, detect_regrasp_point_from_hose, \
     get_center_of_mass
@@ -46,31 +46,30 @@ def save_data(rgb_np, depth_np, predictions):
         json.dump(predictions, f)
 
 
-def get_mess(robot_state_client, rc_client, image_client):
+def get_mess(predictor, rc_client, image_client):
     rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
     depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
 
-    predictions = get_predictions(rgb_np)
+    predictions = predictor.predict(rgb_np)
 
     save_data(rgb_np, depth_np, predictions)
 
-    mess_polys = get_masks(predictions, "mess")
+    mess_masks = get_masks(predictions, "mess")
 
-    if len(mess_polys) == 0:
+    if len(mess_masks) == 0:
         raise DetectionError("No mess detected")
 
-    if len(mess_polys) != 1:
-        print(f"Error: expected 1 mess, got {len(mess_polys)}")
+    if len(mess_masks) != 1:
+        print(f"Error: expected 1 mess, got {len(mess_masks)}")
 
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
     ax.imshow(rgb_np, alpha=0.5, zorder=0)
     ax.imshow(depth_np, alpha=0.5, zorder=1)
-    for mess_poly in mess_polys:
-        ax.plot(mess_poly[:, 0], mess_poly[:, 1], zorder=2, linewidth=3)
+    viz_predictions(rgb_np, predictions, predictor.colors, fig, ax)
     fig.show()
 
-    mess_px, mess_py = get_center_of_mass(mess_polys[0])
+    mess_px, mess_py = get_center_of_mass(mess_masks[0])
 
     # compute position in camera frame of the pixel given a fixed depth, which has the right direction in 3D
     # but may be the wrong length.
@@ -96,20 +95,20 @@ def get_mess(robot_state_client, rc_client, image_client):
     return mess_x, mess_y
 
 
-def get_hose_and_head_point(image_client):
+def get_hose_and_head_point(predictor, image_client):
     rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
     depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
-    predictions = get_predictions(rgb_np)
+    predictions = predictor.predict(rgb_np)
     save_data(rgb_np, depth_np, predictions)
 
     hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
-    head_detection = detect_object_center(predictions, "vacuum_head")
+    head_px = detect_object_center(predictions, "vacuum_head")
 
     # fig, ax = viz_detection(rgb_np, head_detection)
     # ax.plot(hose_points[:, 0], hose_points[:, 1], c='w', linewidth=4)
     # fig.show()
 
-    dists = np.linalg.norm(hose_points - head_detection.grasp_px, axis=-1)
+    dists = np.linalg.norm(hose_points - head_px, axis=-1)
     best_idx = int(np.argmin(dists))
     best_px = hose_points[best_idx]
     best_vec2 = np_to_vec2(best_px)
@@ -120,14 +119,14 @@ def get_hose_and_head_point(image_client):
     return GetRetryResult(rgb_res, hose_points, best_idx, best_vec2)
 
 
-def get_hose_and_regrasp_point(image_client, ideal_dist_to_obs=DEFAULT_IDEAL_DIST_TO_OBS):
+def get_hose_and_regrasp_point(predictor, image_client, ideal_dist_to_obs=DEFAULT_IDEAL_DIST_TO_OBS):
     rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
     depth_np, depth_res = get_depth_img(image_client, 'hand_depth_in_hand_color_frame')
-    predictions = get_predictions(rgb_np)
+    predictions = predictor.predict(rgb_np)
     save_data(rgb_np, depth_np, predictions)
 
     hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
 
-    best_idx, best_px = detect_regrasp_point_from_hose(rgb_np, predictions, hose_points, ideal_dist_to_obs)
+    best_idx, best_px = detect_regrasp_point_from_hose(predictions, hose_points, ideal_dist_to_obs)
     best_vec2 = np_to_vec2(best_px)
     return GetRetryResult(rgb_res, hose_points, best_idx, best_vec2)

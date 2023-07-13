@@ -51,7 +51,9 @@ def image_to_opencv(image, auto_rotate=True):
         img = img[:, :, ::-1]
 
     if auto_rotate:
-        img = ndimage.rotate(img, ROTATION_ANGLE[image.source.name])
+        angle = ROTATION_ANGLE[image.source.name]
+        if angle != 0:
+            img = ndimage.rotate(img, angle)
 
     return img
 
