@@ -14,7 +14,7 @@ from bosdyn.client.math_helpers import Vec3
 
 from hose_gpe_recorder import load_data
 
-def project_hose(rgb_np, rgb_res, gpe_in_hand):
+def project_hose(rgb_np, rgb_res, gpe_in_cam):
     '''
     Projects the hose in an image into the ground plane.
 
@@ -22,7 +22,7 @@ def project_hose(rgb_np, rgb_res, gpe_in_hand):
     Inputs:
         rgb_np: an rgb image of the hose expressed as a numpy array.
         rgb_res: a bosdyn image_pb2.ImageResponse from the image protobuf containing information about the rgb_np
-        gpe_in_hand: a bosdyn math_helpers.SE3Pose representing the transform from the camera frame to the GPE frame
+        gpe_in_cam: a bosdyn math_helpers.SE3Pose representing the transform from the camera frame to the GPE frame
     
     Returns:
         ordered_hose_points: the pixel space points on the hose that are to be projected 
@@ -30,10 +30,10 @@ def project_hose(rgb_np, rgb_res, gpe_in_hand):
     '''
 
     # Vec3 describing a point on the plane
-    p0 = np.array([gpe_in_hand.position.x, gpe_in_hand.position.y, gpe_in_hand.position.z])
+    p0 = np.array([gpe_in_cam.position.x, gpe_in_cam.position.y, gpe_in_cam.position.z])
     # 4x4 rotation matrix of gpe
-    rot_mat_gpe = gpe_in_hand.rotation.to_matrix()
-    plane_q = np.array([gpe_in_hand.rotation.x, gpe_in_hand.rotation.y, gpe_in_hand.rotation.z, gpe_in_hand.rotation.w])
+    rot_mat_gpe = gpe_in_cam.rotation.to_matrix()
+    plane_q = np.array([gpe_in_cam.rotation.x, gpe_in_cam.rotation.y, gpe_in_cam.rotation.z, gpe_in_cam.rotation.w])
     # normal vector of gpe, this is a numpy array
     n = rot_mat_gpe[0:3,2]
 
@@ -43,8 +43,8 @@ def project_hose(rgb_np, rgb_res, gpe_in_hand):
     # n x 2 array with n points and their u, v pixel coordinates
     ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
 
-    rr.log_arrow("plane/n", p0, n)
-    rr.log_obb("plane/obb", position=p0, rotation_q=plane_q, half_size=[3.5, 3.5, 0.005], label="ground plane")
+    # rr.log_arrow("plane/n", p0, n)
+    # rr.log_obb("plane/obb", position=p0, rotation_q=plane_q, half_size=[3.5, 3.5, 0.005], label="ground plane")
 
     l = np.array([*pixel_to_camera_space(rgb_res, ordered_hose_points[:,0], ordered_hose_points[:,1])[0:2]])
     l = np.transpose(l)
@@ -67,9 +67,9 @@ def main():
 
     rgb_np = info_dict_loaded["rgb_np"]
     rgb_res = info_dict_loaded["rgb_res"]
-    gpe_in_hand = info_dict_loaded["gpe_in_hand"]
+    gpe_in_cam = info_dict_loaded["gpe_in_cam"]
 
-    ordered_hose_points, intersection = project_hose(rgb_np, rgb_res, gpe_in_hand)
+    ordered_hose_points, intersection = project_hose(rgb_np, rgb_res, gpe_in_cam)
     rr.log_line_strip("rope", intersection, stroke_width=0.02)
     for i, point in enumerate(intersection):
         rr.log_point(f"intersection_point_{i}", point, radius=0.03)
