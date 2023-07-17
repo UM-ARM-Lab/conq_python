@@ -128,37 +128,23 @@ def walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0., y=0.
         block_for_trajectory_cmd(command_client, se2_cmd_id)
     return se2_cmd_id
 
-def construct_se2_traj_command(walk_to_res, frame_name):
-    point = trajectory_pb2.SE2TrajectoryPoint(pose=walk_to_res.best_se2)
-    walk_to_cmd = trajectory_pb2.SE2Trajectory(points=[point])
-    traj = basic_command_pb2.MobilityCommand.Request(trajectory=traj, se2_frame_name=frame_name)
-
 def walk_to(robot_state_client, image_client, command_client, manipulation_api_client, get_point_f):
     walk_to_res = get_point_f_retry(command_client, robot_state_client, image_client, get_point_f,
                                     y=0., z=0.4,
                                     pitch=np.deg2rad(30), yaw=0)
     # This should probably be an offset 
     offset_distance = wrappers_pb2.FloatValue(value=1.00)
-    points = trajectory_pb2.SE2TrajectoryPoint(pose=walk_to_res.best_se2)
-    walk_to_cmd = trajectory_pb2.SE2Trajectory(points=[points])
-    traj = basic_command_pb2.MobilityCommand.Request(trajectory=traj, se2_frame_name="TODO")
-    construct_se2_traj_command(walk_to_res, frame_name="TODO")
+    transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
+    transforms_cam = walk_to_res.image_res.shot.transforms_snapshot
+    frame_name_shot = walk_to_res.image_res.source.pinhole
     
-    # DEPRECATED use synchro_se2_trajectory_command instead
-    mobility_command = mobility_command_pb2.MobilityCommand.Request(se2_trajectory_request= traj)
-    comand = robot_command_pb2.RobotCommand(mobility_command=mobility_command)
+    walk_to_res_in_odom = get_se2_a_tform_b(transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME) * get_se2_a_tform_b(GRAV_ALIGNED_BODY_FRAME_NAME, frame_name_shot)
+    se2_cmd = RobotCommandBuilder.synchro_se2_trajectory_command(goal_se2=walk_to_res.best_se2, frame_name=ODOM_FRAME_NAME)
+    se2_synchro_cmd = RobotCommandBuilder.build_synchro_command(se2_cmd)
+    se2_cmd_id = command_client.robot_command(lease=None, command=se2_synchro_cmd, end_time_secs=time.time() + 999)
+    block_for_trajectory_cmd(command_client, se2_cmd_id)
 
-    walk_to_cmd = manipulation_api_pb2.WalkToObjectInImage
-    # walk_to_cmd = manipulation_api_pb2.WalkToObjectInImage(
-    #     pixel_xy=walk_to_res.best_vec2,
-    #     transforms_snapshot_for_camera=walk_to_res.image_res.shot.transforms_snapshot,
-    #     frame_name_image_sensor=walk_to_res.image_res.shot.frame_name_image_sensor,
-    #     camera_model=walk_to_res.image_res.source.pinhole,
-    #     offset_distance=offset_distance)
-    # walk_to_request = manipulation_api_pb2.ManipulationApiRequest(walk_to_object_in_image=walk_to_cmd)
-    # walk_response = manipulation_api_client.manipulation_api_command(manipulation_api_request=walk_to_request)
-    # block_for_manipulation_api_command(manipulation_api_client, walk_response)
-
+#TODO: This function isn't useful anymore? Should we still be aligning after walking to the point?
 def align_with_hose(command_client, robot_state_client, image_client, get_point_f):
     pick_res = get_point_f_retry(command_client, robot_state_client, image_client,
                                  get_point_f, y=0., z=0.5, pitch=np.deg2rad(85), yaw=0)
