@@ -28,7 +28,7 @@ from bosdyn.client.math_helpers import quat_to_eulerZYX
 from bosdyn.api import geometry_pb2
 
 from conq.cameras_utils import get_color_img
-from conq.roboflow_utils import get_predictions
+# from conq.roboflow_utils import get_predictions
 
 def save_data(dictionary):
     now = int(time.time())

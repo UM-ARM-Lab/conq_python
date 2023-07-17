@@ -4,7 +4,7 @@ from bosdyn.api import image_pb2
 from bosdyn.api.image_pb2 import ImageResponse
 from bosdyn.client.image import build_image_request
 from scipy import ndimage
-from bosdyn.client.frame_helpers import get_a_tform_b, ODOM_FRAME_NAME
+from bosdyn.client.frame_helpers import get_a_tform_b, ODOM_FRAME_NAME, GROUND_PLANE_FRAME_NAME
 
 ROTATION_ANGLE = {
     'back_fisheye_image': 0,

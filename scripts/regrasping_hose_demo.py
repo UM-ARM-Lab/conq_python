@@ -50,7 +50,7 @@ def look_at_scene(command_client, robot_state_client, x=0.56, y=0.1, z=0.55, pit
     blocking_arm_command(command_client, look_cmd)
 
 
-def get_point_f_retry(command_client, robot_state_client, image_client, get_point_f: Callable,
+def get_point_f_retry(command_client, robot_state_client, image_client, predictor, get_point_f: Callable,
                       y, z, pitch, yaw) -> GetRetryResult:
     dx = 0
     dy = 0
@@ -58,7 +58,7 @@ def get_point_f_retry(command_client, robot_state_client, image_client, get_poin
     while True:
         look_at_scene(command_client, robot_state_client, y=y, z=z, pitch=pitch, yaw=yaw, dx=dx, dy=dy, dpitch=dpitch)
         try:
-            return get_point_f(image_client)
+            return get_point_f(predictor, image_client, robot_state_client)
         except DetectionError:
             dx = np.random.randn() * 0.05
             dy = np.random.randn() * 0.05
@@ -128,18 +128,18 @@ def walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0., y=0.
         block_for_trajectory_cmd(command_client, se2_cmd_id)
     return se2_cmd_id
 
-def walk_to(robot_state_client, image_client, command_client, manipulation_api_client, get_point_f):
-    walk_to_res = get_point_f_retry(command_client, robot_state_client, image_client, get_point_f,
+def walk_to(robot_state_client, image_client, command_client, predictor, get_point_f):
+    walk_to_res = get_point_f_retry(command_client, robot_state_client, image_client, predictor, get_point_f,
                                     y=0., z=0.4,
                                     pitch=np.deg2rad(30), yaw=0)
     # This should probably be an offset 
     offset_distance = wrappers_pb2.FloatValue(value=1.00)
     transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
     transforms_cam = walk_to_res.image_res.shot.transforms_snapshot
-    frame_name_shot = walk_to_res.image_res.source.pinhole
+    frame_name_shot = walk_to_res.image_res.shot.frame_name_image_sensor
     
-    walk_to_res_in_odom = get_se2_a_tform_b(transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME) * get_se2_a_tform_b(GRAV_ALIGNED_BODY_FRAME_NAME, frame_name_shot)
-    se2_cmd = RobotCommandBuilder.synchro_se2_trajectory_command(goal_se2=walk_to_res.best_se2, frame_name=ODOM_FRAME_NAME)
+    walk_to_res_in_body = get_se2_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, ODOM_FRAME_NAME) * get_se2_a_tform_b(transforms_cam, ODOM_FRAME_NAME, frame_name_shot)
+    se2_cmd = RobotCommandBuilder.synchro_trajectory_command_in_body_frame(goal_x_rt_body=walk_to_res_in_body.x, goal_y_rt_body=walk_to_res_in_body.y, goal_heading_rt_body=walk_to_res_in_body.angle, frame_name=ODOM_FRAME_NAME)
     se2_synchro_cmd = RobotCommandBuilder.build_synchro_command(se2_cmd)
     se2_cmd_id = command_client.robot_command(lease=None, command=se2_synchro_cmd, end_time_secs=time.time() + 999)
     block_for_trajectory_cmd(command_client, se2_cmd_id)
@@ -260,6 +260,10 @@ def main(argv):
     args = parser.parse_args(argv)
     rr.init("rope_pull")
     rr.connect()
+    rr.log_view_coordinates("world", up="+Z", timeless=True)
+    rr.log_arrow('world_x', [0, 0, 0], [0.4, 0, 0], color=(255, 0, 0), width_scale=0.02)
+    rr.log_arrow('world_y', [0, 0, 0], [0, 0.4, 0], color=(0, 255, 0), width_scale=0.02)
+    rr.log_arrow('world_z', [0, 0, 0], [0, 0, 0.4], color=(0, 0, 255), width_scale=0.02)
 
     predictor = Predictor()
 
@@ -314,7 +318,7 @@ def main(argv):
 
         while True:
             # Grasp the hose to DRAG
-            walk_to(robot_state_client, image_client, command_client, manipulation_api_client, get_hose_and_head_point)
+            walk_to(robot_state_client, image_client, command_client, predictor, get_hose_and_head_point)
             align_with_hose(command_client, robot_state_client, image_client, get_hose_and_head_point)
             retry_do_grasp(command_client, robot_state_client, manipulation_api_client, image_client,
                            get_hose_and_head_point)
@@ -328,7 +332,7 @@ def main(argv):
             reset_before_regrasp(command_client, initial_transforms)
 
             # Grasp the hose to get it UNSTUCK
-            walk_to(robot_state_client, image_client, command_client, manipulation_api_client,
+            walk_to(robot_state_client, image_client, command_client, predictor,
                     partial(get_hose_and_regrasp_point, predictor, ideal_dist_to_obs=5))
 
             # Move the arm to get the hose unstuck

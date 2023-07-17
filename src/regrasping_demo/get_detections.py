@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import rerun as rr
+import matplotlib.pyplot as plt
 from PIL import Image
 from bosdyn.api import image_pb2, geometry_pb2, ray_cast_pb2
 from bosdyn.client import math_helpers
@@ -168,6 +170,11 @@ def get_hose_and_head_point(predictor, image_client, robot_state_client):
 
     hose_points, projected_points, predictions = project_hose(predictor, rgb_np, rgb_res, gpe_in_cam)
     head_px = detect_object_center(predictions, "vacuum_head")
+    rr.log_line_strip("rope", projected_points, stroke_width=0.02)
+
+    fig, ax = plt.subplots()
+    ax.imshow(rgb_np, zorder=0)
+    ax.scatter(hose_points[:,0], hose_points[:, 1], c='yellow', zorder=2)
 
     dists = np.linalg.norm(hose_points - head_px, axis=-1)
     best_idx = int(np.argmin(dists))

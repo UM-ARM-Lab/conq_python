@@ -38,13 +38,13 @@ def get_center_of_mass(x):
     coordinates = np.indices(x.shape)
     # sum over the x and y coordinates
     com = np.sum(np.sum(coordinates * x, 1), 1) / total_p_mass
-
     # Check the probability of the center of mass, if it's low that indicates a problem!
     if x[int(com[0]), int(com[1])] < 0.5:
         plt.imshow(x)
+        plt.plot(com[0],com[1], marker="o", markersize=5)
         plt.show()
         raise DetectionError("The COM has low probability!")
-
+    com = np.flip(com)
     return com
 
 
