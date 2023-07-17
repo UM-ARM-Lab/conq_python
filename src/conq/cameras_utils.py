@@ -4,6 +4,7 @@ from bosdyn.api import image_pb2
 from bosdyn.api.image_pb2 import ImageResponse
 from bosdyn.client.image import build_image_request
 from scipy import ndimage
+from bosdyn.client.frame_helpers import get_a_tform_b, ODOM_FRAME_NAME
 
 ROTATION_ANGLE = {
     'back_fisheye_image': 0,
@@ -119,3 +120,10 @@ def pos_in_cam_to_pos_in_hand(p_in_cam):
     and gives only an approximation of the rotation.
     """
     return np.array([-p_in_cam[1], -p_in_cam[0]])
+
+# Returns the ground plane estimate in the hand frame 
+def gpe_frame_in_cam(robot_state_client, rgb_res):
+    transforms_hand = rgb_res.shot.transforms_snapshot
+    transforms_body = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
+    # se3 transform from the cam to the ground plane
+    return get_a_tform_b(transforms_hand, rgb_res.shot.frame_name_image_sensor, ODOM_FRAME_NAME) * get_a_tform_b(transforms_body, ODOM_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
