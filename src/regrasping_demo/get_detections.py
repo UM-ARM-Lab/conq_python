@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from bosdyn.api import image_pb2, geometry_pb2, ray_cast_pb2
 from bosdyn.client import math_helpers
-from bosdyn.client.frame_helpers import get_a_tform_b, BODY_FRAME_NAME
+from bosdyn.client.frame_helpers import get_a_tform_b, BODY_FRAME_NAME, GROUND_PLANE_FRAME_NAME
 from bosdyn.client.image import pixel_to_camera_space
 
 from arm_segmentation.viz import viz_predictions
@@ -74,6 +74,34 @@ def save_data(rgb_np, depth_np, predictions):
     with open(f"data/{now}/pred.json", 'w') as f:
         json.dump(predictions, f)
 
+def project_point(px, rgb_res, gpe_in_cam):
+    '''
+    Projects a point in camera frame into the ground plane
+    Inputs:
+        px: the pixel to be projected into ground plane
+        rgb_res: a bosdyn image_pb2.ImageResponse from the image protobuf containing information about the rgb_np
+        gpe_in_cam: a bosdyn math_helpers.SE3Pose representing the transform from the camera frame to the GPE frame
+
+    Returns:
+        point: the projected point in R3 space 
+    '''
+    p0 = np.array([gpe_in_cam.position.x, gpe_in_cam.position.y, gpe_in_cam.position.z])
+    # 4x4 rotation matrix of gpe
+    rot_mat_gpe = gpe_in_cam.rotation.to_matrix()
+    plane_q = np.array([gpe_in_cam.rotation.x, gpe_in_cam.rotation.y, gpe_in_cam.rotation.z, gpe_in_cam.rotation.w])
+    # normal vector of gpe, this is a numpy array
+    n = rot_mat_gpe[0:3,2]
+
+    l = np.array([*pixel_to_camera_space(rgb_res, px[0], px[1])])
+    l = l / np.linalg.norm(l)
+    l0 = np.array([0,0,0])
+
+    d = np.dot((p0 - l0), n) / np.dot(l,n)
+    point = l0 + l * d
+    return point
+
+
+
 def project_hose(predictor, rgb_np, rgb_res, gpe_in_cam):
     '''
     Projects the hose in an image into the ground plane.
@@ -100,12 +128,21 @@ def project_hose(predictor, rgb_np, rgb_res, gpe_in_cam):
     # n x 2 array with n points and their u, v pixel coordinates
     ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
 
+    head_px = detect_object_center(predictions, "vacuum_head")
+
+    # project the vacuum head onto the ground plane
+    hose_head_point = project_point(head_px, rgb_res, gpe_in_cam)
+
+    rr.log_point('hose_head', hose_head_point)
+
     # rr.log_arrow("plane/n", p0, n)
     # rr.log_obb("plane/obb", position=p0, rotation_q=plane_q, half_size=[3.5, 3.5, 0.005], label="ground plane")
-
-    l = np.array([*pixel_to_camera_space(rgb_res, ordered_hose_points[:,0], ordered_hose_points[:,1])[0:2]])
+    
+    # in pixel_to_camera_space, the z's are called 'depth'
+    zs = np.ones_like(ordered_hose_points[:,0])
+    l = np.array([*pixel_to_camera_space(rgb_res, ordered_hose_points[:,0], ordered_hose_points[:,1], depth=zs)])
     l = np.transpose(l)
-    l = np.column_stack((l, np.ones(ordered_hose_points[:,0].shape)))
+    # l = np.column_stack((l, np.ones(ordered_hose_points[:,0].shape)))
     l = l / np.linalg.norm(l, axis=1, keepdims=True)
     l0 = np.array([0,0,0])
 
@@ -168,17 +205,28 @@ def get_hose_and_head_point(predictor, image_client, robot_state_client):
     rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
     gpe_in_cam = gpe_frame_in_cam(robot_state_client, rgb_res)
 
-    hose_points, projected_points, predictions = project_hose(predictor, rgb_np, rgb_res, gpe_in_cam)
+    hose_points, projected_points_in_cam, predictions = project_hose(predictor, rgb_np, rgb_res, gpe_in_cam)
     head_px = detect_object_center(predictions, "vacuum_head")
-    rr.log_line_strip("rope", projected_points, stroke_width=0.02)
+    rr.log_line_strip("rope", projected_points_in_cam, stroke_width=0.02)
 
     fig, ax = plt.subplots()
     ax.imshow(rgb_np, zorder=0)
     ax.scatter(hose_points[:,0], hose_points[:, 1], c='yellow', zorder=2)
 
+    transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
+    transforms_cam = rgb_res.shot.transforms_snapshot
+    frame_name_shot = rgb_res.shot.frame_name_image_sensor
+    projected_points_in_gpe = []
+    for pt_in_cam in projected_points_in_cam:
+        vec_in_cam = math_helpers.Vec3(*pt_in_cam)
+        vec_in_gpe = get_a_tform_b(transforms, GROUND_PLANE_FRAME_NAME, BODY_FRAME_NAME) * get_a_tform_b(transforms_cam, BODY_FRAME_NAME, frame_name_shot) * vec_in_cam
+        projected_points_in_gpe.append([vec_in_gpe.x, vec_in_gpe.y, vec_in_gpe.z])
+
+    projected_points_in_gpe = np.array(projected_points_in_gpe)
+    # TODO: Distances are measured in pixel space. Fix to be measured in R2
     dists = np.linalg.norm(hose_points - head_px, axis=-1)
     best_idx = int(np.argmin(dists))
-    best_se2 = cartesian_to_se2(best_idx, projected_points)
+    best_se2 = cartesian_to_se2(best_idx, projected_points_in_gpe)
 
     best_px = hose_points[best_idx]
     best_vec2 = np_to_vec2(best_px)

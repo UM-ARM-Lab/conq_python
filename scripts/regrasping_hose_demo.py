@@ -138,8 +138,8 @@ def walk_to(robot_state_client, image_client, command_client, predictor, get_poi
     transforms_cam = walk_to_res.image_res.shot.transforms_snapshot
     frame_name_shot = walk_to_res.image_res.shot.frame_name_image_sensor
     
-    walk_to_res_in_body = get_se2_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, ODOM_FRAME_NAME) * get_se2_a_tform_b(transforms_cam, ODOM_FRAME_NAME, frame_name_shot)
-    se2_cmd = RobotCommandBuilder.synchro_trajectory_command_in_body_frame(goal_x_rt_body=walk_to_res_in_body.x, goal_y_rt_body=walk_to_res_in_body.y, goal_heading_rt_body=walk_to_res_in_body.angle, frame_name=ODOM_FRAME_NAME)
+    walk_to_res_in_body = get_se2_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, GROUND_PLANE_FRAME_NAME) * math_helpers.SE2Pose.from_proto(walk_to_res.best_se2)
+    se2_cmd = RobotCommandBuilder.synchro_trajectory_command_in_body_frame(goal_x_rt_body=walk_to_res_in_body.x, goal_y_rt_body=walk_to_res_in_body.y, goal_heading_rt_body=walk_to_res_in_body.angle)
     se2_synchro_cmd = RobotCommandBuilder.build_synchro_command(se2_cmd)
     se2_cmd_id = command_client.robot_command(lease=None, command=se2_synchro_cmd, end_time_secs=time.time() + 999)
     block_for_trajectory_cmd(command_client, se2_cmd_id)
