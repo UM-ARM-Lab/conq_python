@@ -23,7 +23,7 @@ from bosdyn.client.robot_state import RobotStateClient
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
 from bosdyn.client.image import ImageClient, pixel_to_camera_space
 from bosdyn.client.ray_cast import RayCastClient
-from bosdyn.client.frame_helpers import ODOM_FRAME_NAME, GROUND_PLANE_FRAME_NAME, get_a_tform_b
+from bosdyn.client.frame_helpers import ODOM_FRAME_NAME, GROUND_PLANE_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, get_a_tform_b
 from bosdyn.client.math_helpers import quat_to_eulerZYX
 from bosdyn.api import geometry_pb2
 
@@ -77,8 +77,8 @@ def main(argv):
     transforms_body = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
     # se3 transform from the hand to the ground plane
     gpe_in_hand = get_a_tform_b(transforms_hand, rgb_res.shot.frame_name_image_sensor, ODOM_FRAME_NAME) * get_a_tform_b(transforms_body, ODOM_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
-
-    info_dict = {"rgb_np": rgb_np, "rgb_res": rgb_res, "gpe_in_hand": gpe_in_hand}
+    gpe_in_body = get_a_tform_b(transforms_body, GRAV_ALIGNED_BODY_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
+    info_dict = {"rgb_np": rgb_np, "rgb_res": rgb_res, "gpe_in_cam": gpe_in_hand, "gpe_in_body": gpe_in_body}
 
     save_data(info_dict)
 

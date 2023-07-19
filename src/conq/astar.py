@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 from math import inf as infinity
 from typing import Callable, Dict, Iterable, Union, TypeVar, Generic
 
+import matplotlib.pyplot as plt
+import numpy as np
+import time
+
 import sortedcontainers
 
 # introduce generic type
@@ -112,12 +116,24 @@ class AStar(ABC, Generic[T]):
         else:
             return reversed(list(_gen()))
 
+# TODO: remember to remove np arr from parameter list
     def astar(
-            self, start: T, goal: T, reversePath: bool = False
+            self, hose_points, start: T, goal: T, reversePath: bool = False
     ) -> Union[Iterable[T], None]:
         if self.is_goal_reached(start, goal):
             return [start]
 
+        plt.ion()
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.set_aspect('equal')
+        ax.set_xlim(-1, 3)
+        ax.set_ylim(-2, 1)
+        x = np.array([0, goal[0]])
+        y = np.array([0, goal[1]])
+        pt = ax.scatter(x,y)
+        ax.scatter(hose_points[:,0], hose_points[:,1], color='r')
+        plt.draw()
         openSet: OpenSet[SearchNode[T]] = OpenSet()
         searchNodes: SearchNodeDict[T] = SearchNodeDict()
         startNode = searchNodes[start] = SearchNode(
@@ -127,6 +143,12 @@ class AStar(ABC, Generic[T]):
 
         while openSet:
             current = openSet.pop()
+            x = np.append(x, current.data[0])
+            y = np.append(y, current.data[1])
+            pt.set_offsets(np.column_stack((x,y)))
+            fig.canvas.draw_idle()
+            fig.canvas.flush_events()
+            time.sleep(0.05)
 
             if self.is_goal_reached(current.data, goal):
                 return self.reconstruct_path(current, reversePath)

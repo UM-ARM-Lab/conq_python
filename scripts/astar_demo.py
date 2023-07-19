@@ -1,9 +1,17 @@
 """ Plan a path in (X, Y, Theta) space from a start to a goal. """
 import numpy as np
 from matplotlib import pyplot as plt
+import rerun as rr
+from pathlib import Path
 
 from conq.astar import find_path, AStar
 
+from regrasping_demo.get_detections import project_hose, cartesian_to_se2, np_to_vec2
+from arm_segmentation.predictor import Predictor
+from hose_gpe_recorder import load_data
+from bosdyn.client import math_helpers
+from regrasping_demo.detect_regrasp_point import detect_object_center
+from bosdyn.client.frame_helpers import get_a_tform_b, BODY_FRAME_NAME, GROUND_PLANE_FRAME_NAME
 
 def yaw_diff(yaw1, yaw2):
     """
@@ -23,31 +31,24 @@ def round_node(n):
 
 class ConqAStar(AStar):
 
-    def __init__(self):
+    def __init__(self, hose_in_body):
         # Circles are defined as (x, y, radius)
-        self.obstacles = [
-            (0.3, 0.1, 0.15),
-            (0.3, 0.3, 0.15),
-            (0.3, 0.5, 0.15),
-            (0.3, 0.7, 0.15),
-            (0.8, 0.3, 0.15),
-            (0.8, 0.5, 0.15),
-            (0.8, 0.7, 0.15),
-            (0.8, 0.9, 0.15),
-        ]
-        self.xy_tol = 0.01
+        # This set of obstacles is still a np array of R3 points
+        # We only care about x
+        self.obstacles = hose_in_body
+        self.xy_tol = 0.30 # 30cm?
         self.yaw_tol = np.deg2rad(5)
 
         # A weight of 1 here would mean that 1 radian of yaw error is equivalent to 1 meter of position error.
         # This is not realistic, so instead we weight yaw error such that a full rotation (2 pi) is equivalent to 1 meter.
-        self.yaw_weight = 1 / (2 * np.pi)
+        self.yaw_weight = 4 / (np.pi)
 
         self.alignment_weight = 1
 
     def neighbors(self, n):
         x, y, yaw = n
-        d_x = 0.1
-        d_y = 0.1
+        d_x = 0.2
+        d_y = 0.2
         d_yaw = np.pi / 8
         for dx in [-d_x, 0, d_x]:
             for dy in [-d_y, 0, d_y]:
@@ -81,7 +82,8 @@ class ConqAStar(AStar):
         return self.distance_between(current, goal)
 
     def in_bounds(self, n):
-        return 0 <= n[0] <= 1 and 0 <= n[1] <= 1 and -2 * np.pi <= n[2] <= 2 * np.pi
+        # TODO: Fix these so they aren't hard coded
+        return -3 <= n[0] <= 3 and -3 <= n[1] <= 3 and -2 * np.pi <= n[2] <= 2 * np.pi
 
     def in_collision(self, n):
         for obstacle in self.obstacles:
@@ -93,8 +95,9 @@ class ConqAStar(AStar):
     def viz(self, start, goal, path):
         fig, ax = plt.subplots()
         ax.set_aspect('equal')
-        ax.set_xlim(-0.1, 1.1)
-        ax.set_ylim(-0.1, 1.1)
+        # TODO: These shouldn't be hardcoded either
+        ax.set_xlim(-1, 3)
+        ax.set_ylim(-2, 1)
 
         xs = [n[0] for n in path]
         ys = [n[1] for n in path]
@@ -145,13 +148,69 @@ def simple_graph_demo():
 
 
 def main():
-    a = ConqAStar()
-    start = (0, 0, 0)
-    goal = (1.0, 1.0, np.deg2rad(90))
-    path = list(a.astar(start, goal))
+    rr.init("hose_gpe")
+    rr.connect()
+    rr.log_view_coordinates("world", up="+Z", timeless=True)
+    rr.log_arrow('world_x', [0, 0, 0], [0.4, 0, 0], color=(255, 0, 0), width_scale=0.02)
+    rr.log_arrow('world_y', [0, 0, 0], [0, 0.4, 0], color=(0, 255, 0), width_scale=0.02)
+    rr.log_arrow('world_z', [0, 0, 0], [0, 0, 0.4], color=(0, 0, 255), width_scale=0.02)
+    info_dict_loaded = load_data("/home/aliryckman/conq_python/scripts/data/info_1689099862.pkl")
+    
+    predictor = Predictor(Path("hose_regrasping.pth"))
+
+    rgb_np = info_dict_loaded["rgb_np"]
+    rgb_res = info_dict_loaded["rgb_res"]
+    gpe_in_cam = info_dict_loaded["gpe_in_hand"]
+    # gpe_in_body = info_dict_loaded["gpe_in_body"]
+
+    hose_points, projected_points_in_cam, predictions = project_hose(predictor, rgb_np, rgb_res, gpe_in_cam)
+
+    # For now, duplicating code from get_detections/get_hose_and_head_point. Eventually astar will be
+    # called by that function
+
+    head_px = detect_object_center(predictions, "vacuum_head")
+    rr.log_line_strip("rope", projected_points_in_cam, stroke_width=0.02)
+
+    fig, ax = plt.subplots()
+    ax.imshow(rgb_np, zorder=0)
+    ax.scatter(hose_points[:,0], hose_points[:, 1], c='yellow', zorder=2)
+    fig.show()
+    
+    transforms_cam = rgb_res.shot.transforms_snapshot
+    frame_name_shot = rgb_res.shot.frame_name_image_sensor
+    projected_points_in_body = []
+    for pt_in_cam in projected_points_in_cam:
+        vec_in_cam = math_helpers.Vec3(*pt_in_cam)
+        # Don't have transform from body frame to gpe, so for now do planning 
+        vec_in_gpe = get_a_tform_b(transforms_cam, BODY_FRAME_NAME, frame_name_shot) * vec_in_cam
+        projected_points_in_body.append([vec_in_gpe.x, vec_in_gpe.y, vec_in_gpe.z])
+
+    projected_points_in_body = np.array(projected_points_in_body)
+    projected_points_in_body = projected_points_in_body[:,:2]
+    # TODO: Distances are measured in pixel space. Fix to be measured in R2
+    dists = np.linalg.norm(hose_points - head_px, axis=-1)
+    best_idx = int(np.argmin(dists))
+    best_se2 = cartesian_to_se2(best_idx, projected_points_in_body)
+
+    best_px = hose_points[best_idx]
+    best_vec2 = np_to_vec2(best_px)
+    
+    # delete the hose point that we're trying to walk to from the obstacle list
+    # TODO: eventually when we offset from the hose this is irrelevant
+    projected_points_in_body = np.delete(projected_points_in_body, (best_idx), axis=0)
+
+    # Currently, the hose is the only obstacle
+    # Eventually want to add battery box, stuff from depth?
+    projected_t = np.column_stack((projected_points_in_body, 0.15 * np.ones_like(projected_points_in_body[:,0])))
+    projected_t = projected_t.T
+    projected_t = list(zip(projected_t[0], projected_t[1], projected_t[2]))
+    a = ConqAStar(projected_t)
+    start = (0,0,0.15)
+    # goal is the point on the hose closest to the vacuum head, perhaps create a modified ver of get_hose_and_head_point
+    goal = ([best_se2.position.x, best_se2.position.y, 0.15])
+    path = list(a.astar(projected_points_in_body, start=start, goal=goal))
     print(path)
     a.viz(start, goal, path)
-
     return path
 
 
