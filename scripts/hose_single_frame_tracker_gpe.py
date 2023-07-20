@@ -68,6 +68,7 @@ def main():
     rgb_np = info_dict_loaded["rgb_np"]
     rgb_res = info_dict_loaded["rgb_res"]
     gpe_in_cam = info_dict_loaded["gpe_in_cam"]
+    gpe_in_body = info_dict_loaded["gpe_in_body"]
 
     ordered_hose_points, intersection = project_hose(rgb_np, rgb_res, gpe_in_cam)
     rr.log_line_strip("rope", intersection, stroke_width=0.02)

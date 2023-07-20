@@ -129,11 +129,15 @@ class AStar(ABC, Generic[T]):
         ax.set_aspect('equal')
         ax.set_xlim(-1, 3)
         ax.set_ylim(-2, 1)
-        x = np.array([0, goal[0]])
-        y = np.array([0, goal[1]])
-        pt = ax.scatter(x,y)
+        x = np.array([])
+        y = np.array([])
+        yaws = np.array([])
+        # draw the start and goal
+        ax.quiver(start[0],start[1],np.cos(start[2]), np.sin(start[2]))
+        ax.quiver(goal[0],goal[1],np.cos(goal[2]), np.sin(goal[2]))
         ax.scatter(hose_points[:,0], hose_points[:,1], color='r')
         plt.draw()
+
         openSet: OpenSet[SearchNode[T]] = OpenSet()
         searchNodes: SearchNodeDict[T] = SearchNodeDict()
         startNode = searchNodes[start] = SearchNode(
@@ -145,7 +149,8 @@ class AStar(ABC, Generic[T]):
             current = openSet.pop()
             x = np.append(x, current.data[0])
             y = np.append(y, current.data[1])
-            pt.set_offsets(np.column_stack((x,y)))
+            yaws = np.append(yaws, current.data[2])
+            ax.quiver(x,y,np.cos(yaws), np.sin(yaws), color='b')
             fig.canvas.draw_idle()
             fig.canvas.flush_events()
             time.sleep(0.05)

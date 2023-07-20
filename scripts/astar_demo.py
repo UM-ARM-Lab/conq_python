@@ -37,11 +37,11 @@ class ConqAStar(AStar):
         # We only care about x
         self.obstacles = hose_in_body
         self.xy_tol = 0.30 # 30cm?
-        self.yaw_tol = np.deg2rad(5)
+        self.yaw_tol = np.deg2rad(20)
 
         # A weight of 1 here would mean that 1 radian of yaw error is equivalent to 1 meter of position error.
         # This is not realistic, so instead we weight yaw error such that a full rotation (2 pi) is equivalent to 1 meter.
-        self.yaw_weight = 4 / (np.pi)
+        self.yaw_weight = 1 / (2 * np.pi)
 
         self.alignment_weight = 1
 
@@ -154,7 +154,7 @@ def main():
     rr.log_arrow('world_x', [0, 0, 0], [0.4, 0, 0], color=(255, 0, 0), width_scale=0.02)
     rr.log_arrow('world_y', [0, 0, 0], [0, 0.4, 0], color=(0, 255, 0), width_scale=0.02)
     rr.log_arrow('world_z', [0, 0, 0], [0, 0, 0.4], color=(0, 0, 255), width_scale=0.02)
-    info_dict_loaded = load_data("/home/aliryckman/conq_python/scripts/data/info_1689099862.pkl")
+    info_dict_loaded = load_data("/home/aliryckman/conq_python/scripts/data/info_1689099583.pkl")
     
     predictor = Predictor(Path("hose_regrasping.pth"))
 
@@ -165,17 +165,17 @@ def main():
 
     hose_points, projected_points_in_cam, predictions = project_hose(predictor, rgb_np, rgb_res, gpe_in_cam)
 
+    fig, ax = plt.subplots()
+    ax.imshow(rgb_np, zorder=0)
+    ax.scatter(hose_points[:,0], hose_points[:, 1], c='yellow', zorder=2)
+    fig.show()
+
     # For now, duplicating code from get_detections/get_hose_and_head_point. Eventually astar will be
     # called by that function
 
     head_px = detect_object_center(predictions, "vacuum_head")
     rr.log_line_strip("rope", projected_points_in_cam, stroke_width=0.02)
 
-    fig, ax = plt.subplots()
-    ax.imshow(rgb_np, zorder=0)
-    ax.scatter(hose_points[:,0], hose_points[:, 1], c='yellow', zorder=2)
-    fig.show()
-    
     transforms_cam = rgb_res.shot.transforms_snapshot
     frame_name_shot = rgb_res.shot.frame_name_image_sensor
     projected_points_in_body = []
@@ -199,15 +199,20 @@ def main():
     # TODO: eventually when we offset from the hose this is irrelevant
     projected_points_in_body = np.delete(projected_points_in_body, (best_idx), axis=0)
 
+
     # Currently, the hose is the only obstacle
     # Eventually want to add battery box, stuff from depth?
     projected_t = np.column_stack((projected_points_in_body, 0.15 * np.ones_like(projected_points_in_body[:,0])))
+
+    # Add fake obstacles
+    projected_t = np.append(projected_t, [[1.0, 0, 0.3]], axis=0)
+    
     projected_t = projected_t.T
     projected_t = list(zip(projected_t[0], projected_t[1], projected_t[2]))
     a = ConqAStar(projected_t)
     start = (0,0,0.15)
     # goal is the point on the hose closest to the vacuum head, perhaps create a modified ver of get_hose_and_head_point
-    goal = ([best_se2.position.x, best_se2.position.y, 0.15])
+    goal = ([best_se2.position.x, best_se2.position.y, best_se2.angle])
     path = list(a.astar(projected_points_in_body, start=start, goal=goal))
     print(path)
     a.viz(start, goal, path)

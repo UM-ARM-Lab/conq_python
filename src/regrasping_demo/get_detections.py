@@ -62,7 +62,7 @@ def cartesian_to_se2(p_idx, projected_points):
     dir_vec = np.array([1, inv_m])
     dir_vec = dir_vec / np.linalg.norm(dir_vec)
     # find the angle between the vector and the y-axis
-    angle = np.arccos(np.dot(dir_vec, np.array([0,1])))
+    angle = np.arctan(dir_vec[1] / dir_vec[0])
     return geometry_pb2.SE2Pose(position=pos, angle=angle)
 
 def save_data(rgb_np, depth_np, predictions):
