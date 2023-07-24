@@ -38,7 +38,7 @@ def np_to_vec2(a):
 def vec3_to_np(v):
     return np.array([v.x, v.y, v.z])
 
-def cartesian_to_se2(p_idx, projected_points):
+def construct_se2_from_points(p_idx, body_pose_in_gpe, projected_points):
     pos = geometry_pb2.Vec2(x=projected_points[p_idx][0], y=projected_points[p_idx][1])
     
     # generate rotation from the rate of change 
@@ -61,8 +61,14 @@ def cartesian_to_se2(p_idx, projected_points):
     inv_m = -1.0 / m
     dir_vec = np.array([1, inv_m])
     dir_vec = dir_vec / np.linalg.norm(dir_vec)
-    # find the angle between the vector and the y-axis
+    # find the angle between the vector and the x-axis
     angle = np.arctan(dir_vec[1] / dir_vec[0])
+
+    # If start angle and the calculated pose are more than 90 degrees apart, flip the final pose
+    start_to_goal_vec = np.array([projected_points[p_idx][0] - body_pose_in_gpe[0], projected_points[p_idx][1] - body_pose_in_gpe[1]])
+    start_to_goal_vec = start_to_goal_vec / np.linalg.norm(dir_vec)
+    if np.dot(dir_vec, start_to_goal_vec) < 0:
+        angle = (angle + np.pi) % (2 * np.pi)
     return geometry_pb2.SE2Pose(position=pos, angle=angle)
 
 def save_data(rgb_np, depth_np, predictions):
@@ -226,7 +232,7 @@ def get_hose_and_head_point(predictor, image_client, robot_state_client):
     # TODO: Distances are measured in pixel space. Fix to be measured in R2
     dists = np.linalg.norm(hose_points - head_px, axis=-1)
     best_idx = int(np.argmin(dists))
-    best_se2 = cartesian_to_se2(best_idx, projected_points_in_gpe)
+    best_se2 = construct_se2_from_points(best_idx, projected_points_in_gpe)
 
     best_px = hose_points[best_idx]
     best_vec2 = np_to_vec2(best_px)
@@ -239,7 +245,7 @@ def get_hose_and_regrasp_point(predictor, image_client, robot_state_client, idea
     hose_points, projected_points, predictions = project_hose(predictor, rgb_np, rgb_res, gpe_in_cam)
     
     best_idx, best_px = detect_regrasp_point_from_hose(predictions, hose_points, ideal_dist_to_obs)
-    best_se2 = cartesian_to_se2(best_idx, projected_points)
+    best_se2 = construct_se2_from_points(best_idx, projected_points)
     best_vec2 = np_to_vec2(best_px)
 
     return GetRetryResult(rgb_res, hose_points, best_idx, best_se2, best_vec2)

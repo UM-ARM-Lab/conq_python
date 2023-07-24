@@ -6,7 +6,7 @@ from pathlib import Path
 
 from conq.astar import find_path, AStar
 
-from regrasping_demo.get_detections import project_hose, cartesian_to_se2, np_to_vec2
+from regrasping_demo.get_detections import project_hose, construct_se2_from_points, project_point
 from arm_segmentation.predictor import Predictor
 from hose_gpe_recorder import load_data
 from bosdyn.client import math_helpers
@@ -37,7 +37,7 @@ class ConqAStar(AStar):
         # We only care about x
         self.obstacles = hose_in_body
         self.xy_tol = 0.30 # 30cm?
-        self.yaw_tol = np.deg2rad(20)
+        self.yaw_tol = np.deg2rad(8)
 
         # A weight of 1 here would mean that 1 radian of yaw error is equivalent to 1 meter of position error.
         # This is not realistic, so instead we weight yaw error such that a full rotation (2 pi) is equivalent to 1 meter.
@@ -49,7 +49,7 @@ class ConqAStar(AStar):
         x, y, yaw = n
         d_x = 0.2
         d_y = 0.2
-        d_yaw = np.pi / 8
+        d_yaw = np.pi / 12
         for dx in [-d_x, 0, d_x]:
             for dy in [-d_y, 0, d_y]:
                 for dyaw in [-d_yaw, 0, d_yaw]:
@@ -92,25 +92,32 @@ class ConqAStar(AStar):
                 return True
         return False
 
+    # the indexing is reversed in this function so that x and y are swapped when graphing
     def viz(self, start, goal, path):
         fig, ax = plt.subplots()
+        ax.set_title("A* Planned Path")
         ax.set_aspect('equal')
-        # TODO: These shouldn't be hardcoded either
-        ax.set_xlim(-1, 3)
-        ax.set_ylim(-2, 1)
+        ax.set_ylim(min(start[0], goal[0]) - 1, max(start[0], goal[0]) + 1)
+        ax.set_xlim(min(start[1], goal[1]) - 1, max(start[1], goal[1]) + 1)
 
+        ax.set_xlabel("x (m)")
+        ax.set_ylabel("y (m)")
+
+        # need to reflect vertically otherwise the graph is mirrored
+        ax.invert_xaxis()
         xs = [n[0] for n in path]
         ys = [n[1] for n in path]
-        yaws = [n[2] for n in path]
+        yaws = np.array([n[2] for n in path])
 
         for obstacle in self.obstacles:
-            circle = plt.Circle((obstacle[0], obstacle[1]), obstacle[2], color='r')
+            circle = plt.Circle((obstacle[1], obstacle[0]), obstacle[2], color='r')
             ax.add_artist(circle)
 
-        ax.plot(xs, ys, 'b-')
-        ax.quiver(xs, ys, np.cos(yaws), np.sin(yaws))
-        ax.scatter([start[0]], [start[1]], c='b')
-        ax.scatter([goal[0]], [goal[1]], c='g')
+        ax.plot(ys, xs, 'b-')
+        ax.quiver(ys, xs, np.sin(2 * np.pi - yaws), np.cos(2 * np.pi - yaws))
+        ax.scatter([start[1]], [start[0]], c='b')
+        ax.scatter([goal[1]], [goal[0]], c='g')
+        ax.quiver(goal[1], goal[0], np.sin(2 * np.pi - goal[2]), np.cos(2 * np.pi - goal[2]), color='g')
 
         fig.show()
 
@@ -154,7 +161,7 @@ def main():
     rr.log_arrow('world_x', [0, 0, 0], [0.4, 0, 0], color=(255, 0, 0), width_scale=0.02)
     rr.log_arrow('world_y', [0, 0, 0], [0, 0.4, 0], color=(0, 255, 0), width_scale=0.02)
     rr.log_arrow('world_z', [0, 0, 0], [0, 0, 0.4], color=(0, 0, 255), width_scale=0.02)
-    info_dict_loaded = load_data("/home/aliryckman/conq_python/scripts/data/info_1689099583.pkl")
+    info_dict_loaded = load_data("/home/aliryckman/conq_python/scripts/data/info_1689099826.pkl")
     
     predictor = Predictor(Path("hose_regrasping.pth"))
 
@@ -163,54 +170,67 @@ def main():
     gpe_in_cam = info_dict_loaded["gpe_in_hand"]
     # gpe_in_body = info_dict_loaded["gpe_in_body"]
 
-    hose_points, projected_points_in_cam, predictions = project_hose(predictor, rgb_np, rgb_res, gpe_in_cam)
+    # In the future, want to record transform between ground plane and gpe to get 'start'. For now, we hard code it
+    # to be 0,0,0 since we're planning in the body frame
+    # start must be a tuple
+    start = (0,0,0)
 
+    # Use arm segmentation's predictor to determine key features of the hose and environment
+    hose_points, projected_points_in_cam, predictions = project_hose(predictor, rgb_np, rgb_res, gpe_in_cam)
+    
+    battery_px = detect_object_center(predictions, "battery")
+
+    # Draw cdcpd hose points prediction on top of the hand RGB image
     fig, ax = plt.subplots()
     ax.imshow(rgb_np, zorder=0)
+    ax.scatter(battery_px[0], battery_px[1], c='orange', zorder=2)
     ax.scatter(hose_points[:,0], hose_points[:, 1], c='yellow', zorder=2)
     fig.show()
 
     # For now, duplicating code from get_detections/get_hose_and_head_point. Eventually astar will be
-    # called by that function
-
+    # called by that function instead
     head_px = detect_object_center(predictions, "vacuum_head")
+
+    # graph hose in rr
     rr.log_line_strip("rope", projected_points_in_cam, stroke_width=0.02)
 
     transforms_cam = rgb_res.shot.transforms_snapshot
     frame_name_shot = rgb_res.shot.frame_name_image_sensor
+
+    # Project the points on the hose 
     projected_points_in_body = []
     for pt_in_cam in projected_points_in_cam:
         vec_in_cam = math_helpers.Vec3(*pt_in_cam)
-        # Don't have transform from body frame to gpe, so for now do planning 
+        # Don't have transform from body frame to gpe, so for now do planning in body frame
+        # Once we record new pickles that contain gpe_in_body, we can do planning in gpe instead
         vec_in_gpe = get_a_tform_b(transforms_cam, BODY_FRAME_NAME, frame_name_shot) * vec_in_cam
         projected_points_in_body.append([vec_in_gpe.x, vec_in_gpe.y, vec_in_gpe.z])
 
+    # Add battery to obstacles
+    projected_battery = project_point(battery_px, rgb_res, gpe_in_cam)
+    np.append(projected_points_in_body, [projected_battery], axis=0)
+
+    # Trim points so they're in 2D instead of 3D
     projected_points_in_body = np.array(projected_points_in_body)
     projected_points_in_body = projected_points_in_body[:,:2]
     # TODO: Distances are measured in pixel space. Fix to be measured in R2
     dists = np.linalg.norm(hose_points - head_px, axis=-1)
     best_idx = int(np.argmin(dists))
-    best_se2 = cartesian_to_se2(best_idx, projected_points_in_body)
-
-    best_px = hose_points[best_idx]
-    best_vec2 = np_to_vec2(best_px)
+    best_se2 = construct_se2_from_points(best_idx, start, projected_points_in_body)
     
     # delete the hose point that we're trying to walk to from the obstacle list
     # TODO: eventually when we offset from the hose this is irrelevant
     projected_points_in_body = np.delete(projected_points_in_body, (best_idx), axis=0)
-
-
-    # Currently, the hose is the only obstacle
-    # Eventually want to add battery box, stuff from depth?
     projected_t = np.column_stack((projected_points_in_body, 0.15 * np.ones_like(projected_points_in_body[:,0])))
 
-    # Add fake obstacles
-    projected_t = np.append(projected_t, [[1.0, 0, 0.3]], axis=0)
+    # Add fake obstacles to test A*
+    # projected_t = np.append(projected_t, [[0.5, -0.5, 0.2],[0.5, -0.75, 0.2],[0.5, 0, 0.2],[0.5,-0.25,0.2]], axis=0)
+    # projected_t = np.append(projected_t, [[1.5, 1, 0.2],[1.5, 0.75, 0.2],[1.5, 0.5, 0.2],[1.5, 0.25, 0.2],[1.5,0, 0.2],[1.5,0.75,0.2]], axis=0)
     
     projected_t = projected_t.T
     projected_t = list(zip(projected_t[0], projected_t[1], projected_t[2]))
     a = ConqAStar(projected_t)
-    start = (0,0,0.15)
+
     # goal is the point on the hose closest to the vacuum head, perhaps create a modified ver of get_hose_and_head_point
     goal = ([best_se2.position.x, best_se2.position.y, best_se2.angle])
     path = list(a.astar(projected_points_in_body, start=start, goal=goal))
