@@ -21,6 +21,16 @@ def get_masks(predictions, desired_class_name):
             masks.append(mask)
     return masks
 
+def detect_object_points(predictions, class_name):
+    """"
+    Returns a set of points in a N x 2 np array representing the mask
+    Basically takes the mask and splits it into a grid
+    """
+    mask = get_combined_mask(predictions, class_name)
+    # take every tenth pixel to be a part of the mask
+    obj_mask_idxs = np.fliplr(np.transpose(np.nonzero(mask)))
+    grid_idxs = obj_mask_idxs[0::50]
+    return grid_idxs
 
 def detect_object_center(predictions, class_name):
     mask = get_combined_mask(predictions, class_name)

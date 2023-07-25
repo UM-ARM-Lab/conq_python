@@ -17,7 +17,7 @@ from conq.cameras_utils import get_color_img, get_depth_img, gpe_frame_in_cam
 from conq.exceptions import DetectionError
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.detect_regrasp_point import get_masks, detect_object_center, detect_regrasp_point_from_hose, \
-    get_center_of_mass
+    get_center_of_mass, detect_object_points
 
 DEFAULT_IDEAL_DIST_TO_OBS = 70
 
@@ -80,17 +80,22 @@ def save_data(rgb_np, depth_np, predictions):
     with open(f"data/{now}/pred.json", 'w') as f:
         json.dump(predictions, f)
 
-def project_point(px, rgb_res, gpe_in_cam):
+def project_points(px, rgb_res, gpe_in_cam):
     '''
-    Projects a point in camera frame into the ground plane
+    Project points in camera frame into the ground plane
     Inputs:
-        px: the pixel to be projected into ground plane
+        px: the pixels to be projected into ground plane
         rgb_res: a bosdyn image_pb2.ImageResponse from the image protobuf containing information about the rgb_np
         gpe_in_cam: a bosdyn math_helpers.SE3Pose representing the transform from the camera frame to the GPE frame
 
     Returns:
-        point: the projected point in R3 space 
+        points: the projected points in R3 space 
     '''
+    # If the input is a singular pixel, make it 2D
+    one_pix = False
+    if len(px.shape) == 1:
+        px = np.array([px])
+        one_pix = True
     p0 = np.array([gpe_in_cam.position.x, gpe_in_cam.position.y, gpe_in_cam.position.z])
     # 4x4 rotation matrix of gpe
     rot_mat_gpe = gpe_in_cam.rotation.to_matrix()
@@ -98,13 +103,18 @@ def project_point(px, rgb_res, gpe_in_cam):
     # normal vector of gpe, this is a numpy array
     n = rot_mat_gpe[0:3,2]
 
-    l = np.array([*pixel_to_camera_space(rgb_res, px[0], px[1])])
-    l = l / np.linalg.norm(l)
+    zs = np.ones_like(px[:,0])
+    l = np.array([*pixel_to_camera_space(rgb_res, px[:,0], px[:,1], depth=zs)])
+    l = np.transpose(l)
+    l = l / np.linalg.norm(l, axis=1, keepdims=True)
     l0 = np.array([0,0,0])
 
     d = np.dot((p0 - l0), n) / np.dot(l,n)
-    point = l0 + l * d
-    return point
+    points = l0 + l * d[:, np.newaxis]
+    # if the input is only one pixel, return a 1D array
+    if one_pix:
+        return points[0]
+    return points
 
 
 
@@ -137,10 +147,12 @@ def project_hose(predictor, rgb_np, rgb_res, gpe_in_cam):
     head_px = detect_object_center(predictions, "vacuum_head")
 
     # project the vacuum head onto the ground plane
-    hose_head_point = project_point(head_px, rgb_res, gpe_in_cam)
+    hose_head_point = project_points(head_px, rgb_res, gpe_in_cam)
+    battery_px_points = detect_object_points(predictions, "battery")
+    battery_points = project_points(battery_px_points, rgb_res, gpe_in_cam)
 
     rr.log_point('hose_head', hose_head_point)
-
+    rr.log_points('battery', battery_points)
     # rr.log_arrow("plane/n", p0, n)
     # rr.log_obb("plane/obb", position=p0, rotation_q=plane_q, half_size=[3.5, 3.5, 0.005], label="ground plane")
     

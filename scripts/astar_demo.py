@@ -6,11 +6,11 @@ from pathlib import Path
 
 from conq.astar import find_path, AStar
 
-from regrasping_demo.get_detections import project_hose, construct_se2_from_points, project_point
+from regrasping_demo.get_detections import project_hose, construct_se2_from_points, project_points
 from arm_segmentation.predictor import Predictor
 from hose_gpe_recorder import load_data
 from bosdyn.client import math_helpers
-from regrasping_demo.detect_regrasp_point import detect_object_center
+from regrasping_demo.detect_regrasp_point import detect_object_center, detect_object_points
 from bosdyn.client.frame_helpers import get_a_tform_b, BODY_FRAME_NAME, GROUND_PLANE_FRAME_NAME
 
 def yaw_diff(yaw1, yaw2):
@@ -175,9 +175,17 @@ def main():
     # start must be a tuple
     start = (0,0,0)
 
-    # Use arm segmentation's predictor to determine key features of the hose and environment
+    # Use arm segmentation's predictor to determine key features of the hose and battery
     hose_points, projected_points_in_cam, predictions = project_hose(predictor, rgb_np, rgb_res, gpe_in_cam)
-    
+    battery_px_points = detect_object_points(predictions, "battery")
+    projected_battery_in_cam = project_points(battery_px_points, rgb_res, gpe_in_cam)
+
+    # graph hose and battery in rr
+    rr.log_line_strip("rope", projected_points_in_cam, stroke_width=0.02)
+    rr.log_points("battery", projected_battery_in_cam)
+
+    projected_points_in_cam = np.append(projected_points_in_cam, projected_battery_in_cam, axis=0)
+
     battery_px = detect_object_center(predictions, "battery")
 
     # Draw cdcpd hose points prediction on top of the hand RGB image
@@ -191,9 +199,6 @@ def main():
     # called by that function instead
     head_px = detect_object_center(predictions, "vacuum_head")
 
-    # graph hose in rr
-    rr.log_line_strip("rope", projected_points_in_cam, stroke_width=0.02)
-
     transforms_cam = rgb_res.shot.transforms_snapshot
     frame_name_shot = rgb_res.shot.frame_name_image_sensor
 
@@ -206,10 +211,6 @@ def main():
         vec_in_gpe = get_a_tform_b(transforms_cam, BODY_FRAME_NAME, frame_name_shot) * vec_in_cam
         projected_points_in_body.append([vec_in_gpe.x, vec_in_gpe.y, vec_in_gpe.z])
 
-    # Add battery to obstacles
-    projected_battery = project_point(battery_px, rgb_res, gpe_in_cam)
-    np.append(projected_points_in_body, [projected_battery], axis=0)
-
     # Trim points so they're in 2D instead of 3D
     projected_points_in_body = np.array(projected_points_in_body)
     projected_points_in_body = projected_points_in_body[:,:2]
@@ -217,7 +218,7 @@ def main():
     dists = np.linalg.norm(hose_points - head_px, axis=-1)
     best_idx = int(np.argmin(dists))
     best_se2 = construct_se2_from_points(best_idx, start, projected_points_in_body)
-    
+
     # delete the hose point that we're trying to walk to from the obstacle list
     # TODO: eventually when we offset from the hose this is irrelevant
     projected_points_in_body = np.delete(projected_points_in_body, (best_idx), axis=0)
