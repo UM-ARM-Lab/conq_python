@@ -7,6 +7,7 @@ from pathlib import Path
 from conq.astar import find_path, AStar
 
 from regrasping_demo.get_detections import project_hose, construct_se2_from_points, project_points
+from regrasping_demo.occupancy_grid import OccupancyGrid
 from arm_segmentation.predictor import Predictor
 from hose_gpe_recorder import load_data
 from bosdyn.client import math_helpers
@@ -23,7 +24,6 @@ def yaw_diff(yaw1, yaw2):
     """
     return min(abs(yaw1 - yaw2), abs(yaw1 - yaw2 + 2 * np.pi), abs(yaw1 - yaw2 - 2 * np.pi))
 
-
 def round_node(n):
     """ round to be sure that node equality with floats isn't an issue """
     return round(n[0], 2), round(n[1], 2), round(n[2], 2)
@@ -31,11 +31,11 @@ def round_node(n):
 
 class ConqAStar(AStar):
 
-    def __init__(self, hose_in_body):
+    def __init__(self):
         # Circles are defined as (x, y, radius)
         # This set of obstacles is still a np array of R3 points
         # We only care about x
-        self.obstacles = hose_in_body
+        self.occupancy_grid = OccupancyGrid()
         self.xy_tol = 0.30 # 30cm?
         self.yaw_tol = np.deg2rad(8)
 
@@ -85,12 +85,12 @@ class ConqAStar(AStar):
         # TODO: Fix these so they aren't hard coded
         return -3 <= n[0] <= 3 and -3 <= n[1] <= 3 and -2 * np.pi <= n[2] <= 2 * np.pi
 
+    # TODO: Fix this to use the occupancy grid instead
     def in_collision(self, n):
-        for obstacle in self.obstacles:
-            dist_to_obstacle = np.sqrt((n[0] - obstacle[0]) ** 2 + (n[1] - obstacle[1]) ** 2)
-            if dist_to_obstacle < obstacle[2]:
-                return True
-        return False
+        return self.occupancy_grid.get_robot_intersection(n)
+
+    def add_obstacle(self, obstacle_x, obstacle_y, radius):
+        self.occupancy_grid.add_obstacle(obstacle_x, obstacle_y, radius)
 
     # the indexing is reversed in this function so that x and y are swapped when graphing
     def viz(self, start, goal, path):
@@ -108,10 +108,12 @@ class ConqAStar(AStar):
         xs = [n[0] for n in path]
         ys = [n[1] for n in path]
         yaws = np.array([n[2] for n in path])
+        scale_dim = self.occupancy_grid.get_scaled_dim()
+        ax.imshow(self.occupancy_grid.get_grid(), extent=[-scale_dim/2, scale_dim/2, -scale_dim/2, scale_dim/2])
 
-        for obstacle in self.obstacles:
-            circle = plt.Circle((obstacle[1], obstacle[0]), obstacle[2], color='r')
-            ax.add_artist(circle)
+        # for obstacle in self.obstacles:
+        #     circle = plt.Circle((obstacle[1], obstacle[0]), obstacle[2], color='r')
+        #     ax.add_artist(circle)
 
         ax.plot(ys, xs, 'b-')
         ax.quiver(ys, xs, np.sin(2 * np.pi - yaws), np.cos(2 * np.pi - yaws))
@@ -170,6 +172,8 @@ def main():
     gpe_in_cam = info_dict_loaded["gpe_in_hand"]
     # gpe_in_body = info_dict_loaded["gpe_in_body"]
 
+    a = ConqAStar()
+
     # In the future, want to record transform between ground plane and gpe to get 'start'. For now, we hard code it
     # to be 0,0,0 since we're planning in the body frame
     # start must be a tuple
@@ -225,12 +229,13 @@ def main():
     projected_t = np.column_stack((projected_points_in_body, 0.15 * np.ones_like(projected_points_in_body[:,0])))
 
     # Add fake obstacles to test A*
-    # projected_t = np.append(projected_t, [[0.5, -0.5, 0.2],[0.5, -0.75, 0.2],[0.5, 0, 0.2],[0.5,-0.25,0.2]], axis=0)
-    # projected_t = np.append(projected_t, [[1.5, 1, 0.2],[1.5, 0.75, 0.2],[1.5, 0.5, 0.2],[1.5, 0.25, 0.2],[1.5,0, 0.2],[1.5,0.75,0.2]], axis=0)
-    
-    projected_t = projected_t.T
-    projected_t = list(zip(projected_t[0], projected_t[1], projected_t[2]))
-    a = ConqAStar(projected_t)
+    # These points are in (y, x, angle)
+    projected_t = np.append(projected_t, [[0.5, -0.5, 0.2],[0.5, -0.75, 0.2],[0.5, 0, 0.2],[0.5,-0.25,0.2]], axis=0)
+    projected_t = np.append(projected_t, [[1.5, 1, 0.2],[1.5, 0.75, 0.2],[1.5, 0.5, 0.2],[1.5, 0.25, 0.2],[1.5,0, 0.2],[1.5,0.75,0.2]], axis=0)
+    for ob in projected_t:
+        a.add_obstacle(ob[0], ob[1], ob[2])
+    # projected_t = projected_t.T
+    # projected_t = list(zip(projected_t[0], projected_t[1], projected_t[2]))
 
     # goal is the point on the hose closest to the vacuum head, perhaps create a modified ver of get_hose_and_head_point
     goal = ([best_se2.position.x, best_se2.position.y, best_se2.angle])
