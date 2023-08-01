@@ -29,6 +29,7 @@ def round_node(n):
     return round(n[0], 2), round(n[1], 2), round(n[2], 2)
 
 
+
 class ConqAStar(AStar):
 
     def __init__(self):
@@ -36,8 +37,8 @@ class ConqAStar(AStar):
         # This set of obstacles is still a np array of R3 points
         # We only care about x
         self.occupancy_grid = OccupancyGrid()
-        self.xy_tol = 0.30 # 30cm?
-        self.yaw_tol = np.deg2rad(8)
+        self.xy_tol = 0.60
+        self.yaw_tol = np.deg2rad(10)
 
         # A weight of 1 here would mean that 1 radian of yaw error is equivalent to 1 meter of position error.
         # This is not realistic, so instead we weight yaw error such that a full rotation (2 pi) is equivalent to 1 meter.
@@ -64,8 +65,8 @@ class ConqAStar(AStar):
                     yield neighbor
 
     def is_goal_reached(self, n, goal):
-        return abs(n[0] - goal[0]) < self.xy_tol and abs(n[1] - goal[1]) < self.xy_tol and abs(
-            n[2] - goal[2]) < self.yaw_tol
+        return abs(n[0] - goal[0]) < self.xy_tol and abs(n[1] - goal[1]) < self.xy_tol and yaw_diff(
+            n[2], goal[2]) < self.yaw_tol
 
     def distance_between(self, n1, n2):
         # The alignment between the edge and the yaw of the node is important.
@@ -83,7 +84,7 @@ class ConqAStar(AStar):
 
     def in_bounds(self, n):
         # TODO: Fix these so they aren't hard coded
-        return -3 <= n[0] <= 3 and -3 <= n[1] <= 3 and -2 * np.pi <= n[2] <= 2 * np.pi
+        return -0.1 <= n[0] <= 3 and -2 <= n[1] <= 2 and -2 * np.pi <= n[2] <= 2 * np.pi
 
     # TODO: Fix this to use the occupancy grid instead
     def in_collision(self, n):
@@ -94,66 +95,24 @@ class ConqAStar(AStar):
 
     # the indexing is reversed in this function so that x and y are swapped when graphing
     def viz(self, start, goal, path):
-        fig, ax = plt.subplots()
-        ax.set_title("A* Planned Path")
-        ax.set_aspect('equal')
-        ax.set_ylim(min(start[0], goal[0]) - 1, max(start[0], goal[0]) + 1)
-        ax.set_xlim(min(start[1], goal[1]) - 1, max(start[1], goal[1]) + 1)
+        obstacle_points = []
+        for x in np.linspace(-3, 3, 100):
+            for y in np.linspace(-3, 3, 100):
+                if self.occupancy_grid.is_point_occupied(x, y):
+                    obstacle_points.append([x, y, 0])
+        rr.log_points("obstacles", obstacle_points)
 
-        ax.set_xlabel("x (m)")
-        ax.set_ylabel("y (m)")
+        self.rr_se2('start', start)
+        for i, point in enumerate(path):
+            self.rr_se2(f'path/{i}', point)
+            self.rr_se2(f'path/{i}', point)
+        self.rr_se2('goal', goal)
 
-        # need to reflect vertically otherwise the graph is mirrored
-        ax.invert_xaxis()
-        xs = [n[0] for n in path]
-        ys = [n[1] for n in path]
-        yaws = np.array([n[2] for n in path])
-        scale_dim = self.occupancy_grid.get_scaled_dim()
-        ax.imshow(self.occupancy_grid.get_grid(), extent=[-scale_dim/2, scale_dim/2, -scale_dim/2, scale_dim/2])
-
-        # for obstacle in self.obstacles:
-        #     circle = plt.Circle((obstacle[1], obstacle[0]), obstacle[2], color='r')
-        #     ax.add_artist(circle)
-
-        ax.plot(ys, xs, 'b-')
-        ax.quiver(ys, xs, np.sin(2 * np.pi - yaws), np.cos(2 * np.pi - yaws))
-        ax.scatter([start[1]], [start[0]], c='b')
-        ax.scatter([goal[1]], [goal[0]], c='g')
-        ax.quiver(goal[1], goal[0], np.sin(2 * np.pi - goal[2]), np.cos(2 * np.pi - goal[2]), color='g')
-
-        fig.show()
-
-
-def simple_graph_demo():
-    neighbors = {
-        'A': ['B', 'C'],
-        'C': ['D'],
-        'D': ['B']
-    }
-    costs = {
-        ('A', 'B'): 100,
-        ('A', 'C'): 10,
-        ('C', 'D'): 10,
-        ('D', 'B'): 20,
-    }
-
-    def _neighbors(node):
-        if node in neighbors:
-            return neighbors[node]
-        return []
-
-    def _cost(n1, n2):
-        if (n1, n2) in costs:
-            return costs[(n1, n2)]
-        return 1e9
-
-    def _heuristic(n1, n2):
-        return 0
-
-    path = find_path('A', 'B', neighbors_fnct=_neighbors, distance_between_fnct=_cost,
-                     heuristic_cost_estimate_fnct=_heuristic)
-    print(list(path))
-    return path
+    def rr_se2(self, n, se2):
+        origin = [se2[0], se2[1], 0]
+        direction = [np.cos(se2[2])*self.occupancy_grid.res,
+                        np.sin(se2[2])*self.occupancy_grid.res, 0]
+        rr.log_arrow(n, origin, direction, width_scale=0.02, color=[0, 1., 0])
 
 
 def main():
@@ -163,7 +122,7 @@ def main():
     rr.log_arrow('world_x', [0, 0, 0], [0.4, 0, 0], color=(255, 0, 0), width_scale=0.02)
     rr.log_arrow('world_y', [0, 0, 0], [0, 0.4, 0], color=(0, 255, 0), width_scale=0.02)
     rr.log_arrow('world_z', [0, 0, 0], [0, 0, 0.4], color=(0, 0, 255), width_scale=0.02)
-    info_dict_loaded = load_data("/home/aliryckman/conq_python/scripts/data/info_1689099826.pkl")
+    info_dict_loaded = load_data("/home/aliryckman/conq_python/scripts/data/info_1689099862.pkl")
     
     predictor = Predictor(Path("hose_regrasping.pth"))
 
@@ -207,7 +166,7 @@ def main():
     frame_name_shot = rgb_res.shot.frame_name_image_sensor
 
     # Project the points on the hose 
-    projected_points_in_body = []
+    projected_points_in_body = []  
     for pt_in_cam in projected_points_in_cam:
         vec_in_cam = math_helpers.Vec3(*pt_in_cam)
         # Don't have transform from body frame to gpe, so for now do planning in body frame
@@ -228,10 +187,15 @@ def main():
     projected_points_in_body = np.delete(projected_points_in_body, (best_idx), axis=0)
     projected_t = np.column_stack((projected_points_in_body, 0.15 * np.ones_like(projected_points_in_body[:,0])))
 
+    # test_x = np.float64(-0.05)
+    # test_y = np.float64(-0.45)
+    # a.add_obstacle(test_x, test_y, a.occupancy_grid.res)
+    # print(a.occupancy_grid.is_point_occupied(test_x, test_y))
+
     # Add fake obstacles to test A*
-    # These points are in (y, x, angle)
-    projected_t = np.append(projected_t, [[0.5, -0.5, 0.2],[0.5, -0.75, 0.2],[0.5, 0, 0.2],[0.5,-0.25,0.2]], axis=0)
-    projected_t = np.append(projected_t, [[1.5, 1, 0.2],[1.5, 0.75, 0.2],[1.5, 0.5, 0.2],[1.5, 0.25, 0.2],[1.5,0, 0.2],[1.5,0.75,0.2]], axis=0)
+    # (x,y, radius)
+    projected_t = np.append(projected_t, [[0.9, -0.5, 0.2],[0.9, -0.75, 0.2],[0.9, 0, 0.2],[0.9,-0.25,0.2]], axis=0)
+    # projected_t = np.append(projected_t, [[1.5, 1, 0.2],[1.5, 0.75, 0.2],[1.5, 0.5, 0.2],[1.5, 0.25, 0.2],[1.5,0, 0.2],[1.5,0.75,0.2]], axis=0)
     for ob in projected_t:
         a.add_obstacle(ob[0], ob[1], ob[2])
     # projected_t = projected_t.T
