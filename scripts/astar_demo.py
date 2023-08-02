@@ -37,7 +37,7 @@ class ConqAStar(AStar):
         # This set of obstacles is still a np array of R3 points
         # We only care about x
         self.occupancy_grid = OccupancyGrid()
-        self.xy_tol = 0.60
+        self.xy_tol = 0.5
         self.yaw_tol = np.deg2rad(10)
 
         # A weight of 1 here would mean that 1 radian of yaw error is equivalent to 1 meter of position error.
@@ -84,7 +84,7 @@ class ConqAStar(AStar):
 
     def in_bounds(self, n):
         # TODO: Fix these so they aren't hard coded
-        return -0.1 <= n[0] <= 3 and -2 <= n[1] <= 2 and -2 * np.pi <= n[2] <= 2 * np.pi
+        return -4 <= n[0] <= 4 and -4 <= n[1] <= 4 and -2 * np.pi <= n[2] <= 2 * np.pi
 
     # TODO: Fix this to use the occupancy grid instead
     def in_collision(self, n):
@@ -96,8 +96,9 @@ class ConqAStar(AStar):
     # the indexing is reversed in this function so that x and y are swapped when graphing
     def viz(self, start, goal, path):
         obstacle_points = []
-        for x in np.linspace(-3, 3, 100):
-            for y in np.linspace(-3, 3, 100):
+        # TODO: make these same dim as grid
+        for x in np.linspace(-4, 4, 100):
+            for y in np.linspace(-4, 4, 100):
                 if self.occupancy_grid.is_point_occupied(x, y):
                     obstacle_points.append([x, y, 0])
         rr.log_points("obstacles", obstacle_points)
@@ -128,7 +129,7 @@ def main():
 
     rgb_np = info_dict_loaded["rgb_np"]
     rgb_res = info_dict_loaded["rgb_res"]
-    gpe_in_cam = info_dict_loaded["gpe_in_hand"]
+    gpe_in_cam = info_dict_loaded["gpe_in_cam"]
     # gpe_in_body = info_dict_loaded["gpe_in_body"]
 
     a = ConqAStar()
@@ -194,7 +195,7 @@ def main():
 
     # Add fake obstacles to test A*
     # (x,y, radius)
-    projected_t = np.append(projected_t, [[0.9, -0.5, 0.2],[0.9, -0.75, 0.2],[0.9, 0, 0.2],[0.9,-0.25,0.2]], axis=0)
+    # projected_t = np.append(projected_t, [[0.9, -0.5, 0.2],[0.9, -0.75, 0.2],[0.9, 0, 0.2],[0.9,-0.25,0.2]], axis=0)
     # projected_t = np.append(projected_t, [[1.5, 1, 0.2],[1.5, 0.75, 0.2],[1.5, 0.5, 0.2],[1.5, 0.25, 0.2],[1.5,0, 0.2],[1.5,0.75,0.2]], axis=0)
     for ob in projected_t:
         a.add_obstacle(ob[0], ob[1], ob[2])
