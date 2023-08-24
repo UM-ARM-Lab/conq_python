@@ -24,6 +24,7 @@ DEFAULT_IDEAL_DIST_TO_OBS = 70
 
 @dataclass
 class GetRetryResult:
+    image_np: image_pb2.Image
     image_res: image_pb2.ImageResponse
     hose_points: np.ndarray
     best_idx: int
@@ -249,7 +250,7 @@ def get_hose_and_head_point(predictor, image_client, robot_state_client):
     best_px = hose_points[best_idx]
     best_vec2 = np_to_vec2(best_px)
 
-    return GetRetryResult(rgb_res, hose_points, best_idx, best_se2, best_vec2)
+    return GetRetryResult(rgb_np, rgb_res, hose_points, best_idx, best_se2, best_vec2)
 
 def get_hose_and_regrasp_point(predictor, image_client, robot_state_client, ideal_dist_to_obs=DEFAULT_IDEAL_DIST_TO_OBS):
     rgb_np, rgb_res = get_color_img(image_client, "hand_color_image")
@@ -260,5 +261,5 @@ def get_hose_and_regrasp_point(predictor, image_client, robot_state_client, idea
     best_se2 = construct_se2_from_points(best_idx, projected_points)
     best_vec2 = np_to_vec2(best_px)
 
-    return GetRetryResult(rgb_res, hose_points, best_idx, best_se2, best_vec2)
+    return GetRetryResult(rgb_np, rgb_res, hose_points, best_idx, best_se2, best_vec2)
 

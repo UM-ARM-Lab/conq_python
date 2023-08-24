@@ -27,7 +27,7 @@ def detect_object_points(predictions, class_name):
     Basically takes the mask and splits it into a grid
     """
     mask = get_combined_mask(predictions, class_name)
-    # take every tenth pixel to be a part of the mask
+    # take every 50th pixel to be a part of the mask
     obj_mask_idxs = np.fliplr(np.transpose(np.nonzero(mask)))
     grid_idxs = obj_mask_idxs[0::50]
     return grid_idxs

@@ -41,7 +41,7 @@ from regrasping_demo.get_detections import GetRetryResult, np_to_vec2, get_hose_
     get_hose_and_head_point, get_mess
 from regrasping_demo.get_detections import save_data
 from regrasping_demo.homotopy_planner import get_obstacle_coms
-
+from astar_demo import astar
 
 def look_at_scene(command_client, robot_state_client, x=0.56, y=0.1, z=0.55, pitch=0., yaw=0., dx=0., dy=0., dpitch=0.):
     look_cmd = hand_pose_cmd(robot_state_client, x + dx, y + dy, z,
@@ -137,7 +137,12 @@ def walk_to(robot_state_client, image_client, command_client, predictor, get_poi
     transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
     transforms_cam = walk_to_res.image_res.shot.transforms_snapshot
     frame_name_shot = walk_to_res.image_res.shot.frame_name_image_sensor
-    
+
+    gpe_in_cam = get_a_tform_b(transforms_cam, frame_name_shot, ODOM_FRAME_NAME) * get_a_tform_b(transforms, ODOM_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
+    se2_path_in_body = astar(predictor, walk_to_res.image_np, walk_to_res.image_res, gpe_in_cam)
+
+
+
     walk_to_res_in_body = get_se2_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, GROUND_PLANE_FRAME_NAME) * math_helpers.SE2Pose.from_proto(walk_to_res.best_se2)
     se2_cmd = RobotCommandBuilder.synchro_trajectory_command_in_body_frame(goal_x_rt_body=walk_to_res_in_body.x, goal_y_rt_body=walk_to_res_in_body.y, goal_heading_rt_body=walk_to_res_in_body.angle)
     se2_synchro_cmd = RobotCommandBuilder.build_synchro_command(se2_cmd)

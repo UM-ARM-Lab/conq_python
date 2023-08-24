@@ -143,21 +143,7 @@ class ConqAStar(AStar):
         # dy = dy / mag
         return (se2[0] - dx, se2[1] - dy, se2[2])
 
-def main():
-    rr.init("hose_gpe")
-    rr.connect()
-    rr.log_view_coordinates("world", up="+Z", timeless=True)
-    rr.log_arrow('world_x', [0, 0, 0], [0.4, 0, 0], color=(255, 0, 0), width_scale=0.02)
-    rr.log_arrow('world_y', [0, 0, 0], [0, 0.4, 0], color=(0, 255, 0), width_scale=0.02)
-    rr.log_arrow('world_z', [0, 0, 0], [0, 0, 0.4], color=(0, 0, 255), width_scale=0.02)
-    info_dict_loaded = load_data("/home/aliryckman/conq_python/scripts/data/info_1689099862.pkl")
-    predictor = Predictor(Path("hose_regrasping.pth"))
-
-    rgb_np = info_dict_loaded["rgb_np"]
-    rgb_res = info_dict_loaded["rgb_res"]
-    gpe_in_cam = info_dict_loaded["gpe_in_cam"]
-    # gpe_in_body = info_dict_loaded["gpe_in_body"]
-
+def astar(predictor, rgb_np, rgb_res, gpe_in_cam):
     a = ConqAStar()
 
     # In the future, want to record transform between ground plane and gpe to get 'start'. For now, we hard code it
@@ -235,6 +221,24 @@ def main():
     print(path)
     a.viz(start, goal, path)
     return path
+
+def main():
+    rr.init("hose_gpe")
+    rr.connect()
+    rr.log_view_coordinates("world", up="+Z", timeless=True)
+    rr.log_arrow('world_x', [0, 0, 0], [0.4, 0, 0], color=(255, 0, 0), width_scale=0.02)
+    rr.log_arrow('world_y', [0, 0, 0], [0, 0.4, 0], color=(0, 255, 0), width_scale=0.02)
+    rr.log_arrow('world_z', [0, 0, 0], [0, 0, 0.4], color=(0, 0, 255), width_scale=0.02)
+    info_dict_loaded = load_data("/home/aliryckman/conq_python/scripts/data/info_1689099862.pkl")
+    predictor = Predictor(Path("hose_regrasping.pth"))
+
+    rgb_np = info_dict_loaded["rgb_np"]
+    rgb_res = info_dict_loaded["rgb_res"]
+    gpe_in_cam = info_dict_loaded["gpe_in_cam"]
+    # gpe_in_body = info_dict_loaded["gpe_in_body"]
+
+    se2_traj_path = astar(predictor, rgb_np, rgb_res, gpe_in_cam)
+
 
 
 if __name__ == '__main__':
