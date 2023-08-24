@@ -3,6 +3,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import rerun as rr
 from pathlib import Path
+from scipy.spatial.transform import Rotation
 
 from conq.astar import find_path, AStar
 
@@ -39,7 +40,6 @@ class ConqAStar(AStar):
         self.occupancy_grid = OccupancyGrid()
         self.xy_tol = 0.5
         self.yaw_tol = np.deg2rad(10)
-
         # A weight of 1 here would mean that 1 radian of yaw error is equivalent to 1 meter of position error.
         # This is not realistic, so instead we weight yaw error such that a full rotation (2 pi) is equivalent to 1 meter.
         self.yaw_weight = 1 / (2 * np.pi)
@@ -103,18 +103,45 @@ class ConqAStar(AStar):
                     obstacle_points.append([x, y, 0])
         rr.log_points("obstacles", obstacle_points)
 
-        self.rr_se2('start', start)
+        self.rr_se2('start', start, [0,1.,0])
+        rr.log_obb('start_pose', half_size=[0.5,0.25,0.01], position=[start[0], start[1], 0], rotation_q=self.get_quat_from_se2(start))
         for i, point in enumerate(path):
-            self.rr_se2(f'path/{i}', point)
-            self.rr_se2(f'path/{i}', point)
-        self.rr_se2('goal', goal)
+            self.rr_se2(f'path/{i}', point, [1.,1.,0])
+        self.rr_se2('goal', goal, [0,1.,0])
+        end = path[-1]
+        rr.log_obb('end_pose', half_size=[0.5,0.25,0.01], position= [end[0], end[1], 0], rotation_q=self.get_quat_from_se2(end))
+    
+    def get_quat_from_se2(self, se2):
+        rot = Rotation.from_euler('xyz', [0,0,se2[2]])
+        rot_quat = rot.as_quat()
+        return rot_quat
 
-    def rr_se2(self, n, se2):
+    def rr_se2(self, n, se2, color):
         origin = [se2[0], se2[1], 0]
         direction = [np.cos(se2[2])*self.occupancy_grid.res,
                         np.sin(se2[2])*self.occupancy_grid.res, 0]
         rr.log_arrow(n, origin, direction, width_scale=0.02, color=[0, 1., 0])
 
+    def offset_from_hose(self, se2, dist):
+        '''
+        Offsets the destination pose from the hose so that the robot isn't standing directly over it
+        '''
+        xa = np.cos(se2[2])
+        ya = np.sin(se2[2])
+        if abs(xa) < 0.0001:
+            dx = 0
+            dy = ya * dist
+        elif abs(ya) < 0.0001:
+            dx  = xa * dist
+            dy = 0
+        else:
+            dx = xa * dist
+            dy = ya * dist
+        print("hello world")
+        # mag = np.sqrt(dx ** 2 + dy ** 2)
+        # dx = dx / mag
+        # dy = dy / mag
+        return (se2[0] - dx, se2[1] - dy, se2[2])
 
 def main():
     rr.init("hose_gpe")
@@ -124,7 +151,6 @@ def main():
     rr.log_arrow('world_y', [0, 0, 0], [0, 0.4, 0], color=(0, 255, 0), width_scale=0.02)
     rr.log_arrow('world_z', [0, 0, 0], [0, 0, 0.4], color=(0, 0, 255), width_scale=0.02)
     info_dict_loaded = load_data("/home/aliryckman/conq_python/scripts/data/info_1689099862.pkl")
-    
     predictor = Predictor(Path("hose_regrasping.pth"))
 
     rgb_np = info_dict_loaded["rgb_np"]
@@ -183,8 +209,8 @@ def main():
     best_idx = int(np.argmin(dists))
     best_se2 = construct_se2_from_points(best_idx, start, projected_points_in_body)
 
-    # delete the hose point that we're trying to walk to from the obstacle list
-    # TODO: eventually when we offset from the hose this is irrelevant
+    rr.log_points("hose_points_in_body", projected_points_in_body, colors=[1.,1.,0], radii=0.03)
+
     projected_points_in_body = np.delete(projected_points_in_body, (best_idx), axis=0)
     projected_t = np.column_stack((projected_points_in_body, 0.15 * np.ones_like(projected_points_in_body[:,0])))
 
@@ -204,6 +230,7 @@ def main():
 
     # goal is the point on the hose closest to the vacuum head, perhaps create a modified ver of get_hose_and_head_point
     goal = ([best_se2.position.x, best_se2.position.y, best_se2.angle])
+    goal = a.offset_from_hose(goal, 0.3)
     path = list(a.astar(projected_points_in_body, start=start, goal=goal))
     print(path)
     a.viz(start, goal, path)
