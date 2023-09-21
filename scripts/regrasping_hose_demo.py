@@ -138,9 +138,9 @@ def walk_to(robot_state_client, image_client, command_client, manipulation_api_c
     offset_distance = wrappers_pb2.FloatValue(value=1.00)
     walk_to_cmd = manipulation_api_pb2.WalkToObjectInImage(
         pixel_xy=walk_to_res.best_vec2,
-        transforms_snapshot_for_camera=walk_to_res.image_res.shot.transforms_snapshot,
-        frame_name_image_sensor=walk_to_res.image_res.shot.frame_name_image_sensor,
-        camera_model=walk_to_res.image_res.source.pinhole,
+        transforms_snapshot_for_camera=walk_to_res.rgb_res.shot.transforms_snapshot,
+        frame_name_image_sensor=walk_to_res.rgb_res.shot.frame_name_image_sensor,
+        camera_model=walk_to_res.rgb_res.source.pinhole,
         offset_distance=offset_distance)
     walk_to_request = manipulation_api_pb2.ManipulationApiRequest(walk_to_object_in_image=walk_to_cmd)
     walk_response = manipulation_api_client.manipulation_api_command(manipulation_api_request=walk_to_request)
@@ -176,7 +176,7 @@ def align_with_hose(command_client, robot_state_client, image_client, get_point_
     best_px = hose_points[best_idx]
 
     # convert to camera frame and ignore the Z. Assumes the camera is pointed straight down.
-    best_pt_in_cam = np.array(pixel_to_camera_space(pick_res.image_res, best_px[0], best_px[1], depth=1.0))[:2]
+    best_pt_in_cam = np.array(pixel_to_camera_space(pick_res.rgb_res, best_px[0], best_px[1], depth=1.0))[:2]
     best_pt_in_hand = pos_in_cam_to_pos_in_hand(best_pt_in_cam)
 
     rotate_around_point_in_hand_frame(command_client, robot_state_client, best_pt_in_hand, angle)
@@ -220,7 +220,7 @@ def retry_do_grasp(command_client, robot_state_client, manipulation_api_client, 
         pick_res = get_point_f_retry(command_client, robot_state_client, image_client, get_point_f, y=0., z=0.5,
                                      pitch=np.deg2rad(85), yaw=0)
         # Try to do the grasp
-        success = do_grasp(command_client, manipulation_api_client, robot_state_client, pick_res.image_res,
+        success = do_grasp(command_client, manipulation_api_client, robot_state_client, pick_res.rgb_res,
                            pick_res.best_vec2)
         if success:
             return

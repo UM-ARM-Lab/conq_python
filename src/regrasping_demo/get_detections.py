@@ -1,4 +1,4 @@
-import json
+import pickle
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,7 +22,9 @@ DEFAULT_IDEAL_DIST_TO_OBS = 70
 
 @dataclass
 class GetRetryResult:
-    image_res: image_pb2.ImageResponse
+    rgb_res: image_pb2.ImageResponse
+    depth_res: image_pb2.ImageResponse
+    depth_np: np.ndarray
     hose_points: np.ndarray
     best_idx: int
     best_vec2: geometry_pb2.Vec2
@@ -42,8 +44,14 @@ def save_data(rgb_np, depth_np, predictions):
 
     Image.fromarray(rgb_np).save(f"data/{now}/rgb.png")
     Image.fromarray(np.squeeze(depth_np)).save(f"data/{now}/depth.png")
-    with open(f"data/{now}/pred.json", 'w') as f:
-        json.dump(predictions, f)
+
+    data_dict = {
+        'rgb':         rgb_np,
+        'depth':       depth_np,
+        'predictions': predictions,
+    }
+    with open(f"data/{now}.pkl", 'wb') as f:
+        pickle.dump(data_dict, f)
 
 
 def get_mess(predictor, rc_client, image_client):
@@ -103,20 +111,24 @@ def get_hose_and_head_point(predictor, image_client):
 
     hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
     head_px = detect_object_center(predictions, "vacuum_head")
+    head_xy = head_px[::-1]
 
-    # fig, ax = viz_detection(rgb_np, head_detection)
-    # ax.plot(hose_points[:, 0], hose_points[:, 1], c='w', linewidth=4)
-    # fig.show()
-
-    dists = np.linalg.norm(hose_points - head_px, axis=-1)
+    # TODO do this in ground plane space instead of image space
+    dists = np.linalg.norm(hose_points - head_xy, axis=-1)
     best_idx = int(np.argmin(dists))
     best_px = hose_points[best_idx]
     best_vec2 = np_to_vec2(best_px)
 
-    # ax.scatter(best_px[0], best_px[1], c='m', marker='*', s=100, zorder=10)
-    # fig.show()
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    ax.imshow(rgb_np, alpha=0.5, zorder=0)
+    ax.imshow(depth_np, alpha=0.5, zorder=1)
+    viz_predictions(rgb_np, predictions, predictor.colors, fig, ax)
+    ax.plot(hose_points[:, 0], hose_points[:, 1], c='w', linewidth=4)
+    ax.scatter(best_px[0], best_px[1], c='m', marker='*', s=100, zorder=10)
+    fig.show()
 
-    return GetRetryResult(rgb_res, hose_points, best_idx, best_vec2)
+    return GetRetryResult(rgb_res, depth_res, depth_np, hose_points, best_idx, best_vec2)
 
 
 def get_hose_and_regrasp_point(predictor, image_client, ideal_dist_to_obs=DEFAULT_IDEAL_DIST_TO_OBS):
@@ -129,4 +141,4 @@ def get_hose_and_regrasp_point(predictor, image_client, ideal_dist_to_obs=DEFAUL
 
     best_idx, best_px = detect_regrasp_point_from_hose(predictions, hose_points, ideal_dist_to_obs)
     best_vec2 = np_to_vec2(best_px)
-    return GetRetryResult(rgb_res, hose_points, best_idx, best_vec2)
+    return GetRetryResult(rgb_res, depth_res, depth_np, hose_points, best_idx, best_vec2)

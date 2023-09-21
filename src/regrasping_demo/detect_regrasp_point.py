@@ -24,6 +24,8 @@ def get_masks(predictions, desired_class_name):
 
 def detect_object_center(predictions, class_name):
     mask = get_combined_mask(predictions, class_name)
+    if mask is None:
+        raise DetectionError(f"No {class_name} detected")
     com = get_center_of_mass(mask)
     return com
 

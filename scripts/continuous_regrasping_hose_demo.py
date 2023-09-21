@@ -137,7 +137,7 @@ def drag_rope_to_goal(robot_state_client, command_client, initial_transforms, x,
         traj_feedback = mobility_feedback.se2_trajectory_feedback
         if (traj_feedback.status == traj_feedback.STATUS_AT_GOAL and
                 traj_feedback.body_movement_status == traj_feedback.BODY_STATUS_SETTLED):
-            print("Arrived at goal.")
+            print("Arrived at dragging goal.")
             return True
         if force_measure(robot_state_client, command_client, force_buffer):
             time.sleep(1)  # makes the video look better in my opinion
@@ -168,15 +168,15 @@ def walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0., y=0.
 def walk_to(robot_state_client, image_client, command_client, manipulation_api_client, get_point_f):
     walk_to_res = get_point_f_retry(command_client, robot_state_client, image_client, get_point_f,
                                     y=0., z=0.4,
-                                    pitch=np.deg2rad(40), yaw=0)
+                                    pitch=np.deg2rad(45), yaw=0)
 
     # First just walk to in front of that point
     offset_distance = wrappers_pb2.FloatValue(value=1.00)
     walk_to_cmd = manipulation_api_pb2.WalkToObjectInImage(
         pixel_xy=walk_to_res.best_vec2,
-        transforms_snapshot_for_camera=walk_to_res.image_res.shot.transforms_snapshot,
-        frame_name_image_sensor=walk_to_res.image_res.shot.frame_name_image_sensor,
-        camera_model=walk_to_res.image_res.source.pinhole,
+        transforms_snapshot_for_camera=walk_to_res.rgb_res.shot.transforms_snapshot,
+        frame_name_image_sensor=walk_to_res.rgb_res.shot.frame_name_image_sensor,
+        camera_model=walk_to_res.rgb_res.source.pinhole,
         offset_distance=offset_distance)
     walk_to_request = manipulation_api_pb2.ManipulationApiRequest(walk_to_object_in_image=walk_to_cmd)
     walk_response = manipulation_api_client.manipulation_api_command(manipulation_api_request=walk_to_request)
@@ -222,7 +222,7 @@ def align_with_hose(command_client, robot_state_client, image_client, get_point_
     best_px = hose_points[best_idx]
 
     # convert to camera frame and ignore the Z. Assumes the camera is pointed straight down.
-    best_pt_in_cam = np.array(pixel_to_camera_space(pick_res.image_res, best_px[0], best_px[1], depth=1.0))[:2]
+    best_pt_in_cam = np.array(pixel_to_camera_space(pick_res.rgb_res, best_px[0], best_px[1], depth=1.0))[:2]
     best_pt_in_hand = pos_in_cam_to_pos_in_hand(best_pt_in_cam)
 
     rotate_around_point_in_hand_frame(command_client, robot_state_client, best_pt_in_hand, angle)
@@ -261,15 +261,40 @@ def rotate_around_point_in_hand_frame(command_client, robot_state_client, pos: n
 
 
 def retry_do_grasp(command_client, robot_state_client, manipulation_api_client, image_client, get_point_f):
-    for _ in range(4):
+    z = 0.5
+    for _ in range(5):
         # Try repeatedly to get a valid point in the image to grasp
-        pick_res = get_point_f_retry(command_client, robot_state_client, image_client, get_point_f, y=0., z=0.5,
-                                     pitch=np.deg2rad(85), yaw=0)
+        for _ in range(3):
+            pick_res : GetRetryResult = get_point_f_retry(command_client, robot_state_client, image_client, get_point_f, y=0., z=z,
+                                         pitch=np.deg2rad(85), yaw=0)
+            # if the depth isn't good enough, move closer
+            # look at a region around best_vec2 to see if there's a valid depth
+            margin = 100
+            u, v = int(pick_res.best_vec2.y), int(pick_res.best_vec2.x)
+            n_valid_points = np.sum(pick_res.depth_np[u-margin:u+margin, v-margin:v+margin] > 0)
+            frac_valid = n_valid_points / (2*margin)**2
+            rr.log_scalar("grasp_frac_valid_depth", frac_valid)
+            if frac_valid >= 0.45:
+                break
+            z -= 0.05
+
         # Try to do the grasp
-        success = do_grasp(command_client, manipulation_api_client, robot_state_client, pick_res.image_res,
+        success = do_grasp(command_client, manipulation_api_client, robot_state_client, pick_res.rgb_res,
                            pick_res.best_vec2)
         if success:
             return
+        else:
+            # try to walk a little closer to the detected grasp location
+            offset_distance = wrappers_pb2.FloatValue(value=0.5)
+            walk_to_cmd = manipulation_api_pb2.WalkToObjectInImage(
+                pixel_xy=pick_res.best_vec2,
+                transforms_snapshot_for_camera=pick_res.rgb_res.shot.transforms_snapshot,
+                frame_name_image_sensor=pick_res.rgb_res.shot.frame_name_image_sensor,
+                camera_model=pick_res.rgb_res.source.pinhole,
+                offset_distance=offset_distance)
+            walk_to_request = manipulation_api_pb2.ManipulationApiRequest(walk_to_object_in_image=walk_to_cmd)
+            walk_response = manipulation_api_client.manipulation_api_command(manipulation_api_request=walk_to_request)
+            block_for_manipulation_api_command(manipulation_api_client, walk_response)
 
     open_gripper(command_client)
     raise GraspingException("Failed to grasp")
@@ -295,7 +320,6 @@ def center_obstacles(predictor, command_client, robot_state_client, image_client
             print("success!")
             break
 
-        # TODO: move by delta_px
         # FIXME: generalize this math/transform. This assumes that +x in image (column) is -Y in body, etc.
         # FIXME: should be using camera intrinsics here so motion scale makes more sense
         dx_in_body, dy_in_body = np.array([-delta_px[1], -delta_px[0]]) * motion_scale
@@ -306,10 +330,11 @@ def go_to_goal_and_reset(predictor, command_client, robot_state_client, image_cl
                          initial_transforms, goal_x, goal_y, goal_yaw):
     while True:
         # Grasp the hose to DRAG
-        walk_to(robot_state_client, image_client, command_client, manipulation_api_client, get_hose_and_head_point)
-        align_with_hose(command_client, robot_state_client, image_client, get_hose_and_head_point)
+        _get_hose_and_head_point = partial(get_hose_and_head_point, predictor)
+        walk_to(robot_state_client, image_client, command_client, manipulation_api_client, _get_hose_and_head_point)
+        align_with_hose(command_client, robot_state_client, image_client, _get_hose_and_head_point)
         retry_do_grasp(command_client, robot_state_client, manipulation_api_client, image_client,
-                       get_hose_and_head_point)
+                       _get_hose_and_head_point)
 
         goal_reached = drag_rope_to_goal(robot_state_client, command_client, initial_transforms, goal_x, goal_y,
                                          goal_yaw)
@@ -378,6 +403,7 @@ def go_to_goal_and_reset(predictor, command_client, robot_state_client, image_cl
             if success:
                 break
         else:
+            # Give up and reset
             walk_to_pose_in_initial_frame(command_client, initial_transforms, x=0, y=0, yaw=0)
             continue
 
@@ -413,7 +439,7 @@ def main(argv):
     rr.init("rope_pull")
     rr.connect()
 
-    predictor = Predictor()
+    predictor = Predictor('models/hose_regrasping.pth')
 
     bosdyn.client.util.setup_logging(args.verbose)
 
@@ -435,13 +461,6 @@ def main(argv):
 
     lease_client.take()
 
-    # Video recording
-    from conq.video_recording import VideoRecorder
-    device_num = 4
-    vr = VideoRecorder(device_num, 'video/')
-    vr.start_new_recording(f'demo_{int(time.time())}.mp4')
-    vr.start_in_thread()
-
     with (LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True)):
         command_client = setup_and_stand(robot)
 
@@ -450,13 +469,13 @@ def main(argv):
         # open the hand, so we can see more with the depth sensor
         open_gripper(command_client)
 
-        # first detect the goal
-        handedness = 1  # 1 for when the mess is on the left, -1 for when the mess is on the right
+        # First detect the goal
+        # TODO: generalize this, don't hardcode the goal
         goal_1_x = 1.5
-        goal_1_y = 1.5
+        goal_1_y = 1.2
         goal_1_yaw = -np.pi / 2
         goal_2_x = 1.5
-        goal_2_y = -1.5
+        goal_2_y = -1.2
         goal_2_yaw = np.pi / 2
 
         for _ in range(5):
@@ -464,8 +483,6 @@ def main(argv):
                                  initial_transforms, goal_1_x, goal_1_y, goal_1_yaw)
             go_to_goal_and_reset(predictor, command_client, robot_state_client, image_client, manipulation_api_client,
                                  initial_transforms, goal_2_x, goal_2_y, goal_2_yaw)
-
-        vr.stop_in_thread()
 
 
 if __name__ == '__main__':

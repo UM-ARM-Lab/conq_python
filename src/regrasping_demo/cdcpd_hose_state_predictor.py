@@ -227,7 +227,8 @@ def single_frame_planar_cdcpd(rgb_np: np.ndarray, predictions: Dict):
 
         inputs = CDCPDModuleArguments(tracking_map, cloud_filtered.xyz)
 
-        outputs = cdcpd_module(inputs)
+        for _ in range(50):
+            outputs = cdcpd_module(inputs)
 
         Y_cpd_candidate = outputs.get_Y_cpd()
         sigma2 = outputs.get_sigma2_cpd()
