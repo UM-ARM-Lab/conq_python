@@ -374,8 +374,7 @@ def main(argv):
                 body_in_cam = np.array([-body_in_hand.y, -body_in_hand.z])
                 robot_px = np.array(camera_space_to_pixel(rgb_res, body_in_cam[0], body_in_cam[1], hand_to_floor))
 
-                _, place_px = homotopy_planner.plan(rgb_np, predictions, predictor.colors, hose_points, regrasp_px,
-                                                    robot_px)
+                _, place_px = homotopy_planner.plan(rgb_np, predictions, hose_points, regrasp_px, robot_px)
 
                 place_x_in_cam, place_y_in_cam, _ = pixel_to_camera_space(rgb_res, place_px[0], place_px[1], depth=1.0)
                 place_x, place_y = pos_in_cam_to_pos_in_hand([place_x_in_cam, place_y_in_cam])

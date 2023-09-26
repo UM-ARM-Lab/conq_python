@@ -105,8 +105,8 @@ def sample_point(rng, h, w, extend_px):
     return sample_px
 
 
-def plan(rgb_np, predictions, class_colors, ordered_hose_points, regrasp_px, robot_px,
-         robot_reach_px=750, extend_px=100, near_tol=0.30):
+def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_reach_px=750, extend_px=100,
+         near_tol=0.30):
     h, w = rgb_np.shape[:2]
     obstacles_mask = get_combined_mask(predictions, "battery")
     inflated_obstacles_mask = inflate_mask(obstacles_mask)
@@ -197,7 +197,7 @@ def main():
             t0 = time.time()
             ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
             min_cost_idx, regrasp_px = detect_regrasp_point_from_hose(predictions, ordered_hose_points, 50)
-            success, _ = plan(rgb_np, predictions, predictor.colors, ordered_hose_points, regrasp_px,
+            success, _ = plan(rgb_np, predictions, ordered_hose_points, regrasp_px,
                               robot_px + rng.uniform(-25, 25, 2).astype(int))
             print("Planning took %.3f seconds" % (time.time() - t0))
             if success:

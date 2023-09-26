@@ -4,6 +4,7 @@ from typing import Dict
 
 import numpy as np
 import torch
+from diffcp import SolverError
 
 from cdcpd_torch.core.deformable_object_configuration import RopeConfiguration
 from cdcpd_torch.core.tracking_map import TrackingMap
@@ -171,6 +172,7 @@ def setup_cdcpd_module(rope_config: RopeConfiguration):
     # This seemed to do the job. Hopefully it doesn't explode or get really poor tracking when using
     # poor initializations.
     param_vals.zeta_.val = 0.05
+    param_vals.max_iterations.val = 10
 
     cdcpd_module = CDCPDModule(
         rope_config,
@@ -194,9 +196,11 @@ def project_tracking_results_to_image_coords(cdcpd_output: torch.Tensor):
 def single_frame_planar_cdcpd(rgb_np: np.ndarray, predictions: Dict):
     """Does full CDCPD single frame prediction given input images, predictions, and masks"""
     rope_mask = get_combined_mask(predictions, ['vacuum_hose', 'vacuum_neck'])
-    binary_rope_mask = rope_mask > 0.5
     if rope_mask is None:
         raise DetectionError("No rope masks found")
+    binary_rope_mask = rope_mask > 0.5
+    if not np.any(binary_rope_mask):
+        raise DetectionError("No pixels in rope mask > 0.5")
 
     # Combine masks by adding and clipping the probabilities.
     depth_np = np.ones((rgb_np.shape[0], rgb_np.shape[1]), dtype=float) * METERS_TO_MILLIMETERS
@@ -227,8 +231,10 @@ def single_frame_planar_cdcpd(rgb_np: np.ndarray, predictions: Dict):
 
         inputs = CDCPDModuleArguments(tracking_map, cloud_filtered.xyz)
 
-        for _ in range(50):
+        try:
             outputs = cdcpd_module(inputs)
+        except SolverError:
+            continue
 
         Y_cpd_candidate = outputs.get_Y_cpd()
         sigma2 = outputs.get_sigma2_cpd()
@@ -236,6 +242,9 @@ def single_frame_planar_cdcpd(rgb_np: np.ndarray, predictions: Dict):
         if sigma2 < best_sigma2:
             best_sigma2 = sigma2
             best_Y_cpd = Y_cpd_candidate
+
+    if best_Y_cpd is None:
+        raise DetectionError("No CDCPD solution found")
 
     # Project tracking result back to image space coordinates.
     vertex_uv_coords = project_tracking_results_to_image_coords(best_Y_cpd)

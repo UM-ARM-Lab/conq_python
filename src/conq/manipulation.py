@@ -66,6 +66,7 @@ def force_measure(state_client, command_client, force_buffer: List):
     rr.log_scalar("force/z", force_reading.z)
     rr.log_scalar("force/total", total_force)
     rr.log_scalar("force/recent_avg_total", recent_avg_total_force)
+    rr.log_scalar("force/high_force_threshold", HIGH_FORCE_THRESHOLD)
 
     if recent_avg_total_force > HIGH_FORCE_THRESHOLD and len(force_buffer) == FORCE_BUFFER_SIZE:
         print(f"large force detected! {recent_avg_total_force:.2f}")
@@ -85,7 +86,7 @@ def do_grasp(command_client, manipulation_api_client, robot_state_client, image_
 
     # execute grasp
     t0 = time.time()
-    while time.time() - t0 < 13:
+    while True:
         feedback_request = manipulation_api_pb2.ManipulationApiFeedbackRequest(
             manipulation_cmd_id=cmd_response.manipulation_cmd_id)
 
@@ -98,6 +99,11 @@ def do_grasp(command_client, manipulation_api_client, robot_state_client, image_
         if response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_SUCCEEDED:
             break
         elif response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_FAILED:
+            break
+        if time.time() - t0 >= 8 and response.current_state in [manipulation_api_pb2.MANIP_STATE_SEARCHING_FOR_GRASP,
+                                                                manipulation_api_pb2.MANIP_STATE_WALKING_TO_OBJECT,
+                                                                manipulation_api_pb2.MANIP_STATE_GRASP_PLANNING_NO_SOLUTION]:
+            # give up after 5 seconds if we haven't found a grasp
             break
 
         time.sleep(1)
