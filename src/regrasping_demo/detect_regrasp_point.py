@@ -50,13 +50,6 @@ def get_center_of_mass(x):
     return com
 
 
-def detect_regrasp_point(rgb_np, predictions, ideal_dist_to_obs):
-    ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
-    min_cost_idx, best_px = detect_regrasp_point_from_hose(predictions, ordered_hose_points, ideal_dist_to_obs)
-
-    return best_px, ordered_hose_points
-
-
 def detect_regrasp_point_from_hose(predictions, ordered_hose_points, ideal_dist_to_obs):
     n = ordered_hose_points.shape[0]
 
@@ -96,22 +89,3 @@ def min_angle_to_x_axis(delta):
         return angle
     else:
         return neg_angle
-
-
-def main():
-    for predictor, subdir, rgb_np, predictions in testing.get_test_examples():
-        regrasp_px, hose_points = detect_regrasp_point(rgb_np, predictions, ideal_dist_to_obs=50)
-
-        fig, ax = plt.subplots()
-        ax.imshow(rgb_np)
-        # viz_predictions(rgb_np, predictions, predictor.colors, fig, ax)
-        for p in hose_points:
-            ax.scatter(p[0], p[1], color='y', zorder=3)
-        ax.scatter(regrasp_px[0], regrasp_px[1], s=200, marker='*', c='orange', zorder=4)
-        ax.axis("off")
-        fig.show()
-        fig.savefig("regrasp_point.png")
-
-
-if __name__ == "__main__":
-    main()

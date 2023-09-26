@@ -29,6 +29,7 @@ dependencies = [
     "scikit-learn",
     "scipy",
     "sklearn",
+    "sortedcontainers",
 ]
 
 [project.optional-dependencies] # Optional

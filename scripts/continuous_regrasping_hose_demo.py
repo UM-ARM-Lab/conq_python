@@ -1,4 +1,9 @@
 import argparse
+
+from matplotlib import pyplot as plt
+
+from arm_segmentation.viz import viz_predictions
+from conq.conq_astar import ConqAStar
 import time
 from functools import partial
 from typing import Callable
@@ -14,7 +19,7 @@ from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
 from bosdyn.api.spot import robot_command_pb2 as spot_command_pb2
 from bosdyn.client import math_helpers
 from bosdyn.client.frame_helpers import ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, \
-    GROUND_PLANE_FRAME_NAME, HAND_FRAME_NAME, get_a_tform_b, get_se2_a_tform_b, BODY_FRAME_NAME
+    GROUND_PLANE_FRAME_NAME, HAND_FRAME_NAME, get_a_tform_b, get_se2_a_tform_b
 from bosdyn.client.image import ImageClient, pixel_to_camera_space
 from bosdyn.client.lease import LeaseKeepAlive, LeaseClient
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
@@ -30,14 +35,15 @@ from conq.exceptions import DetectionError, GraspingException
 from conq.manipulation import block_for_manipulation_api_command, open_gripper, force_measure, \
     do_grasp, raise_hand, add_follow_with_body
 from conq.manipulation import blocking_arm_command
-from conq.perception import get_gpe_in_cam, project_points
+from conq.perception import project_points_in_gpe
 from conq.utils import setup
 from regrasping_demo import homotopy_planner
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.center_object import center_object_step
 from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis, detect_regrasp_point_from_hose
-from regrasping_demo.get_detections import GetRetryResult, np_to_vec2, get_hose_and_regrasp_point, get_object_on_floor, \
-    get_hose_and_head_point
+from regrasping_demo.get_detections import GetRetryResult, np_to_vec2, get_hose_and_regrasp_point, \
+    get_object_on_floor, detect_object_points, get_body_goal_se2_from_hose_points, save_all_rgb, \
+    DEFAULT_IDEAL_DIST_TO_OBS
 from regrasping_demo.get_detections import save_data
 from regrasping_demo.homotopy_planner import get_obstacle_coms
 
@@ -107,10 +113,6 @@ def spiral_search(rc_client, rr_viz: bool = True, a=1.1, b=0.25, spiral_end=7 * 
         spiral_steps: The number of steps in the spiral, larger means more small steps.
     """
     # move the hand in a spiral pattern to search for objects on the floor
-    if rr_viz:
-        rr.log_arrow('world/x', [0, 0, 0], [1, 0, 0], color=[1, 0, 0, 1.0], width_scale=0.01, timeless=True)
-        rr.log_arrow('world/y', [0, 0, 0], [0, 1, 0], color=[0, 1, 0, 1.0], width_scale=0.01, timeless=True)
-        rr.log_arrow('world/z', [0, 0, 0], [0, 0, 1], color=[0, 0, 1, 1.0], width_scale=0.01, timeless=True)
 
     # Figure out where is the robot currently looking in body frame, and offset from that
     response = rc_client.raycast(np.zeros(3), np.array([1, 0, 0]),
@@ -165,9 +167,10 @@ def drag_rope_to_goal(robot_state_client, command_client, goal):
     force_buffer = []
 
     # Raise arm a bit
-    raise_hand(command_client, robot_state_client, 0.1)
+    raise_hand(command_client, robot_state_client, 0.3)
 
-    # Create the se2 trajectory for the dragging motion
+    # Ideally here we would plan a collision free path to the goal, but what should the model of the hose be?
+    # We assume that the end not grasped by the robot is fixed in the world, but we don't know where that is.
     walk_cmd_id = walk_to_pose_in_odom(command_client, goal, block=False, locomotion_hint=spot_command_pb2.HINT_CRAWL)
 
     # loop to check forces
@@ -309,10 +312,10 @@ def retry_do_grasp(robot, command_client, robot_state_client, manipulation_api_c
         # move forward if the hand is too far back
         snapshot = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
         hand_in_gpe = get_a_tform_b(snapshot, GROUND_PLANE_FRAME_NAME, HAND_FRAME_NAME)
-        if hand_in_gpe.z > 0.1:
+        if hand_in_gpe.z > 0.2:
             x_vel = 0.02
         else:
-            x_vel = -0.02
+            x_vel = -0.08
         hand_vel.velocity_in_frame_name.x = x_vel
         dt = 0.5
         end_time_secs = time.time() + dt
@@ -366,41 +369,85 @@ def walk_to(robot_state_client, command_client, manipulation_api_client, rc_clie
 
 
 def go_to_goal(predictor, robot, command_client, robot_state_client, image_client, manipulation_api_client, rc_client,
-               initial_transforms, goal: math_helpers.SE2Pose):
+               initial_transforms,
+               goal: math_helpers.SE2Pose):
     while True:
         # Grasp the hose to DRAG
-        _get_hose_head = partial(get_hose_and_head_point, predictor, image_client)
-        walk_to(robot_state_client, command_client, manipulation_api_client, rc_client, _get_hose_head)
-        align_with_hose(command_client, robot_state_client, rc_client, _get_hose_head)
-        retry_do_grasp(robot, command_client, robot_state_client, manipulation_api_client, rc_client, _get_hose_head)
-
-        goal_reached = drag_rope_to_goal(robot_state_client, command_client, goal)
-        if goal_reached:
-            break
-
+        # _get_hose_head = partial(get_hose_and_head_point, predictor, image_client)
+        # walk_to(robot_state_client, command_client, manipulation_api_client, rc_client, _get_hose_head)
+        # align_with_hose(command_client, robot_state_client, rc_client, _get_hose_head)
+        # retry_do_grasp(robot, command_client, robot_state_client, manipulation_api_client, rc_client, _get_hose_head)
+        #
+        # goal_reached = drag_rope_to_goal(robot_state_client, command_client, goal)
+        # if goal_reached:
+        #     break
+        #
         # setup to look for the hose, which we just dropped
-        open_gripper(command_client)
-        look_at_scene(command_client, robot_state_client, z=0.3, pitch=np.deg2rad(85))
+        # open_gripper(command_client)
+        # look_at_scene(command_client, robot_state_client, z=0.3, pitch=np.deg2rad(85))
 
         # Look for the hose and get the full estimate in base frame
-        spiral_gen = spiral_search(rc_client)
-        while True:
-            gaze_command = next(spiral_gen)
-            blocking_arm_command(command_client, gaze_command)
-            time.sleep(0.25)
+        # TODO:
 
-        # First just walk to in front of that point
-        # TODO: run A* planner
-        # offset_distance = wrappers_pb2.FloatValue(value=1.00)
-        # walk_to_cmd = manipulation_api_pb2.WalkToObjectInImage(
-        #     pixel_xy=walk_to_res.best_vec2,
-        #     transforms_snapshot_for_camera=walk_to_res.rgb_res.shot.transforms_snapshot,
-        #     frame_name_image_sensor=walk_to_res.rgb_res.shot.frame_name_image_sensor,
-        #     camera_model=walk_to_res.rgb_res.source.pinhole,
-        #     offset_distance=offset_distance)
-        # walk_to_request = manipulation_api_pb2.ManipulationApiRequest(walk_to_object_in_image=walk_to_cmd)
-        # walk_response = manipulation_api_client.manipulation_api_command(manipulation_api_request=walk_to_request)
-        # block_for_manipulation_api_command(manipulation_api_client, walk_response)
+        # Detect the regrasp point
+        # this sort of duplicates some code from get_hose_and_regrasp_point()
+        rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
+        predictions = predictor.predict(rgb_np)
+        hose_pixels = single_frame_planar_cdcpd(rgb_np, predictions)
+
+        # save_all_rgb(image_client)
+
+        best_idx, best_px = detect_regrasp_point_from_hose(predictions, hose_pixels,
+                                                           ideal_dist_to_obs=DEFAULT_IDEAL_DIST_TO_OBS)
+
+        # visualize
+        fig, ax = plt.subplots()
+        ax.imshow(rgb_np, zorder=0)
+        viz_predictions(rgb_np, predictions, predictor.colors, fig, ax)
+        ax.scatter(best_px[0], best_px[1], s=200, marker='*', c='orange', zorder=4)
+        fig.show()
+
+        cam2odom = get_a_tform_b(rgb_res.shot.transforms_snapshot, rgb_res.shot.frame_name_image_sensor,
+                                 ODOM_FRAME_NAME)
+        snapshot = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
+        battery_px_points = detect_object_points(predictions, "battery")
+
+        gpe2odom = get_a_tform_b(snapshot, GROUND_PLANE_FRAME_NAME, ODOM_FRAME_NAME)
+        odom2gpe = gpe2odom.inverse()
+        cam2gpe = cam2odom * odom2gpe
+
+        hose_points_in_gpe = project_points_in_gpe(hose_pixels, rgb_res, cam2gpe)
+        battery_points_in_gpe = project_points_in_gpe(battery_px_points, rgb_res, cam2gpe)
+        obstacle_points_in_gpe = np.concatenate([hose_points_in_gpe, battery_points_in_gpe], axis=0)
+        rr.log_points('gpe/hose_points', hose_points_in_gpe)
+        rr.log_transform3d(f'gpe/gpe', rr.Translation3D([0, 0, 0]))
+
+        a = ConqAStar()
+        start = (0, 0, 0)
+        # in GPE frame
+        goal_x, goal_y, goal_angle = get_body_goal_se2_from_hose_points(hose_points_in_gpe, best_idx)
+
+        obstacle_point_radius = 0.05
+        for ob in obstacle_points_in_gpe:
+            a.add_obstacle(ob[0], ob[1], obstacle_point_radius)
+
+        goal = a.offset_from_hose((goal_x, goal_y, goal_angle), 0.6)
+        path = list(a.astar(hose_points_in_gpe, start=start, goal=goal))
+        print(path)
+        a.viz(start, goal, path)
+
+        # execute the se2 command
+        gpe2odom_se2 = get_se2_a_tform_b(snapshot, ODOM_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
+        for point in path:
+            point_in_gpe = math_helpers.SE2Pose(x=point[0], y=point[1], angle=point[2])
+            point_in_odom = gpe2odom_se2 * point_in_gpe
+            se2_cmd = RobotCommandBuilder.synchro_se2_trajectory_command(goal_se2=point_in_odom.to_proto(),
+                                                                         frame_name=ODOM_FRAME_NAME,
+                                                                         locomotion_hint=spot_command_pb2.HINT_CRAWL)
+            se2_synchro_commnd = RobotCommandBuilder.build_synchro_command(se2_cmd)
+            se2_cmd_id = command_client.robot_command(lease=None, command=se2_synchro_commnd,
+                                                      end_time_secs=time.time() + 999)
+            block_for_trajectory_cmd(command_client, se2_cmd_id)
 
         # Move the arm to get the hose unstuck
         for _ in range(3):
@@ -489,10 +536,11 @@ def find_goal(robot_state_client, image_client, command_client, rc_client, predi
                                      pitch=np.deg2rad(45))
 
     # Project into the ground plane
-    cam2odom = get_a_tform_b(get_goal_res.rgb_res.shot.transforms_snapshot, get_goal_res.rgb_res.shot.frame_name_image_sensor, ODOM_FRAME_NAME)
+    cam2odom = get_a_tform_b(get_goal_res.rgb_res.shot.transforms_snapshot,
+                             get_goal_res.rgb_res.shot.frame_name_image_sensor, ODOM_FRAME_NAME)
 
     pixels = np.array([[get_goal_res.best_vec2.y, get_goal_res.best_vec2.x]])
-    goal_xy_in_odom = project_points(pixels, get_goal_res.rgb_res, cam2odom)[:2, 0]
+    goal_xy_in_odom = project_points_in_gpe(pixels, get_goal_res.rgb_res, cam2odom)[:2, 0]
     print(goal_xy_in_odom)
 
     snapshot = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
@@ -503,21 +551,25 @@ def find_goal(robot_state_client, image_client, command_client, rc_client, predi
     goal.y = goal_xy_in_odom[1]
     goal.angle = 0
 
+    viz_common_frames(snapshot)
+    rr.log_point('goal', [goal_xy_in_odom[0], goal_xy_in_odom[1], 0], radius=0.25, color=[1, 0, 1, 1.])
+
+    return goal
+
+
+def viz_common_frames(snapshot):
     body_in_odom = get_a_tform_b(snapshot, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
     gpe_in_odom = get_a_tform_b(snapshot, ODOM_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
     hand_in_odom = get_a_tform_b(snapshot, ODOM_FRAME_NAME, HAND_FRAME_NAME)
     rr_tform('body', body_in_odom)
     rr_tform('gpe', gpe_in_odom)
     rr_tform('hand', hand_in_odom)
-    rr.log_point('goal', [goal_xy_in_odom[0], goal_xy_in_odom[1], 0], radius=0.25, color=[1, 0, 1, 1.])
-
-    return goal
 
 
 def rr_tform(child_frame: str, tform: math_helpers.SE3Pose):
     translation = np.array([tform.position.x, tform.position.y, tform.position.z])
     rot_mat = tform.rotation.to_matrix()
-    rr.log_transform3d(f'world/{child_frame}', rr.TranslationAndMat3(translation, rot_mat))
+    rr.log_transform3d(f'frames/{child_frame}', rr.TranslationAndMat3(translation, rot_mat))
 
 
 def main():
@@ -527,6 +579,7 @@ def main():
     bosdyn.client.util.add_base_arguments(parser)
     rr.init("continuous_regrasping_hose_demo")
     rr.connect()
+    rr.log_transform3d(f'frames/odom', rr.Translation3D([0, 0, 0]))
 
     predictor = Predictor('models/hose_regrasping.pth')
 
@@ -557,19 +610,21 @@ def main():
         open_gripper(command_client)
 
         while True:
-            # First detect the goal
-            goal_in_odom = find_goal(robot_state_client, image_client, command_client, rc_client, predictor)
-            print(f'goal={goal_in_odom}')
-
-            # check that the goal isn't too far, since that's likely bug and could be unsafe
-            if np.linalg.norm([goal_in_odom.x, goal_in_odom.y]) > 5.0:
-                print(f"Goal is too far away: {goal_in_odom.x, goal_in_odom.y}")
-                continue
-
             initial_transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
 
+            # First detect the goal
+            # goal_in_odom = find_goal(robot_state_client, image_client, command_client, rc_client, predictor)
+            # print(f'goal={goal_in_odom}')
+            #
+            # check that the goal isn't too far, since that's likely bug and could be unsafe
+            # body_in_odom = get_se2_a_tform_b(initial_transforms, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
+            #
+            # if np.linalg.norm([goal_in_odom.x - body_in_odom.x, goal_in_odom.y - body_in_odom.y]) > 5.0:
+            #     print(f"Goal is too far away: {goal_in_odom.x, goal_in_odom.y}")
+            #     continue
+
             go_to_goal(predictor, robot, command_client, robot_state_client, image_client, manipulation_api_client,
-                       rc_client, initial_transforms, goal_in_odom)
+                       rc_client, initial_transforms, goal=None)
 
             open_gripper(command_client)
             blocking_arm_command(command_client, RobotCommandBuilder.arm_stow_command())

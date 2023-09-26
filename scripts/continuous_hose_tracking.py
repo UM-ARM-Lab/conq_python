@@ -19,7 +19,7 @@ from cdcpd_torch.modules.cdcpd_parameters import CDCPDParamValues
 from cdcpd_torch.modules.post_processing.configuration import PostProcConfig, PostProcModuleChoice
 from conq.cameras_utils import get_color_img, get_depth_img
 from conq.exceptions import DetectionError
-from conq.perception import project_points, get_gpe_in_cam
+from conq.perception import project_points_in_gpe, get_gpe_in_cam
 from regrasping_demo.cdcpd_hose_state_predictor import setup_tracking
 
 
@@ -44,7 +44,7 @@ def process_inputs(robot_state_client, image_client, predictor):
     pixels = np.stack(np.argwhere(binary_rope_mask), 0)
 
     gpe2cam = get_gpe_in_cam(rgb_res, robot_state_client)
-    xyz_in_gpe = project_points(pixels, rgb_res, gpe2cam)
+    xyz_in_gpe = project_points_in_gpe(pixels, rgb_res, gpe2cam)
 
     cam2gpe = gpe2cam.inverse()
     translation = np.array([cam2gpe.position.x, cam2gpe.position.y, cam2gpe.position.z])
