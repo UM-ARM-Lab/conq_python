@@ -112,23 +112,22 @@ class AStar(ABC, Generic[T]):
                 current = current.came_from
 
         if reversePath:
-            return _gen()
+            return list(_gen())
         else:
-            return reversed(list(_gen()))
+            return list(reversed(list(_gen())))
 
-    # TODO: remember to remove np arr from parameter list
-    def astar(
-            self, hose_points, start: T, goal: T, reversePath: bool = False
-    ) -> Union[Iterable[T], None]:
+    def astar(self, start: T, goal: T, reversePath: bool = False, timeout_sec = 15.) -> Union[Iterable[T], None]:
         if self.is_goal_reached(start, goal):
             return [start]
+
+        t0 = time.time()
 
         plt.ion()
         fig = plt.figure()
         ax = fig.add_subplot(111)
         ax.set_aspect('equal')
-        ax.set_xlim(-1, 3)
-        ax.set_ylim(-2, 1)
+        ax.set_xlim(-5, 5)
+        ax.set_ylim(-5, 5)
         x = np.array([])
         y = np.array([])
         yaws = np.array([])
@@ -163,6 +162,9 @@ class AStar(ABC, Generic[T]):
 
             if self.is_goal_reached(current.data, goal):
                 return self.reconstruct_path(current, reversePath)
+            if time.time() - t0 > timeout_sec:
+                print("Timeout!")
+                return None
 
             current.closed = True
 

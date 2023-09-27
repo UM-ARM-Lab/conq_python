@@ -12,16 +12,34 @@ from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.detect_regrasp_point import get_masks, detect_regrasp_point_from_hose, get_center_of_mass
 
 
-def make_tau(start, end, waypoint):
+def make_tau(start, end, waypoints):
     def _tau(t):
         """
         Represents the piecewise linear path: start --> waypoint --> end.
-        The "time" is arbitrary, so we place 0.5 at the waypoint.
+        The start is t=0 and the end is t=1, and waypoints are treated as evently distributed through time.
         """
-        if t <= 0.5:
-            return start + 2 * t * (waypoint - start)
-        else:
-            return waypoint + 2 * (t - 0.5) * (end - waypoint)
+        if t == 0.0:
+            return start
+        if t == 1.0:
+            return end
+
+        all_points = np.concatenate([start[None], waypoints, end[None]], axis=0)
+        # find the waypoint to start interpolating from
+        waypoint_frac = t * (len(all_points) - 1)
+        waypoint_idx = int(waypoint_frac)
+        # find the fraction of the way between the two waypoints
+        alpha = waypoint_frac - waypoint_idx
+        # interpolate between the two waypoints
+        z = (1 - alpha) * all_points[waypoint_idx] + alpha * all_points[waypoint_idx + 1]
+        return z
+
+    # plt.figure()
+    # plt.scatter(start[0], start[1], c='g')
+    # plt.scatter(end[0], end[1], c='b')
+    # for t in np.linspace(0, 1, 10):
+    #     z = _tau(t)
+    #     plt.scatter(z[0], z[1], c='r')
+    # plt.show()
 
     return _tau
 
@@ -36,9 +54,9 @@ def relative_distance_deviation(dist_to_start0, sample_px, start_px):
     return np.square((dist_to_start - dist_to_start0) / dist_to_start0)
 
 
-def is_homotopy_diff(start, end, waypoint1, waypoint2, obstacle_centers):
-    tau1 = make_tau(start, end, waypoint1)
-    tau2 = make_tau(start, end, waypoint2)
+def is_homotopy_diff(hose_points, start, end, place_point, obstacle_centers):
+    tau1 = make_tau(start, end, hose_points)
+    tau2 = make_tau(start, end, place_point[None])
     windings = []
     # compute winding number for each obstacle
     for object_center in obstacle_centers:
@@ -105,15 +123,15 @@ def sample_point(rng, h, w, extend_px):
     return sample_px
 
 
-def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_reach_px=750, extend_px=100,
+def plan(rgb_np, predictions, hose_points, regrasp_px, robot_px, robot_reach_px=750, extend_px=100,
          near_tol=0.30):
     h, w = rgb_np.shape[:2]
     obstacles_mask = get_combined_mask(predictions, "battery")
     inflated_obstacles_mask = inflate_mask(obstacles_mask)
     obstacle_coms = get_obstacle_coms(predictions)
 
-    start_px = ordered_hose_points[0]
-    end_px = ordered_hose_points[-1]
+    start_px = hose_points[0]
+    end_px = hose_points[-1]
     dist_to_start0 = np.linalg.norm(regrasp_px - start_px)
     dist_to_end0 = np.linalg.norm(regrasp_px - end_px)
 
@@ -121,7 +139,7 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
     ax.imshow(rgb_np, zorder=0)
     ax.set_facecolor("gray")
     # viz_predictions(rgb_np, predictions, class_colors, fig, ax, legend=False)
-    ax.scatter(ordered_hose_points[:, 0], ordered_hose_points[:, 1], c='yellow', zorder=2)
+    ax.scatter(hose_points[:, 0], hose_points[:, 1], c='yellow', zorder=2)
     ax.scatter(regrasp_px[0], regrasp_px[1], c='orange', marker='*', s=200, zorder=3)
     ax.scatter(robot_px[0], robot_px[1], c='k', s=500)
     ax.add_patch(
@@ -150,7 +168,7 @@ def plan(rgb_np, predictions, ordered_hose_points, regrasp_px, robot_px, robot_r
     for i in range(5000):
         sample_px = sample_point(rng, h, w, extend_px)
 
-        homotopy_diff = is_homotopy_diff(start_px, end_px, regrasp_px, sample_px, obstacle_coms)
+        homotopy_diff = is_homotopy_diff(hose_points, start_px, end_px, sample_px, obstacle_coms)
         in_collision = is_in_collision(inflated_obstacles_mask, sample_px)
         reachable = np.linalg.norm(robot_px - sample_px) < robot_reach_px
         near_start = relative_distance_deviation(dist_to_start0, sample_px, start_px) < near_tol

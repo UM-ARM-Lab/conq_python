@@ -61,14 +61,14 @@ def image_to_opencv(image, auto_rotate=True):
 def get_color_img(image_client, src):
     rgb_req = build_image_request(src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
     rgb_res: ImageResponse = image_client.get_image([rgb_req])[0]
-    rgb_np = image_to_opencv(rgb_res, auto_rotate=True)
+    rgb_np = image_to_opencv(rgb_res)
     return rgb_np, rgb_res
 
 
 def get_depth_img(image_client, src):
     depth_req = build_image_request(src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_DEPTH_U16)
     depth_res: ImageResponse = image_client.get_image([depth_req])[0]
-    depth_np = image_to_opencv(depth_res, auto_rotate=True)
+    depth_np = image_to_opencv(depth_res)
     return depth_np, depth_res
 
 

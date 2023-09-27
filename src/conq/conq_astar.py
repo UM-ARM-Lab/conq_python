@@ -29,6 +29,22 @@ def round_node(n):
     return round(n[0], 2), round(n[1], 2), round(n[2], 2)
 
 
+def offset_from_hose(se2: Tuple, dist: float):
+    """ Offsets the destination pose from the hose so that the robot isn't standing directly over it """
+    xa = np.cos(se2[2])
+    ya = np.sin(se2[2])
+    if abs(xa) < 0.0001:
+        dx = 0
+        dy = ya * dist
+    elif abs(ya) < 0.0001:
+        dx = xa * dist
+        dy = 0
+    else:
+        dx = xa * dist
+        dy = ya * dist
+    return se2[0] - dx, se2[1] - dy, se2[2]
+
+
 class ConqAStar(AStar):
 
     def __init__(self):
@@ -36,8 +52,8 @@ class ConqAStar(AStar):
         # This set of obstacles is still a np array of R3 points
         # We only care about x
         self.occupancy_grid = OccupancyGrid()
-        self.xy_tol = 0.1
-        self.yaw_tol = np.deg2rad(10)
+        self.xy_tol = 0.20
+        self.yaw_tol = np.deg2rad(15)
         # A weight of 1 here would mean that 1 radian of yaw error is equivalent to 1 meter of position error.
         # This is not realistic, so instead we weight yaw error such that a full rotation (2 pi) is equal to 1m.
         self.yaw_weight = 1 / (2 * np.pi)
@@ -49,9 +65,9 @@ class ConqAStar(AStar):
 
     def neighbors(self, n):
         x, y, yaw = n
-        d_x = 0.2
-        d_y = 0.2
-        d_yaw = np.pi / 8
+        d_x = self.xy_tol * 0.8
+        d_y = self.xy_tol * 0.8
+        d_yaw = self.yaw_tol * 0.8
         for dx in [-d_x, 0, d_x]:
             for dy in [-d_y, 0, d_y]:
                 for dyaw in [-d_yaw, 0, d_yaw]:
@@ -131,60 +147,3 @@ class ConqAStar(AStar):
         direction = [np.cos(se2[2]) * self.occupancy_grid.res,
                      np.sin(se2[2]) * self.occupancy_grid.res, 0]
         rr.log_arrow(n, origin, direction, width_scale=0.02, color=color)
-
-    def offset_from_hose(self, se2: Tuple, dist: float):
-        """ Offsets the destination pose from the hose so that the robot isn't standing directly over it """
-        xa = np.cos(se2[2])
-        ya = np.sin(se2[2])
-        if abs(xa) < 0.0001:
-            dx = 0
-            dy = ya * dist
-        elif abs(ya) < 0.0001:
-            dx = xa * dist
-            dy = 0
-        else:
-            dx = xa * dist
-            dy = ya * dist
-        return se2[0] - dx, se2[1] - dy, se2[2]
-
-
-def astar(predictor, rgb_np, rgb_res, gpe_in_cam):
-    a = ConqAStar()
-
-    start = (0, 0, 0)
-
-    predictions = predictor.predict(rgb_np)
-    hose_pixels = single_frame_planar_cdcpd(rgb_np, predictions)
-    hose_points_in_gpe = project_points_in_gpe(hose_pixels, rgb_res, gpe_in_cam)
-    battery_px_points = detect_object_points(predictions, "battery")
-    battery_in_gpe = project_points_in_gpe(battery_px_points, rgb_res, gpe_in_cam)
-
-    obstacle_points_in_gpe = np.concatenate((hose_points_in_gpe, battery_in_gpe), axis=0)
-
-    # rr.log_line_strip("rope", projected_points_in_cam, stroke_width=0.02)
-    # rr.log_points("battery", projected_battery_in_cam)
-    # projected_points_in_cam = np.append(projected_points_in_cam, projected_battery_in_cam, axis=0)
-
-    obstacle_point_radius = 0.15
-    for ob in obstacle_points_in_gpe:
-        a.add_obstacle(ob[0], ob[1], obstacle_point_radius)
-
-    # test_x = np.float64(-0.05)
-    # test_y = np.float64(-0.45)
-    # a.add_obstacle(test_x, test_y, a.occupancy_grid.res)
-    # print(a.occupancy_grid.is_point_occupied(test_x, test_y))
-
-    # Add fake obstacles to test A*
-    # (x,y, radius)
-    # projected_t = np.append(projected_t, [[0.9, -0.5, 0.2],[0.9, -0.75, 0.2],[0.9, 0, 0.2],[0.9,-0.25,0.2]], axis=0)
-    # projected_t = np.append(projected_t, [[1.5, 1, 0.2],[1.5, 0.75, 0.2],[1.5, 0.5, 0.2],[1.5, 0.25, 0.2],[1.5,0, 0.2],[1.5,0.75,0.2]], axis=0)
-    # projected_t = projected_t.T
-    # projected_t = list(zip(projected_t[0], projected_t[1], projected_t[2]))
-
-    # goal is the point on the hose closest to the vacuum head, perhaps create a modified ver of get_hose_and_head_point
-    goal = ([best_se2.position.x, best_se2.position.y, best_se2.angle])
-    goal = a.offset_from_hose(goal, 0.3)
-    path = list(a.astar(projected_points_in_body, start=start, goal=goal))
-    print(path)
-    a.viz(start, goal, path)
-    return path

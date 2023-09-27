@@ -1,7 +1,9 @@
 import numpy as np
 from bosdyn.client import math_helpers
-from bosdyn.client.frame_helpers import get_a_tform_b, ODOM_FRAME_NAME, GROUND_PLANE_FRAME_NAME
+from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, GROUND_PLANE_FRAME_NAME
 from bosdyn.client.image import pixel_to_camera_space
+
+from conq.clients import Clients
 
 
 def project_points_in_gpe(px: np.ndarray, rgb_res, cam2gpe: math_helpers.SE3Pose):
@@ -51,10 +53,10 @@ def project_points_in_cam(px, rgb_res, cam2gpe):
     return valid_points_in_cam
 
 
-def get_gpe_in_cam(rgb_res, robot_state_client):
+def get_gpe_in_cam(rgb_res, clients: Clients):
     transforms_hand = rgb_res.shot.transforms_snapshot
-    transforms_body = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
-    odon_in_cam = get_a_tform_b(transforms_hand, rgb_res.shot.frame_name_image_sensor, ODOM_FRAME_NAME)
-    gpe_in_odom = get_a_tform_b(transforms_body, ODOM_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
+    transforms_body = clients.state.get_robot_state().kinematic_state.transforms_snapshot
+    odon_in_cam = get_a_tform_b(transforms_hand, rgb_res.shot.frame_name_image_sensor, VISION_FRAME_NAME)
+    gpe_in_odom = get_a_tform_b(transforms_body, VISION_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
     gpe_in_cam = odon_in_cam * gpe_in_odom
     return gpe_in_cam
