@@ -152,7 +152,7 @@ class AStar(ABC, Generic[T]):
             y = np.append(y, current.data[1])
             yaws = np.append(yaws, current.data[2])
 
-            if i % 100 == 0:
+            if i % 1000 == 0:
                 ax.quiver(x, y, np.cos(yaws), np.sin(yaws), color='b')
                 fig.canvas.draw_idle()
                 fig.canvas.flush_events()

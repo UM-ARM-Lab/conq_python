@@ -7,7 +7,6 @@ from matplotlib.patches import Circle
 
 from arm_segmentation.predictor import get_combined_mask
 from conq.exceptions import DetectionError, PlanningException
-from regrasping_demo import testing
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.detect_regrasp_point import get_masks, detect_regrasp_point_from_hose, get_center_of_mass
 
@@ -100,9 +99,8 @@ def get_obstacle_coms(predictions):
     obstacles_masks = get_masks(predictions, "battery")
     obstacle_coms = []
     for obstacle_mask in obstacles_masks:
-        com = get_center_of_mass(obstacle_mask)
-        com = com[::-1]  # switch from [row, col] to [x, y]
-        obstacle_coms.append(com)
+        com_xy = get_center_of_mass(obstacle_mask)
+        obstacle_coms.append(com_xy)
     obstacle_coms = np.array(obstacle_coms)
     return obstacle_coms
 
@@ -189,46 +187,3 @@ def plan(rgb_np, predictions, hose_points, regrasp_px, robot_px, robot_reach_px=
                   [start_px[1], random_place_px[1], end_px[1]])
     fig.show()
     return False, random_place_px
-
-
-def main():
-    robot_px = np.array([320, 650])
-
-    # from PIL import Image
-    # predictor = Predictor()
-    # from pathlib import Path
-    # subdir = Path('homotopy_test_data/ex_for_vid')
-    # img_path_dict = get_filenames(subdir)
-    # rgb_pil = Image.open(img_path_dict["rgb"])
-    # rgb_np = np.asarray(rgb_pil)
-    # predictions = predictor.predict(rgb_np)
-    # ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
-    # min_cost_idx, regrasp_px = detect_regrasp_point_from_hose(predictions, ordered_hose_points, 50)
-    # plan(rgb_np, predictions, predictor.colors, ordered_hose_points, regrasp_px, robot_px)
-
-    rng = np.random.RandomState(0)
-    n_success = 0
-    n_total = 0
-    for predictor, subdir, rgb_np, predictions in testing.get_test_examples():
-        try:
-            n_total += 1
-            t0 = time.time()
-            ordered_hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
-            min_cost_idx, regrasp_px = detect_regrasp_point_from_hose(predictions, ordered_hose_points, 50)
-            success, _ = plan(rgb_np, predictions, ordered_hose_points, regrasp_px,
-                              robot_px + rng.uniform(-25, 25, 2).astype(int))
-            print("Planning took %.3f seconds" % (time.time() - t0))
-            if success:
-                n_success += 1
-        except DetectionError as e:
-            print(f"detection error {subdir}, {e}")
-            continue
-        except PlanningException as e:
-            print(f"planning error {subdir}, {e}")
-            continue
-
-    print(f"success rate: {n_success / n_total:%}")
-
-
-if __name__ == '__main__':
-    main()

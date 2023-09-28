@@ -19,7 +19,7 @@ ROTATION_ANGLE = {
 }
 
 
-def image_to_opencv(image, auto_rotate=True):
+def image_to_opencv(image, auto_rotate=False):
     """Convert an image proto message to an openCV image."""
     num_channels = 1  # Assume a default of 1 byte encodings.
     if image.shot.image.pixel_format == image_pb2.Image.PIXEL_FORMAT_DEPTH_U16:

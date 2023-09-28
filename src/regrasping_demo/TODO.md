@@ -1,17 +1,14 @@
 TODO
 
-[] do the transform math so that it walks to put the _hand_ at the goal, not the body.
-[] figure out whether rotating the images when trying to grasp in non-hand cameras is ok or not?
-[] make it look at the hose correctly after walking up to it
-[] would be nice to improve the object searching functionality
-    [x] try moving in a spiral pattern
-    [x] we could also try looking along the length of the hose
-    [] Try a cardioid where we explicitly rotate the base
 [] store the latest hose points in odom frame so we don't have to search from scratch every time
 [] make CDCPD initialization better, possibly using the mask?
+[] figure out if it's possible to walk more slowly when doing WalkToPointInImage
 
 DONE
 
+[x] do the transform math so that it walks to put the _hand_ at the goal, not the body.
+[x] figure out whether rotating the images when trying to grasp in non-hand cameras is ok or not?
+    - Using autorotate seems to break WalkToObjectInImage
 [x] use ALL cameras to look for objects
 [x] script dies if vacuum head is not detected
 [x] need to re label instances for segmentation

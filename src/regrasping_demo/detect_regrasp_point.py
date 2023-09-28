@@ -2,10 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from arm_segmentation.predictor import get_combined_mask
-from arm_segmentation.viz import viz_predictions
 from conq.exceptions import DetectionError
-from regrasping_demo import testing
-from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 
 
 def get_masks(predictions, desired_class_name):
@@ -35,11 +32,18 @@ def get_center_of_mass(x):
     Returns the center of mass of the given map of probabilities.
     This works by weighting each pixel coordinates by its probability,
     then summing all of these weighted coordinates and dividing by the sum of the probabilities.
+
+    Args:
+        x: A map of probabilities.
+
+    Returns:
+        The center of mass of the given map of probabilities, like [row, col]
     """
     total_p_mass = x.sum()
     coordinates = np.indices(x.shape)
     # sum over the x and y coordinates
     com = np.sum(np.sum(coordinates * x, 1), 1) / total_p_mass
+    row, col = com
 
     # Check the probability of the center of mass, if it's low that indicates a problem!
     if x[int(com[0]), int(com[1])] < 0.5:
@@ -47,7 +51,9 @@ def get_center_of_mass(x):
         plt.show()
         raise DetectionError("The COM has low probability!")
 
-    return com
+    x = col
+    y = row
+    return x, y
 
 
 def detect_regrasp_point_from_hose(predictions, ordered_hose_points, ideal_dist_to_obs):

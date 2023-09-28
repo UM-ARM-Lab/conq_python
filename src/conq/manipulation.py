@@ -3,7 +3,6 @@ from typing import List
 
 import numpy as np
 import rerun as rr
-
 from bosdyn.api import manipulation_api_pb2
 from bosdyn.client.frame_helpers import get_a_tform_b, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME
 from bosdyn.client.robot_command import block_until_arm_arrives, RobotCommandBuilder
@@ -78,12 +77,17 @@ def force_measure(clients: Clients, force_buffer: List):
     return False
 
 
-def do_grasp(clients: Clients, image_res, pick_vec):
+def grasp_point_in_image(clients: Clients, image_res, pick_vec):
     pick_cmd = manipulation_api_pb2.PickObjectInImage(
-        pixel_xy=pick_vec, transforms_snapshot_for_camera=image_res.shot.transforms_snapshot,
+        pixel_xy=pick_vec,
+        transforms_snapshot_for_camera=image_res.shot.transforms_snapshot,
         frame_name_image_sensor=image_res.shot.frame_name_image_sensor,
         camera_model=image_res.source.pinhole)
 
+    return do_grasp_cmd(clients, pick_cmd)
+
+
+def do_grasp_cmd(clients: Clients, pick_cmd: manipulation_api_pb2.PickObjectInImage, timeout=10):
     grasp_request = manipulation_api_pb2.ManipulationApiRequest(pick_object_in_image=pick_cmd)
     cmd_response = clients.manipulation.manipulation_api_command(manipulation_api_request=grasp_request)
 
@@ -103,20 +107,15 @@ def do_grasp(clients: Clients, image_res, pick_vec):
             break
         elif response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_FAILED:
             break
-        if time.time() - t0 >= 10 and response.current_state in [manipulation_api_pb2.MANIP_STATE_SEARCHING_FOR_GRASP,
-                                                                manipulation_api_pb2.MANIP_STATE_WALKING_TO_OBJECT,
-                                                                manipulation_api_pb2.MANIP_STATE_MOVING_TO_GRASP,
-                                                                manipulation_api_pb2.MANIP_STATE_GRASP_PLANNING_NO_SOLUTION]:
-            # give up after 5 seconds if we haven't found a grasp
+        elif response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_PLANNING_NO_SOLUTION:
+            break
+        elif time.time() - t0 >= timeout:
             break
 
         time.sleep(1)
 
-    # Now check if we're actually holding something
-    robot_state = clients.state.get_robot_state()
-    open_enough = robot_state.manipulator_state.gripper_open_percentage > 5
-    # is_gripper_holding_item is NOT reliable
-    if robot_state.manipulator_state.is_gripper_holding_item and open_enough:
+    is_grasping = get_is_grasping(clients)
+    if is_grasping:
         print('Grasp succeeded')
         return True
 
@@ -125,7 +124,16 @@ def do_grasp(clients: Clients, image_res, pick_vec):
     return False
 
 
-def raise_hand(clients: Clients, dz: float):
+def get_is_grasping(clients: Clients):
+    # Now check if we're actually holding something
+    robot_state = clients.state.get_robot_state()
+    open_enough = robot_state.manipulator_state.gripper_open_percentage > 5
+    # is_gripper_holding_item is NOT reliable
+    is_grasping = robot_state.manipulator_state.is_gripper_holding_item and open_enough
+    return is_grasping
+
+
+def hand_delta_z(clients: Clients, dz: float):
     transforms = clients.state.get_robot_state().kinematic_state.transforms_snapshot
     hand_in_body = get_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
     raise_cmd = RobotCommandBuilder.arm_pose_command(hand_in_body.x, hand_in_body.y, hand_in_body.z + dz,

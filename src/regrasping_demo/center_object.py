@@ -7,7 +7,6 @@ from matplotlib import pyplot as plt
 from arm_segmentation.predictor import get_combined_mask
 from arm_segmentation.viz import viz_predictions
 from conq.exceptions import DetectionError
-from regrasping_demo import testing
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.detect_regrasp_point import get_masks, min_dist_to_mask
 
@@ -66,22 +65,3 @@ def get_obsacles_near_hose(predictions: Dict, min_dist_thresh=250):
         if min_dist < min_dist_thresh:
             obstacles_near_hose.append(obstacle_mask)
     return obstacles_near_hose
-
-
-def main():
-    rng = np.random.RandomState(0)
-
-    for predictor, subdir, rgb_np, predictions in testing.get_test_examples():
-        delta_px = center_object_step(rgb_np, predictions, rng)
-        print(delta_px)
-
-        fig, ax = plt.subplots()
-        ax.imshow(rgb_np, zorder=0)
-        viz_predictions(rgb_np, predictions, predictor.colors, fig, ax, legend=False)
-        if delta_px is not None:
-            ax.arrow(rgb_np.shape[1] / 2, rgb_np.shape[0] / 2, delta_px[0], delta_px[1], width=5, color='r', zorder=2)
-        fig.show()
-
-
-if __name__ == '__main__':
-    main()

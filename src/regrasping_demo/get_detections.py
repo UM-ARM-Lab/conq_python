@@ -32,7 +32,8 @@ RBG_SOURCES = [
 
 
 @dataclass
-class GetRetryResult:
+class DetectionsResult:
+    predictions: Optional
     rgb_res: image_pb2.ImageResponse
     depth_res: Optional[image_pb2.ImageResponse]
     depth_np: Optional[np.ndarray]
@@ -88,14 +89,21 @@ def get_object_on_floor(predictor, image_client, object_name: str):
         fig, ax = plt.subplots()
         ax.imshow(rgb_np, zorder=0)
         viz_predictions(rgb_np, predictions, predictor.colors, fig, ax)
-        fig.show()
 
         if len(object_masks) == 0:
+            fig.show()
             raise DetectionError(f"No {object_name} detected")
+
+        if np.sum(object_masks) < 2_000:
+            fig.show()
+            raise DetectionError(f"{object_name} too small")
 
         object_px, object_py = get_center_of_mass(object_masks[0])
 
-        return GetRetryResult(rgb_res, None, None, None, None, math_helpers.Vec2(object_px, object_py))
+        ax.scatter(object_px, object_py, c='orange', marker='*', s=200, zorder=10)
+        fig.show()
+
+        return DetectionsResult(predictions, rgb_res, None, None, None, None, math_helpers.Vec2(object_px, object_py))
 
     return detect_in_all_rgb(predictor, image_client, _get_object_on_floor)
 
@@ -106,8 +114,7 @@ def get_hose_and_head_point(predictor, image_client):
             hose_points = single_frame_planar_cdcpd(rgb_np, predictions)
         except SolverError:
             raise DetectionError("CDCPD Solver failed")
-        head_px = detect_object_center(predictions, "vacuum_head")
-        head_xy = head_px[::-1]
+        head_xy = detect_object_center(predictions, "vacuum_head")
 
         # TODO do this in ground plane space instead of image space
         dists = np.linalg.norm(hose_points - head_xy, axis=-1)
@@ -136,7 +143,7 @@ def get_hose_and_head_point(predictor, image_client):
 
         best_vec2 = np_to_vec2(best_px)
 
-        return GetRetryResult(rgb_res, None, None, hose_points, best_idx, best_vec2)
+        return DetectionsResult(predictions, rgb_res, None, None, hose_points, best_idx, best_vec2)
 
     return detect_in_all_rgb(predictor, image_client, _get_hose_and_head_point)
 
@@ -155,7 +162,7 @@ def get_hose_and_regrasp_point(predictor, image_client, ideal_dist_to_obs=DEFAUL
         fig.show()
 
         best_vec2 = np_to_vec2(best_px)
-        return GetRetryResult(rgb_res, None, None, hose_points, best_idx, best_vec2)
+        return DetectionsResult(predictions, rgb_res, None, None, hose_points, best_idx, best_vec2)
 
     return detect_in_all_rgb(predictor, image_client, _get_hose_and_regrasp_point)
 
@@ -169,21 +176,9 @@ def get_body_goal_se2_from_hose_points(hose_points, best_idx, start: Tuple):
         best_idx: the index of the best point on the hose
         start: a tuple of (x, y, theta) representing the start pose of the robot
     """
+    p_n1, p_n2 = get_best_adjacent_hose_points(hose_points, best_idx)
     x = hose_points[best_idx][0]
     y = hose_points[best_idx][1]
-
-    # generate rotation from the rate of change
-    # if the selected point is not the first or last on the hose
-    if best_idx == 0:
-        p_n1 = hose_points[best_idx]
-        p_n2 = hose_points[best_idx + 1]
-    elif best_idx == len(hose_points) - 1:
-        p_n1 = hose_points[best_idx - 1]
-        p_n2 = hose_points[best_idx]
-    else:
-        # rotation is calculated using the two adjacent hose points
-        p_n1 = hose_points[best_idx - 1]
-        p_n2 = hose_points[best_idx + 1]
 
     # slope of line connecting neighbors
     m = (p_n2[1] - p_n1[1]) / (p_n2[0] - p_n1[0])
@@ -203,3 +198,20 @@ def get_body_goal_se2_from_hose_points(hose_points, best_idx, start: Tuple):
         angle = (angle + np.pi) % (2 * np.pi)
 
     return x, y, angle
+
+
+def get_best_adjacent_hose_points(hose_points: np.ndarray, best_idx: int):
+    """
+    Get two points on the hose that are adjacent to the best point,
+    accounting for the special case of first and last points.
+    """
+    if best_idx == 0:
+        p_n1 = hose_points[best_idx]
+        p_n2 = hose_points[best_idx + 1]
+    elif best_idx == len(hose_points) - 1:
+        p_n1 = hose_points[best_idx - 1]
+        p_n2 = hose_points[best_idx]
+    else:
+        p_n1 = hose_points[best_idx - 1]
+        p_n2 = hose_points[best_idx + 1]
+    return p_n1, p_n2
