@@ -182,6 +182,35 @@ def create_point_cloud_object(waypoints, snapshots, waypoint_id):
     actor.SetUserTransform(waypoint_tform_cloud)
     return actor
 
+def create_waypoint_center_object(waypoints, snapshots, waypoint_id):
+    """
+    Create a VTK object representin the center of a waypoint as a sphere
+    :param waypoints: dict of waypoint ID to waypoint.
+    :param snapshots: dict of waypoint snapshot ID to waypoint snapshot.
+    :param waypoint_id: the waypoint ID of the waypoint whose point cloud we want to render.
+    :return: a vtkActor containing the center of the waypoint as a sphere
+    """
+    wp = waypoints[waypoint_id]
+    snapshot = snapshots[wp.snapshot_id]
+    cloud = snapshot.point_cloud
+    odom_tform_cloud = get_a_tform_b(cloud.source.transforms_snapshot, ODOM_FRAME_NAME,
+                                        cloud.source.frame_name_sensor)
+    waypoint_tform_odom = SE3Pose.from_proto(wp.waypoint_tform_ko)
+    waypoint_tform_cloud = api_to_vtk_se3_pose(waypoint_tform_odom * odom_tform_cloud)
+
+    sphere = vtk.vtkSphereSource()
+    sphere.SetCenter(0.0,0.0,0.0)
+    sphere.SetRadius(0.3)
+
+    sphere_mapper = vtk.vtkPolyDataMapper()
+    sphere_mapper.SetInputConnection(sphere.GetOutputPort())
+    sphere_actor = vtk.vtkActor()
+    sphere_actor.SetMapper(sphere_mapper)
+    sphere_actor.GetProperty().SetColor(1.0, 1.0, 1.0)
+    sphere_actor.SetUserTransform(waypoint_tform_cloud)
+
+    return sphere_actor
+
 
 def create_waypoint_object(renderer, waypoints, snapshots, waypoint_id):
     """
@@ -199,9 +228,13 @@ def create_waypoint_object(renderer, waypoints, snapshots, waypoint_id):
     actor.SetZAxisLabelText('')
     actor.SetTotalLength(0.2, 0.2, 0.2)
     point_cloud_actor = create_point_cloud_object(waypoints, snapshots, waypoint_id)
+    sphere_center_actor = create_waypoint_center_object(waypoints, snapshots, waypoint_id)
+    
     assembly.AddPart(actor)
     assembly.AddPart(point_cloud_actor)
+    assembly.AddPart(sphere_center_actor)
     renderer.AddActor(assembly)
+
     return assembly
 
 
@@ -377,12 +410,12 @@ def create_anchored_graph_objects(current_graph, current_waypoint_snapshots, cur
 def create_graph_objects(current_graph, current_waypoint_snapshots, current_waypoints, renderer):
     """
     Creates all the VTK objects associated with the graph.
-    :param current_graph: the graph to use.
-    :param current_waypoint_snapshots: dict from snapshot id to snapshot.
-    :param current_waypoints: dict from waypoint id to waypoint.
+    :paraints: dict from waypoint id to waypoint.
     :param renderer: The VTK renderer
     :return: the average position in world space of all the waypoints.
-    """
+m current_graph: the graph to use.
+    :param current_waypoint_snapshots: dict from snapshot id to snapshot.
+    :param current_waypo    """
     waypoint_objects = {}
     # Create VTK objects associated with each waypoint.
     for waypoint in current_graph.waypoints:
