@@ -211,6 +211,16 @@ def create_waypoint_center_object(waypoints, snapshots, waypoint_id):
 
     return sphere_actor
 
+def click_callback(obj, event):
+    """
+    Callback function for when a waypoint is clicked.
+    :param obj: The VTK object that was clicked.
+    :param event: The event that was triggered.
+    :return: None.
+    """
+    # Get the waypoint ID from the clicked object.
+    waypoint_id = obj.GetMapper().GetInput().GetPointData().GetArray('waypoint_id').GetValue(0)
+    print(f'Clicked on waypoint {waypoint_id}')
 
 def create_waypoint_object(renderer, waypoints, snapshots, waypoint_id):
     """
@@ -229,12 +239,20 @@ def create_waypoint_object(renderer, waypoints, snapshots, waypoint_id):
     actor.SetTotalLength(0.2, 0.2, 0.2)
     point_cloud_actor = create_point_cloud_object(waypoints, snapshots, waypoint_id)
     sphere_center_actor = create_waypoint_center_object(waypoints, snapshots, waypoint_id)
-    
+
+    # Add a picker to detect when a waypoint is clicked.
+    # picker = vtk.vtkCellPicker()
+    picker = vtk.vtkPropPicker()
+    # picker.SetTolerance(0.005)
+    picker.AddPickList(sphere_center_actor)
+    picker.PickFromListOn()
+    renderer.AddObserver(vtk.vtkCommand.LeftButtonPressEvent, click_callback)
+
     assembly.AddPart(actor)
     assembly.AddPart(point_cloud_actor)
     assembly.AddPart(sphere_center_actor)
-    renderer.AddActor(assembly)
 
+    renderer.AddActor(assembly)
     return assembly
 
 
@@ -486,6 +504,26 @@ m current_graph: the graph to use.
     avg_pos /= len(current_waypoints)
     return avg_pos
 
+class SpotInteractorStyle(vtk.vtkInteractorStyleTerrain):
+    """
+    A custom interactor style that commands Spot to go to a waypoint when 'space' is clicked
+    
+    """
+
+    def __init__(self, parent=None):
+        super(SpotInteractorStyle, self).__init__()
+        # Add an observer to when the 'g' button is pressed
+        self.AddObserver("KeyPressEvent", self.OnKeyPress)
+
+    def OnKeyPress(self, obj, event):
+        key = self.GetInteractor().GetKeySym()
+        if key == 'space':
+            # Get the waypoint ID from the clicked object.
+            click_callback(obj, event)
+        else:
+            super().OnKeyPress()
+
+
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
@@ -525,8 +563,10 @@ def main(argv):
     renderWindowInteractor = vtk.vtkRenderWindowInteractor()
     renderWindowInteractor.SetRenderWindow(renderWindow)
     renderWindow.SetSize(1280, 720)
-    style = vtk.vtkInteractorStyleTerrain()
+    style = SpotInteractorStyle() #vtk.vtkInteractorStyleTerrain()
     renderWindowInteractor.SetInteractorStyle(style)
+    
+
     renderer.ResetCamera()
 
     # Start rendering.
