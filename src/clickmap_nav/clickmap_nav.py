@@ -184,7 +184,7 @@ def create_point_cloud_object(waypoints, snapshots, waypoint_id):
 
 def create_waypoint_center_object(waypoints, snapshots, waypoint_id):
     """
-    Create a VTK object representin the center of a waypoint as a sphere
+    Create a VTK object representing the center of a waypoint as a sphere
     :param waypoints: dict of waypoint ID to waypoint.
     :param snapshots: dict of waypoint snapshot ID to waypoint snapshot.
     :param waypoint_id: the waypoint ID of the waypoint whose point cloud we want to render.
@@ -197,10 +197,11 @@ def create_waypoint_center_object(waypoints, snapshots, waypoint_id):
                                         cloud.source.frame_name_sensor)
     waypoint_tform_odom = SE3Pose.from_proto(wp.waypoint_tform_ko)
     waypoint_tform_cloud = api_to_vtk_se3_pose(waypoint_tform_odom * odom_tform_cloud)
-
+    # print(f"waypoint_tform_cloud: {waypoint_tform_cloud}")
     sphere = vtk.vtkSphereSource()
-    sphere.SetCenter(0.0,0.0,0.0)
+    sphere.SetCenter(0.0,0.0,0.0) #set to origin, then transform later with SetUserTransform
     sphere.SetRadius(0.3)
+    sphere.Update()
 
     sphere_mapper = vtk.vtkPolyDataMapper()
     sphere_mapper.SetInputConnection(sphere.GetOutputPort())
@@ -219,8 +220,9 @@ def click_callback(obj, event):
     :return: None.
     """
     # Get the waypoint ID from the clicked object.
-    waypoint_id = obj.GetMapper().GetInput().GetPointData().GetArray('waypoint_id').GetValue(0)
-    print(f'Clicked on waypoint {waypoint_id}')
+    # waypoint_id = obj.GetMapper().GetInput().GetPointData().GetArray('waypoint_id').GetValue(0)
+    # print(f'Clicked on waypoint {waypoint_id}')
+    print("click_callback")
 
 def create_waypoint_object(renderer, waypoints, snapshots, waypoint_id):
     """
@@ -239,14 +241,6 @@ def create_waypoint_object(renderer, waypoints, snapshots, waypoint_id):
     actor.SetTotalLength(0.2, 0.2, 0.2)
     point_cloud_actor = create_point_cloud_object(waypoints, snapshots, waypoint_id)
     sphere_center_actor = create_waypoint_center_object(waypoints, snapshots, waypoint_id)
-
-    # Add a picker to detect when a waypoint is clicked.
-    # picker = vtk.vtkCellPicker()
-    picker = vtk.vtkPropPicker()
-    # picker.SetTolerance(0.005)
-    picker.AddPickList(sphere_center_actor)
-    picker.PickFromListOn()
-    renderer.AddObserver(vtk.vtkCommand.LeftButtonPressEvent, click_callback)
 
     assembly.AddPart(actor)
     assembly.AddPart(point_cloud_actor)
@@ -511,18 +505,95 @@ class SpotInteractorStyle(vtk.vtkInteractorStyleTerrain):
     """
 
     def __init__(self, parent=None):
-        super(SpotInteractorStyle, self).__init__()
+        # super(SpotInteractorStyle, self).__init__()
         # Add an observer to when the 'g' button is pressed
-        self.AddObserver("KeyPressEvent", self.OnKeyPress)
+        self.AddObserver("KeyPressEvent", self.OnKeyPressEvent)
 
-    def OnKeyPress(self, obj, event):
+        # self.LastPickedActor = None
+        # self.LastPickedProperty = vtk.vtkProperty()
+
+    def OnKeyPressEvent(self, obj, event):
         key = self.GetInteractor().GetKeySym()
         if key == 'space':
-            # Get the waypoint ID from the clicked object.
-            click_callback(obj, event)
-        else:
-            super().OnKeyPress()
+            # Get the position from the mouse
+            clickPos = self.GetInteractor().GetEventPosition()
 
+            print(f"Selected position: {clickPos}")
+            picker = vtk.vtkPropPicker()
+            renderer = self.GetDefaultRenderer()
+            picker.PickProp(clickPos[0], clickPos[1], renderer)
+
+            # get the new
+            self.NewPickedActor = picker.GetActor()
+
+            # If something was selected
+            if self.NewPickedActor:
+                print(f"Selected: {self.NewPickedActor}")
+                vtk_transform = self.NewPickedActor.GetUserTransform()
+
+                # If we picked something before, reset its property
+                # if self.LastPickedActor:
+                    # self.LastPickedActor.GetProperty().DeepCopy(self.LastPickedProperty)
+
+                # Save the property of the picked actor so that we can
+                # restore it next time
+                # self.LastPickedProperty.DeepCopy(self.NewPickedActor.GetProperty())
+                # Highlight the picked actor by changing its properties
+                self.NewPickedActor.GetProperty().SetColor(vtk.vtkNamedColors.GetColor3d('Red'))
+                self.NewPickedActor.GetProperty().SetDiffuse(1.0)
+                self.NewPickedActor.GetProperty().SetSpecular(0.0)
+                self.NewPickedActor.GetProperty().EdgeVisibilityOn()
+
+                # save the last picked actor
+                # self.LastPickedActor = self.NewPickedActor
+            else: 
+                print("Nothing selected")
+
+        self.OnKeyPress()
+        return
+        # super().OnKeyPress()  
+            # Get the waypoint ID from the clicked object.
+            # click_callback(obj, event)
+
+
+    # def __init__(self, parent=None):
+    #     self.AddObserver("LeftButtonPressEvent", self.leftButtonPressEvent)
+
+    #     self.LastPickedActor = None
+    #     self.LastPickedProperty = vtk.vtkProperty()
+
+    # def leftButtonPressEvent(self, obj, event):
+    #     clickPos = self.GetInteractor().GetEventPosition()
+
+    #     picker = vtk.vtkPropPicker()
+    #     picker.Pick(clickPos[0], clickPos[1], 0, self.GetDefaultRenderer())
+
+    #     # get the new
+    #     self.NewPickedActor = picker.GetActor()
+
+    #     print(f"Selected: {self.NewPickedActor}")
+
+    #     # If something was selected
+    #     if self.NewPickedActor:
+    #         # If we picked something before, reset its property
+    #         print(f"selected success")
+    #         if self.LastPickedActor:
+    #             self.LastPickedActor.GetProperty().DeepCopy(self.LastPickedProperty)
+            
+    #         # Save the property of the picked actor so that we can
+    #         # restore it next time
+    #         self.LastPickedProperty.DeepCopy(self.NewPickedActor.GetProperty())
+    #         # Highlight the picked actor by changing its properties
+    #         self.NewPickedActor.GetProperty().SetColor(vtk.vtkNamedColors.GetColor3d('Red'))
+    #         self.NewPickedActor.GetProperty().SetDiffuse(1.0)
+    #         self.NewPickedActor.GetProperty().SetSpecular(0.0)
+    #         self.NewPickedActor.GetProperty().EdgeVisibilityOn()
+
+    #         # save the last picked actor
+    #         self.LastPickedActor = self.NewPickedActor
+
+    #     self.OnLeftButtonDown()
+    #     return
 
 
 def main(argv):
@@ -560,10 +631,11 @@ def main(argv):
     renderWindow = vtk.vtkRenderWindow()
     renderWindow.SetWindowName(options.path)
     renderWindow.AddRenderer(renderer)
+    renderWindow.SetSize(1280, 720)
     renderWindowInteractor = vtk.vtkRenderWindowInteractor()
     renderWindowInteractor.SetRenderWindow(renderWindow)
-    renderWindow.SetSize(1280, 720)
     style = SpotInteractorStyle() #vtk.vtkInteractorStyleTerrain()
+    style.SetDefaultRenderer(renderer)
     renderWindowInteractor.SetInteractorStyle(style)
     
 
