@@ -239,11 +239,11 @@ def create_waypoint_object(renderer, waypoints, snapshots, waypoint_id):
     actor.SetYAxisLabelText('')
     actor.SetZAxisLabelText('')
     actor.SetTotalLength(0.2, 0.2, 0.2)
-    point_cloud_actor = create_point_cloud_object(waypoints, snapshots, waypoint_id)
+    # point_cloud_actor = create_point_cloud_object(waypoints, snapshots, waypoint_id)
     sphere_center_actor = create_waypoint_center_object(waypoints, snapshots, waypoint_id)
 
     assembly.AddPart(actor)
-    assembly.AddPart(point_cloud_actor)
+    # assembly.AddPart(point_cloud_actor)
     assembly.AddPart(sphere_center_actor)
 
     renderer.AddActor(assembly)
@@ -503,113 +503,75 @@ class SpotInteractorStyle(vtk.vtkInteractorStyleTerrain):
     A custom interactor style that commands Spot to go to a waypoint when 'space' is clicked
     
     """
+    def __init__(self, silhouette=None, silhouetteActor=None):
+        self.AddObserver("KeyPressEvent", self.onKeyPressEvent)
 
-    def __init__(self, parent=None):
-        # super(SpotInteractorStyle, self).__init__()
-        # Add an observer to when the 'g' button is pressed
-        self.AddObserver("KeyPressEvent", self.OnKeyPressEvent)
+        self.LastPickedActor = None
+        self.Silhouette = silhouette
+        self.SilhouetteActor = silhouetteActor
 
-        # self.LastPickedActor = None
-        # self.LastPickedProperty = vtk.vtkProperty()
-
-    def OnKeyPressEvent(self, obj, event):
+    def onKeyPressEvent(self, obj, event):
         key = self.GetInteractor().GetKeySym()
         if key == 'space':
-            # Get the position from the mouse
-            clickPos = self.GetInteractor().GetEventPosition()
+            click_x, click_y = self.GetInteractor().GetEventPosition()
 
-            print(f"Selected position: {clickPos}")
+            #  Pick from this location.
             picker = vtk.vtkPropPicker()
-            renderer = self.GetDefaultRenderer()
-            picker.PickProp(clickPos[0], clickPos[1], renderer)
+            picker.Pick(click_x, click_y, 0, self.GetDefaultRenderer())
+            actor = picker.GetActor()
+            
+            self.LastPickedActor = actor
 
-            # get the new
-            self.NewPickedActor = picker.GetActor()
+            # If we picked something before, remove the silhouette actor and
+            # generate a new one.
+            if self.LastPickedActor:
+                self.GetDefaultRenderer().RemoveActor(self.SilhouetteActor)
 
-            # If something was selected
-            if self.NewPickedActor:
-                print(f"Selected: {self.NewPickedActor}")
-                vtk_transform = self.NewPickedActor.GetUserTransform()
+                # Highlight the picked actor by generating a silhouette
+                self.Silhouette.SetInputData(self.LastPickedActor.GetMapper().GetInput())
+                self.GetDefaultRenderer().AddActor(self.SilhouetteActor)
 
-                # If we picked something before, reset its property
-                # if self.LastPickedActor:
-                    # self.LastPickedActor.GetProperty().DeepCopy(self.LastPickedProperty)
+            # render the image
+            self.GetDefaultRenderer().GetRenderWindow().Render()
 
-                # Save the property of the picked actor so that we can
-                # restore it next time
-                # self.LastPickedProperty.DeepCopy(self.NewPickedActor.GetProperty())
-                # Highlight the picked actor by changing its properties
-                self.NewPickedActor.GetProperty().SetColor(vtk.vtkNamedColors.GetColor3d('Red'))
-                self.NewPickedActor.GetProperty().SetDiffuse(1.0)
-                self.NewPickedActor.GetProperty().SetSpecular(0.0)
-                self.NewPickedActor.GetProperty().EdgeVisibilityOn()
-
-                # save the last picked actor
-                # self.LastPickedActor = self.NewPickedActor
-            else: 
-                print("Nothing selected")
-
+        #  Forward events
         self.OnKeyPress()
         return
-        # super().OnKeyPress()  
-            # Get the waypoint ID from the clicked object.
-            # click_callback(obj, event)
-
-
-    # def __init__(self, parent=None):
-    #     self.AddObserver("LeftButtonPressEvent", self.leftButtonPressEvent)
-
-    #     self.LastPickedActor = None
-    #     self.LastPickedProperty = vtk.vtkProperty()
-
-    # def leftButtonPressEvent(self, obj, event):
-    #     clickPos = self.GetInteractor().GetEventPosition()
-
-    #     picker = vtk.vtkPropPicker()
-    #     picker.Pick(clickPos[0], clickPos[1], 0, self.GetDefaultRenderer())
-
-    #     # get the new
-    #     self.NewPickedActor = picker.GetActor()
-
-    #     print(f"Selected: {self.NewPickedActor}")
-
-    #     # If something was selected
-    #     if self.NewPickedActor:
-    #         # If we picked something before, reset its property
-    #         print(f"selected success")
-    #         if self.LastPickedActor:
-    #             self.LastPickedActor.GetProperty().DeepCopy(self.LastPickedProperty)
             
-    #         # Save the property of the picked actor so that we can
-    #         # restore it next time
-    #         self.LastPickedProperty.DeepCopy(self.NewPickedActor.GetProperty())
-    #         # Highlight the picked actor by changing its properties
-    #         self.NewPickedActor.GetProperty().SetColor(vtk.vtkNamedColors.GetColor3d('Red'))
-    #         self.NewPickedActor.GetProperty().SetDiffuse(1.0)
-    #         self.NewPickedActor.GetProperty().SetSpecular(0.0)
-    #         self.NewPickedActor.GetProperty().EdgeVisibilityOn()
+    def SetSilhouette(self, silhouette):
+        self.Silhouette = silhouette
 
-    #         # save the last picked actor
-    #         self.LastPickedActor = self.NewPickedActor
+    def SetSilhouetteActor(self, silhouetteActor):
+        self.SilhouetteActor = silhouetteActor
 
-    #     self.OnLeftButtonDown()
-    #     return
 
 
 def main(argv):
+    # Parse arguments.
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('path', type=str, help='Map to draw.')
     parser.add_argument('-a', '--anchoring', action='store_true',
                         help='Draw the map according to the anchoring (in seed frame).')
     options = parser.parse_args(argv)
+    
     # Load the map from the given file.
     (current_graph, current_waypoints, current_waypoint_snapshots, current_edge_snapshots,
      current_anchors, current_anchored_world_objects) = load_map(options.path)
 
-    # Create the renderer.
+    # Create the renderer, render window, and interactor
     renderer = vtk.vtkRenderer()
     renderer.SetBackground(0.05, 0.1, 0.15)
 
+    renderWindow = vtk.vtkRenderWindow()
+    renderWindow.SetSize(1280, 720)
+    renderWindow.SetWindowName(options.path)
+    renderWindow.AddRenderer(renderer)
+
+    renderWindowInteractor = vtk.vtkRenderWindowInteractor()
+    renderWindowInteractor.SetRenderWindow(renderWindow)
+
+
+    # Display map objects extracted from file
     if options.anchoring:
         if len(current_graph.anchoring.anchors) == 0:
             print('No anchors to draw.')
@@ -622,24 +584,28 @@ def main(argv):
                                        renderer)
 
     camera_pos = avg_pos + np.array([-1, 0, 5])
-
     camera = renderer.GetActiveCamera()
     camera.SetViewUp(0, 0, 1)
     camera.SetPosition(camera_pos[0], camera_pos[1], camera_pos[2])
-
-    # Create the VTK renderer and interactor.
-    renderWindow = vtk.vtkRenderWindow()
-    renderWindow.SetWindowName(options.path)
-    renderWindow.AddRenderer(renderer)
-    renderWindow.SetSize(1280, 720)
-    renderWindowInteractor = vtk.vtkRenderWindowInteractor()
-    renderWindowInteractor.SetRenderWindow(renderWindow)
-    style = SpotInteractorStyle() #vtk.vtkInteractorStyleTerrain()
-    style.SetDefaultRenderer(renderer)
-    renderWindowInteractor.SetInteractorStyle(style)
-    
-
     renderer.ResetCamera()
+    renderWindow.Render()
+
+    # Create the silhouette pipeline, the input data will be set in the
+    # interactor
+    silhouette = vtk.vtkPolyDataSilhouette()
+    silhouette.SetCamera(renderer.GetActiveCamera())
+    silhouetteMapper = vtk.vtkPolyDataMapper()
+    silhouetteMapper.SetInputConnection(silhouette.GetOutputPort())
+    silhouetteActor = vtk.vtkActor()
+    silhouetteActor.SetMapper(silhouetteMapper)
+    colors = vtk.vtkNamedColors()
+    silhouetteActor.GetProperty().SetColor(colors.GetColor3d("Tomato"))
+ 
+    # Set custom interaction style
+    style = SpotInteractorStyle(silhouette, silhouetteActor) #vtk.vtkInteractorStyleTerrain()
+    style.SetDefaultRenderer(renderer)
+    renderWindowInteractor.Initialize()
+    renderWindowInteractor.SetInteractorStyle(style)
 
     # Start rendering.
     renderWindow.Render()
