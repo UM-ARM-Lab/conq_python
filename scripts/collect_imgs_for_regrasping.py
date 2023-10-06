@@ -9,6 +9,7 @@ import bosdyn.client.util
 from PIL import Image
 from bosdyn.client.image import ImageClient
 from tqdm import tqdm
+from regrasping_demo.get_detections import save_all_rgb
 
 from conq.cameras_utils import get_color_img
 
@@ -29,13 +30,10 @@ def main(argv):
     print("Saving images to", root)
 
     filenames = []
+    image_client = robot.ensure_client(ImageClient.default_service_name)
     while True:
-        image_client = robot.ensure_client(ImageClient.default_service_name)
-        rgb_np, rgb_res = get_color_img(image_client, 'hand_color_image')
-        now = int(time())
-        filename = root / f"{now}_rgb.png"
-        Image.fromarray(rgb_np).save(filename)
-        filenames.append(filename)
+        filenames_i = save_all_rgb(image_client)
+        filenames.extend(filenames_i)
 
         k = input("Press enter to capture next image, or q to quit.")
         if k == 'q':

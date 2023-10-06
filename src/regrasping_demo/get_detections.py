@@ -64,10 +64,13 @@ def detect_in_all_rgb(predictor, image_client, get_point_f):
 
 def save_all_rgb(image_client):
     now = int(time.time())
+    filenames = []
     for src in RBG_SOURCES:
         rgb_np, rgb_res = get_color_img(image_client, src)
         filename = Path(f"data/all_rgb/{now}_{src}.png")
         Image.fromarray(rgb_np).save(filename)
+        filenames.append(filename)
+    return filenames
 
 
 def detect_object_points(predictions, class_name):
