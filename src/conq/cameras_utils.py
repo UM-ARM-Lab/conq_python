@@ -119,3 +119,18 @@ def pos_in_cam_to_pos_in_hand(p_in_cam):
     and gives only an approximation of the rotation.
     """
     return np.array([-p_in_cam[1], -p_in_cam[0]])
+
+
+RGB_SOURCES = [
+    'hand_color_image',
+    'back_fisheye_image',
+    'frontleft_fisheye_image',
+    'frontright_fisheye_image',
+    'left_fisheye_image',
+    'right_fisheye_image',
+]
+DEPTH_SOURCES = [
+    'hand_depth',
+    'frontleft_depth_in_visual_frame',
+    'frontright_depth_in_visual_frame',
+]

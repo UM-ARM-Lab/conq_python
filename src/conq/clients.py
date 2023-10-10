@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from bosdyn.client.image import ImageClient
 from bosdyn.client.lease import LeaseClient
@@ -7,6 +8,8 @@ from bosdyn.client.ray_cast import RayCastClient
 from bosdyn.client.robot import Robot
 from bosdyn.client.robot_command import RobotCommandClient
 from bosdyn.client.robot_state import RobotStateClient
+
+from conq.data_recorder import ConqDataRecorder
 
 
 @dataclass
@@ -18,3 +21,4 @@ class Clients:
     raycast: RayCastClient
     command: RobotCommandClient
     robot: Robot
+    recorder: Optional[ConqDataRecorder] = None

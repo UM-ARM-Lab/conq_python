@@ -1,13 +1,9 @@
+#!/usr/bin/env python
+
 import argparse
-import datetime
-import json
-import pickle
 import time
 from functools import partial
-from importlib.metadata import version
-from multiprocessing import Queue, Event
 from pathlib import Path
-from threading import Thread
 from typing import Callable
 
 import bosdyn.client
@@ -15,12 +11,12 @@ import bosdyn.client.util
 import numpy as np
 import rerun as rr
 from bosdyn import geometry
-from bosdyn.api import basic_command_pb2, manipulation_api_pb2, image_pb2
+from bosdyn.api import basic_command_pb2, manipulation_api_pb2
 from bosdyn.api.spot import robot_command_pb2 as spot_command_pb2
 from bosdyn.client import math_helpers
 from bosdyn.client.frame_helpers import GRAV_ALIGNED_BODY_FRAME_NAME, GROUND_PLANE_FRAME_NAME, HAND_FRAME_NAME, \
     get_a_tform_b, get_se2_a_tform_b, VISION_FRAME_NAME
-from bosdyn.client.image import ImageClient, pixel_to_camera_space, build_image_request
+from bosdyn.client.image import ImageClient, pixel_to_camera_space
 from bosdyn.client.lease import LeaseKeepAlive, LeaseClient
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
 from bosdyn.client.ray_cast import RayCastClient
@@ -30,23 +26,23 @@ from bosdyn.client.robot_state import RobotStateClient
 from google.protobuf import wrappers_pb2
 
 from arm_segmentation.predictor import Predictor, get_combined_mask
-from conq.cameras_utils import rot_2d, get_color_img, camera_space_to_pixel, pos_in_cam_to_pos_in_hand, get_depth_img, \
-    image_to_opencv
+from conq.cameras_utils import rot_2d, get_color_img, camera_space_to_pixel, pos_in_cam_to_pos_in_hand, get_depth_img
 from conq.clients import Clients
 from conq.conq_astar import ConqAStar, yaw_diff, offset_from_hose
+from conq.data_recorder import ConqDataRecorder
 from conq.exceptions import DetectionError, GraspingException, PlanningException
 from conq.hand_motion import hand_pose_cmd
 from conq.manipulation import blocking_arm_command, hand_delta_z, grasp_point_in_image, get_is_grasping
 from conq.manipulation import open_gripper, force_measure, add_follow_with_body
 from conq.perception import project_points_in_gpe
+from conq.rerun_utils import viz_common_frames
 from conq.utils import setup_and_stand
 from regrasping_demo import homotopy_planner
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.center_object import center_object_step
 from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis, detect_regrasp_point_from_hose
 from regrasping_demo.get_detections import DetectionsResult, np_to_vec2, get_object_on_floor, detect_object_points, \
-    get_body_goal_se2_from_hose_points, get_hose_and_regrasp_point, get_hose_and_head_point, RGB_SOURCES, \
-    DEPTH_SOURCES
+    get_body_goal_se2_from_hose_points, get_hose_and_regrasp_point, get_hose_and_head_point
 
 HOME = math_helpers.SE2Pose(0, 0, 0)
 
@@ -496,21 +492,22 @@ def untangle_hose(clients: Clients, predictor: Predictor, initial_transforms):
 def go_to_goal(predictor, clients, initial_transforms):
     while True:
         # Grasp the hose to DRAG
+        clients.recorder.add_instruction("find the head of the hose")
         _get_hose_head = partial(get_hose_and_head_point, predictor, clients.image)
         look_at_scene(clients, z=0.4, pitch=np.deg2rad(85))
 
+        clients.recorder.add_instruction("grasp the neck of the hose, near the head")
         retry_grasp_hose(clients, _get_hose_head)
 
-        print("DEBUGGING!!!!")
-        return
-
         dz = 0.4
+        clients.recorder.add_instruction("lift the hose up")
         hand_delta_z(clients, dz)
 
         is_grasping = get_is_grasping(clients)
         if not is_grasping:
             continue
 
+        clients.recorder.add_instruction("drag the hose to the goal")
         goal_reached = drag_hand_to_goal(clients, predictor)
 
         is_grasping = get_is_grasping(clients)
@@ -521,121 +518,8 @@ def go_to_goal(predictor, clients, initial_transforms):
             hand_delta_z(clients, -dz * 0.9)
             return True
 
+        clients.recorder.add_instruction("untangle the hose")
         untangle_hose(clients, predictor, initial_transforms)
-
-
-def viz_common_frames(snapshot):
-    body_in_odom = get_a_tform_b(snapshot, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
-    gpe_in_odom = get_a_tform_b(snapshot, VISION_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
-    hand_in_odom = get_a_tform_b(snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
-    rr_tform('body', body_in_odom)
-    rr_tform('gpe', gpe_in_odom)
-    rr_tform('hand', hand_in_odom)
-
-
-def rr_tform(child_frame: str, tform: math_helpers.SE3Pose):
-    translation = np.array([tform.position.x, tform.position.y, tform.position.z])
-    rot_mat = tform.rotation.to_matrix()
-    rr.log_transform3d(f'frames/{child_frame}', rr.TranslationAndMat3(translation, rot_mat))
-
-
-class ConqDataRecorder:
-
-    def __init__(self, root: Path, robot_state_client: RobotStateClient, image_client: ImageClient):
-        self.root = root
-
-        self.root.mkdir(exist_ok=True, parents=True)
-        self.metadata = {
-            'bosdyn.api version': version("bosdyn.api"),
-            'date':               datetime.datetime.now().isoformat(),
-        }
-        self.metadata_path = self.root / 'metadata.json'
-        with self.metadata_path.open('w') as f:
-            json.dump(self.metadata, f, indent=2)
-
-        # Use a queue to receive paths from the worker threads
-        self.paths_queue = Queue()
-        # event to kill threads
-        self.done = Event()
-
-        # the dataset is stored as a pkl,
-        # containing a list of dicts, where each dict is a snapshot of either
-        # the robot state or the image response
-        self.dataset_path = self.root / 'dataset.pkl'
-
-        # create a saver worker that constantly saves the paths to disk
-        self.saver_thread = Thread(target=save, args=(self.paths_queue, self.dataset_path, self.done))
-
-        self.robot_state_thread = Thread(target=save_robot_state,
-                                         args=(self.paths_queue, robot_state_client, root, self.done))
-        self.img_threads = []
-        self.img_threads += [
-            Thread(target=save_imgs,
-                   args=(self.paths_queue, image_client, root, src, image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8,
-                         self.done))
-            for src in RGB_SOURCES
-        ]
-        self.img_threads += [
-            Thread(target=save_imgs,
-                   args=(self.paths_queue, image_client, root, src, image_pb2.Image.PixelFormat.PIXEL_FORMAT_DEPTH_U16,
-                         self.done))
-            for src in DEPTH_SOURCES
-        ]
-
-    def start(self):
-        self.saver_thread.start()
-        self.robot_state_thread.start()
-        for img_thread in self.img_threads:
-            img_thread.start()
-
-    def stop(self):
-        self.done.set()
-        self.robot_state_thread.join()
-        for img_thread in self.img_threads:
-            img_thread.join()
-
-
-def save(paths_queue: Queue, dataset_path: Path, done: Event):
-    dataset = []
-    while not done.is_set():
-        # read the queue until it is empty
-        while not paths_queue.empty():
-            new_path = paths_queue.get()
-            dataset.append(new_path)
-
-        # save and wait a bit so other threads can run
-        with dataset_path.open('wb') as f:
-            pickle.dump(dataset, f)
-        time.sleep(5)
-        print("Saved...")
-
-        rr.log_text_entry("saver", "Saved")
-
-
-def save_imgs(queue: Queue, image_client, root, src, fmt, done: Event):
-    while not done.is_set():
-        req = build_image_request(src, pixel_format=fmt)
-        res = image_client.get_image([req])[0]
-        now = time.time()
-        img_path = root / f'{src}_{now:.4f}.pb'
-        with img_path.open('wb') as f:
-            f.write(res.SerializeToString())
-        queue.put_nowait(img_path)
-
-        img_np = image_to_opencv(res)
-        rr.log_image(f'{src}', img_np)
-
-
-def save_robot_state(queue, robot_state_client, root, done: Event):
-    while not done.is_set():
-        now = time.time()
-        state = robot_state_client.get_robot_state()
-        state_path = root / f'robot_state_{now:.4f}.pb'
-        with state_path.open('wb') as f:
-            f.write(state.SerializeToString())
-        queue.put_nowait(state_path)
-
-        viz_common_frames(state.kinematic_state.transforms_snapshot)
 
 
 def main():
@@ -645,13 +529,13 @@ def main():
     bosdyn.client.util.add_base_arguments(parser)
     rr.init("continuous_regrasping_hose_demo")
     rr.connect()
-    rr.log_transform3d(f'frames/odom', rr.Translation3D([0, 0, 0]))
 
     predictor = Predictor('models/hose_regrasping.pth')
 
     # Creates client, robot, and authenticates, and time syncs
     sdk = bosdyn.client.create_standard_sdk('continuous_regrasping_hose_demo')
     robot = sdk.create_robot('192.168.80.3')
+    # robot = sdk.create_robot('10.0.0.3')
     bosdyn.client.util.authenticate(robot)
     robot.time_sync.wait_for_sync()
 
@@ -675,24 +559,27 @@ def main():
         command_client = setup_and_stand(robot)
 
         clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client,
-                          image=image_client, raycast=rc_client, command=command_client, robot=robot)
+                          image=image_client, raycast=rc_client, command=command_client, robot=robot,
+                          recorder=recorder)
 
         # open the hand, so we can see more with the depth sensor
         open_gripper(clients)
 
-        while True:
+        for task_itrs in range(5):
             initial_transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
 
             try:
                 go_to_goal(predictor, clients, initial_transforms)
-                break
-            except (GraspingException, DetectionError, PlanningException):
+            except (GraspingException, DetectionError, PlanningException) as e:
+                print(e)
                 print("Failed to grasp, restarting.")
 
+            clients.recorder.add_instruction("release and stow the arm")
             open_gripper(clients)
             blocking_arm_command(clients, RobotCommandBuilder.arm_stow_command())
 
             # Go home, you're done!
+            clients.recorder.add_instruction("walk back to the start")
             walk_to_pose_in_initial_frame(clients, initial_transforms, math_helpers.SE2Pose(0, 0, 0))
 
             time.sleep(5)

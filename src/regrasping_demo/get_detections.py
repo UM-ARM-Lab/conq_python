@@ -1,4 +1,3 @@
-import pickle
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,28 +13,13 @@ from diffcp import SolverError
 
 from arm_segmentation.predictor import get_combined_mask
 from arm_segmentation.viz import viz_predictions
-from conq.cameras_utils import get_color_img
+from conq.cameras_utils import get_color_img, RGB_SOURCES, DEPTH_SOURCES
 from conq.exceptions import DetectionError
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.detect_regrasp_point import get_masks, detect_object_center, detect_regrasp_point_from_hose, \
     get_center_of_mass
 
 DEFAULT_IDEAL_DIST_TO_OBS = 70
-
-RGB_SOURCES = [
-    'hand_color_image',
-    'back_fisheye_image',
-    'frontleft_fisheye_image',
-    'frontright_fisheye_image',
-    'left_fisheye_image',
-    'right_fisheye_image',
-]
-
-DEPTH_SOURCES = [
-    'hand_depth',
-    'frontleft_depth_in_visual_frame',
-    'frontright_depth_in_visual_frame',
-]
 
 
 @dataclass
@@ -85,7 +69,7 @@ def get_all(image_client):
 
 
 def save_all_rgb(image_client):
-    print("DEBUGGING!!!")
+    print("Saving to all_rgb temporarily disabled")
     return
     now = int(time.time())
     filenames = []
