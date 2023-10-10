@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import rerun as rr
 
-from conq.cameras_utils import image_to_opencv
+from conq.cameras_utils import image_to_opencv, RGB_SOURCES
 from conq.rerun_utils import viz_common_frames
 
 
@@ -39,10 +39,11 @@ def main():
         snapshot = step['robot_state'].kinematic_state.transforms_snapshot
         viz_common_frames(snapshot)
 
-        res = step['images']['hand_color_image']
-        if res is not None:
-            img_np = image_to_opencv(res)
-            rr.log_image(f'hand_color_image', img_np)
+        for src in ['hand_color_image', 'frontleft_fisheye_image', 'frontright_fisheye_image']:
+            res = step['images'][src]
+            if res is not None:
+                img_np = image_to_opencv(res, auto_rotate=True)
+                rr.log_image(f'{src}', img_np)
 
         # for src, res in step['images'].items():
         #     if res is not None:

@@ -145,12 +145,13 @@ def drag_hand_to_goal(clients: Clients, predictor: Predictor):
         print(f'Current state: {state_name}')
 
         state = clients.state.get_robot_state()
-        if len(state.system_fault_state.faults) > 0:
-            print("System fault detected. Failed to reach goal.")
-            return False
-        if len(state.behavior_fault_state.faults) > 0:
-            print("Behavior fault detected. Failed to reach goal.")
-            return False
+        # NOTE: disabled because this was causing false positives
+        # if len(state.system_fault_state.faults) > 0:
+        #     print("System fault detected. Failed to reach goal.")
+        #     return False
+        # if len(state.behavior_fault_state.faults) > 0:
+        #     print("Behavior fault detected. Failed to reach goal.")
+        #     return False
 
         if force_measure(clients, force_buffer):
             time.sleep(1)  # makes the video look better in my opinion
@@ -569,7 +570,9 @@ def main():
             initial_transforms = robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
 
             try:
-                go_to_goal(predictor, clients, initial_transforms)
+                success = go_to_goal(predictor, clients, initial_transforms)
+                if success:
+                    break
             except (GraspingException, DetectionError, PlanningException) as e:
                 print(e)
                 print("Failed to grasp, restarting.")
