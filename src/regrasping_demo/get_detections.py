@@ -85,6 +85,8 @@ def get_all(image_client):
 
 
 def save_all_rgb(image_client):
+    print("DEBUGGING!!!")
+    return
     now = int(time.time())
     filenames = []
     for src in RGB_SOURCES:

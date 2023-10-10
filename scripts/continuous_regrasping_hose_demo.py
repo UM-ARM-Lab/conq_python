@@ -1,10 +1,13 @@
 import argparse
-from threading import Thread
 import datetime
 import json
+import pickle
 import time
 from functools import partial
+from importlib.metadata import version
+from multiprocessing import Queue, Event
 from pathlib import Path
+from threading import Thread
 from typing import Callable
 
 import bosdyn.client
@@ -25,10 +28,10 @@ from bosdyn.client.robot_command import RobotCommandBuilder
 from bosdyn.client.robot_command import block_for_trajectory_cmd
 from bosdyn.client.robot_state import RobotStateClient
 from google.protobuf import wrappers_pb2
-from importlib.metadata import version
 
 from arm_segmentation.predictor import Predictor, get_combined_mask
-from conq.cameras_utils import rot_2d, get_color_img, camera_space_to_pixel, pos_in_cam_to_pos_in_hand, get_depth_img
+from conq.cameras_utils import rot_2d, get_color_img, camera_space_to_pixel, pos_in_cam_to_pos_in_hand, get_depth_img, \
+    image_to_opencv
 from conq.clients import Clients
 from conq.conq_astar import ConqAStar, yaw_diff, offset_from_hose
 from conq.exceptions import DetectionError, GraspingException, PlanningException
@@ -42,7 +45,8 @@ from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.center_object import center_object_step
 from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis, detect_regrasp_point_from_hose
 from regrasping_demo.get_detections import DetectionsResult, np_to_vec2, get_object_on_floor, detect_object_points, \
-    get_body_goal_se2_from_hose_points, get_hose_and_regrasp_point, get_hose_and_head_point, get_all
+    get_body_goal_se2_from_hose_points, get_hose_and_regrasp_point, get_hose_and_head_point, RGB_SOURCES, \
+    DEPTH_SOURCES
 
 HOME = math_helpers.SE2Pose(0, 0, 0)
 
@@ -495,10 +499,10 @@ def go_to_goal(predictor, clients, initial_transforms):
         _get_hose_head = partial(get_hose_and_head_point, predictor, clients.image)
         look_at_scene(clients, z=0.4, pitch=np.deg2rad(85))
 
+        retry_grasp_hose(clients, _get_hose_head)
+
         print("DEBUGGING!!!!")
         return
-
-        retry_grasp_hose(clients, _get_hose_head)
 
         dz = 0.4
         hand_delta_z(clients, dz)
@@ -549,50 +553,89 @@ class ConqDataRecorder:
         with self.metadata_path.open('w') as f:
             json.dump(self.metadata, f, indent=2)
 
+        # Use a queue to receive paths from the worker threads
+        self.paths_queue = Queue()
+        # event to kill threads
+        self.done = Event()
+
         # the dataset is stored as a pkl,
         # containing a list of dicts, where each dict is a snapshot of either
         # the robot state or the image response
         self.dataset_path = self.root / 'dataset.pkl'
 
-        self.robot_state_thread = Thread(target=save_robot_state, args=(robot_state_client, root), daemon=True)
-        self.img_thread = Thread(target=save_images, args=(image_client, root), daemon=True)
+        # create a saver worker that constantly saves the paths to disk
+        self.saver_thread = Thread(target=save, args=(self.paths_queue, self.dataset_path, self.done))
+
+        self.robot_state_thread = Thread(target=save_robot_state,
+                                         args=(self.paths_queue, robot_state_client, root, self.done))
+        self.img_threads = []
+        self.img_threads += [
+            Thread(target=save_imgs,
+                   args=(self.paths_queue, image_client, root, src, image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8,
+                         self.done))
+            for src in RGB_SOURCES
+        ]
+        self.img_threads += [
+            Thread(target=save_imgs,
+                   args=(self.paths_queue, image_client, root, src, image_pb2.Image.PixelFormat.PIXEL_FORMAT_DEPTH_U16,
+                         self.done))
+            for src in DEPTH_SOURCES
+        ]
 
     def start(self):
+        self.saver_thread.start()
         self.robot_state_thread.start()
-        self.img_thread.start()
+        for img_thread in self.img_threads:
+            img_thread.start()
 
-    def join(self):
+    def stop(self):
+        self.done.set()
         self.robot_state_thread.join()
-        self.img_thread.join()
-
-    def save(self):
-        pass
+        for img_thread in self.img_threads:
+            img_thread.join()
 
 
-def save_images(image_client, root):
-    while True:
-        now = int(time.time())
-        print(f'saving images {time.time():.3f}')
-        img_responses = get_all(image_client)
-        for src, response in img_responses:
-            img_path = root / f'img_responses_{src}_{now}.pb'
-            with img_path.open('wb') as f:
-                f.write(response.SerializeToString())
-            stamp = response.shot.acquisition_time
-            seconds_f = stamp.seconds + stamp.nanos / 1e9
+def save(paths_queue: Queue, dataset_path: Path, done: Event):
+    dataset = []
+    while not done.is_set():
+        # read the queue until it is empty
+        while not paths_queue.empty():
+            new_path = paths_queue.get()
+            dataset.append(new_path)
+
+        # save and wait a bit so other threads can run
+        with dataset_path.open('wb') as f:
+            pickle.dump(dataset, f)
+        time.sleep(5)
+        print("Saved...")
+
+        rr.log_text_entry("saver", "Saved")
 
 
-def save_robot_state(robot_state_client, root):
-    while True:
-        now = int(time.time())
+def save_imgs(queue: Queue, image_client, root, src, fmt, done: Event):
+    while not done.is_set():
+        req = build_image_request(src, pixel_format=fmt)
+        res = image_client.get_image([req])[0]
+        now = time.time()
+        img_path = root / f'{src}_{now:.4f}.pb'
+        with img_path.open('wb') as f:
+            f.write(res.SerializeToString())
+        queue.put_nowait(img_path)
+
+        img_np = image_to_opencv(res)
+        rr.log_image(f'{src}', img_np)
+
+
+def save_robot_state(queue, robot_state_client, root, done: Event):
+    while not done.is_set():
+        now = time.time()
         state = robot_state_client.get_robot_state()
-        state_path = root / f'robot_state_{now}.pb'
+        state_path = root / f'robot_state_{now:.4f}.pb'
         with state_path.open('wb') as f:
             f.write(state.SerializeToString())
-        # hand_in_world = get_a_tform_b(state.kinematic_state.transforms_snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
-        stamp = state.comms_states[0].timestamp
-        seconds_f = stamp.seconds + stamp.nanos / 1e9
-        # print(f'{state_path} {seconds_f:.3f}')
+        queue.put_nowait(state_path)
+
+        viz_common_frames(state.kinematic_state.transforms_snapshot)
 
 
 def main():
@@ -622,19 +665,6 @@ def main():
     rc_client = robot.ensure_client(RayCastClient.default_service_name)
 
     lease_client.take()
-
-    for _ in range(20):
-        from time import perf_counter
-        t0 = perf_counter()
-        rgb_req = build_image_request('hand_color_image', pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
-        rgb_res = image_client.get_image([rgb_req])[0]
-        print(f"acquire: {perf_counter() - t0:.3f}s")
-        t0 = perf_counter()
-        with open('test.pb', 'wb') as f:
-            f.write(rgb_res.SerializeToString())
-        print(f"serialize: {perf_counter() - t0:.3f}s")
-
-    return
 
     now = int(time.time())
     root = Path(f"data/regrasping_dataset_{now}")
@@ -667,7 +697,7 @@ def main():
 
             time.sleep(5)
 
-    recorder.join()
+    recorder.stop()
 
 
 if __name__ == '__main__':
