@@ -1,6 +1,10 @@
 import argparse
+from threading import Thread
+import datetime
+import json
 import time
 from functools import partial
+from pathlib import Path
 from typing import Callable
 
 import bosdyn.client
@@ -8,19 +12,20 @@ import bosdyn.client.util
 import numpy as np
 import rerun as rr
 from bosdyn import geometry
-from bosdyn.api import basic_command_pb2, manipulation_api_pb2
+from bosdyn.api import basic_command_pb2, manipulation_api_pb2, image_pb2
 from bosdyn.api.spot import robot_command_pb2 as spot_command_pb2
 from bosdyn.client import math_helpers
 from bosdyn.client.frame_helpers import GRAV_ALIGNED_BODY_FRAME_NAME, GROUND_PLANE_FRAME_NAME, HAND_FRAME_NAME, \
     get_a_tform_b, get_se2_a_tform_b, VISION_FRAME_NAME
-from bosdyn.client.image import ImageClient, pixel_to_camera_space
+from bosdyn.client.image import ImageClient, pixel_to_camera_space, build_image_request
 from bosdyn.client.lease import LeaseKeepAlive, LeaseClient
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
 from bosdyn.client.ray_cast import RayCastClient
-from bosdyn.client.robot_command import RobotCommandBuilder, RobotCommandClient
+from bosdyn.client.robot_command import RobotCommandBuilder
 from bosdyn.client.robot_command import block_for_trajectory_cmd
 from bosdyn.client.robot_state import RobotStateClient
 from google.protobuf import wrappers_pb2
+from importlib.metadata import version
 
 from arm_segmentation.predictor import Predictor, get_combined_mask
 from conq.cameras_utils import rot_2d, get_color_img, camera_space_to_pixel, pos_in_cam_to_pos_in_hand, get_depth_img
@@ -31,13 +36,13 @@ from conq.hand_motion import hand_pose_cmd
 from conq.manipulation import blocking_arm_command, hand_delta_z, grasp_point_in_image, get_is_grasping
 from conq.manipulation import open_gripper, force_measure, add_follow_with_body
 from conq.perception import project_points_in_gpe
-from conq.utils import setup, setup_and_stand
+from conq.utils import setup_and_stand
 from regrasping_demo import homotopy_planner
 from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.center_object import center_object_step
 from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis, detect_regrasp_point_from_hose
 from regrasping_demo.get_detections import DetectionsResult, np_to_vec2, get_object_on_floor, detect_object_points, \
-    get_body_goal_se2_from_hose_points, get_hose_and_regrasp_point, get_hose_and_head_point
+    get_body_goal_se2_from_hose_points, get_hose_and_regrasp_point, get_hose_and_head_point, get_all
 
 HOME = math_helpers.SE2Pose(0, 0, 0)
 
@@ -489,6 +494,10 @@ def go_to_goal(predictor, clients, initial_transforms):
         # Grasp the hose to DRAG
         _get_hose_head = partial(get_hose_and_head_point, predictor, clients.image)
         look_at_scene(clients, z=0.4, pitch=np.deg2rad(85))
+
+        print("DEBUGGING!!!!")
+        return
+
         retry_grasp_hose(clients, _get_hose_head)
 
         dz = 0.4
@@ -526,6 +535,66 @@ def rr_tform(child_frame: str, tform: math_helpers.SE3Pose):
     rr.log_transform3d(f'frames/{child_frame}', rr.TranslationAndMat3(translation, rot_mat))
 
 
+class ConqDataRecorder:
+
+    def __init__(self, root: Path, robot_state_client: RobotStateClient, image_client: ImageClient):
+        self.root = root
+
+        self.root.mkdir(exist_ok=True, parents=True)
+        self.metadata = {
+            'bosdyn.api version': version("bosdyn.api"),
+            'date':               datetime.datetime.now().isoformat(),
+        }
+        self.metadata_path = self.root / 'metadata.json'
+        with self.metadata_path.open('w') as f:
+            json.dump(self.metadata, f, indent=2)
+
+        # the dataset is stored as a pkl,
+        # containing a list of dicts, where each dict is a snapshot of either
+        # the robot state or the image response
+        self.dataset_path = self.root / 'dataset.pkl'
+
+        self.robot_state_thread = Thread(target=save_robot_state, args=(robot_state_client, root), daemon=True)
+        self.img_thread = Thread(target=save_images, args=(image_client, root), daemon=True)
+
+    def start(self):
+        self.robot_state_thread.start()
+        self.img_thread.start()
+
+    def join(self):
+        self.robot_state_thread.join()
+        self.img_thread.join()
+
+    def save(self):
+        pass
+
+
+def save_images(image_client, root):
+    while True:
+        now = int(time.time())
+        print(f'saving images {time.time():.3f}')
+        img_responses = get_all(image_client)
+        for src, response in img_responses:
+            img_path = root / f'img_responses_{src}_{now}.pb'
+            with img_path.open('wb') as f:
+                f.write(response.SerializeToString())
+            stamp = response.shot.acquisition_time
+            seconds_f = stamp.seconds + stamp.nanos / 1e9
+
+
+def save_robot_state(robot_state_client, root):
+    while True:
+        now = int(time.time())
+        state = robot_state_client.get_robot_state()
+        state_path = root / f'robot_state_{now}.pb'
+        with state_path.open('wb') as f:
+            f.write(state.SerializeToString())
+        # hand_in_world = get_a_tform_b(state.kinematic_state.transforms_snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
+        stamp = state.comms_states[0].timestamp
+        seconds_f = stamp.seconds + stamp.nanos / 1e9
+        # print(f'{state_path} {seconds_f:.3f}')
+
+
 def main():
     np.seterr(all='raise')
     np.set_printoptions(precision=3, suppress=True)
@@ -543,8 +612,6 @@ def main():
     bosdyn.client.util.authenticate(robot)
     robot.time_sync.wait_for_sync()
 
-    assert robot.has_arm(), "Robot requires an arm to run this example."
-
     assert not robot.is_estopped(), "Robot is estopped. Please use an external E-Stop client, such as the" \
                                     " estop SDK example, to configure E-Stop."
 
@@ -555,6 +622,24 @@ def main():
     rc_client = robot.ensure_client(RayCastClient.default_service_name)
 
     lease_client.take()
+
+    for _ in range(20):
+        from time import perf_counter
+        t0 = perf_counter()
+        rgb_req = build_image_request('hand_color_image', pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+        rgb_res = image_client.get_image([rgb_req])[0]
+        print(f"acquire: {perf_counter() - t0:.3f}s")
+        t0 = perf_counter()
+        with open('test.pb', 'wb') as f:
+            f.write(rgb_res.SerializeToString())
+        print(f"serialize: {perf_counter() - t0:.3f}s")
+
+    return
+
+    now = int(time.time())
+    root = Path(f"data/regrasping_dataset_{now}")
+    recorder = ConqDataRecorder(root, robot_state_client, image_client)
+    recorder.start()
 
     with (LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True)):
         command_client = setup_and_stand(robot)
@@ -570,6 +655,7 @@ def main():
 
             try:
                 go_to_goal(predictor, clients, initial_transforms)
+                break
             except (GraspingException, DetectionError, PlanningException):
                 print("Failed to grasp, restarting.")
 
@@ -579,7 +665,9 @@ def main():
             # Go home, you're done!
             walk_to_pose_in_initial_frame(clients, initial_transforms, math_helpers.SE2Pose(0, 0, 0))
 
-            time.sleep(5)  # TODO: make this much larger for the real demo
+            time.sleep(5)
+
+    recorder.join()
 
 
 if __name__ == '__main__':

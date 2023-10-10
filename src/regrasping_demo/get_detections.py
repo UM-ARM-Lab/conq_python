@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image
 from bosdyn.api import image_pb2, geometry_pb2
 from bosdyn.client import math_helpers
+from bosdyn.client.image import build_image_request
 from diffcp import SolverError
 
 from arm_segmentation.predictor import get_combined_mask
@@ -21,13 +22,19 @@ from regrasping_demo.detect_regrasp_point import get_masks, detect_object_center
 
 DEFAULT_IDEAL_DIST_TO_OBS = 70
 
-RBG_SOURCES = [
+RGB_SOURCES = [
     'hand_color_image',
     'back_fisheye_image',
     'frontleft_fisheye_image',
     'frontright_fisheye_image',
     'left_fisheye_image',
     'right_fisheye_image',
+]
+
+DEPTH_SOURCES = [
+    'hand_depth',
+    'frontleft_depth_in_visual_frame',
+    'frontright_depth_in_visual_frame',
 ]
 
 
@@ -52,7 +59,7 @@ def vec3_to_np(v):
 
 def detect_in_all_rgb(predictor, image_client, get_point_f):
     save_all_rgb(image_client)
-    for src in RBG_SOURCES:
+    for src in RGB_SOURCES:
         rgb_np, rgb_res = get_color_img(image_client, src)
         predictions = predictor.predict(rgb_np)
         try:
@@ -62,10 +69,25 @@ def detect_in_all_rgb(predictor, image_client, get_point_f):
     raise DetectionError("No object detected")
 
 
+def get_all(image_client):
+    """ returns all rgb and depth image responses """
+    requests = []
+    for rgb_src in RGB_SOURCES:
+        req = build_image_request(rgb_src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+        requests.append(req)
+    for depth_src in DEPTH_SOURCES:
+        depth_req = build_image_request(depth_src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_DEPTH_U16)
+        requests.append(depth_req)
+
+    responses = image_client.get_image(requests)
+
+    return zip(RGB_SOURCES + DEPTH_SOURCES, responses)
+
+
 def save_all_rgb(image_client):
     now = int(time.time())
     filenames = []
-    for src in RBG_SOURCES:
+    for src in RGB_SOURCES:
         rgb_np, rgb_res = get_color_img(image_client, src)
         filename = Path(f"data/all_rgb/{now}_{src}.png")
         Image.fromarray(rgb_np).save(filename)

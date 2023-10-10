@@ -8,8 +8,8 @@ from scipy import ndimage
 ROTATION_ANGLE = {
     'back_fisheye_image': 0,
     'frontleft_fisheye_image': -78,
-    'frontleft_depth_in_visual_frame': -78,
     'frontright_fisheye_image': -102,
+    'frontleft_depth_in_visual_frame': -78,
     'frontright_depth_in_visual_frame': -102,
     'hand_depth_in_hand_color_frame': 0,
     'hand_depth': 0,
