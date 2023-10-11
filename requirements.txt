@@ -12,7 +12,6 @@ rerun-sdk
 roboflow
 scikit-learn
 scipy
-sklearn
 torch
 cvxpy
 cvxpylayers
