@@ -6,12 +6,12 @@ from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, GRAV_A
 
 
 def viz_common_frames(snapshot):
-    body_in_odom = get_a_tform_b(snapshot, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
-    gpe_in_odom = get_a_tform_b(snapshot, VISION_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
-    hand_in_odom = get_a_tform_b(snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
-    rr_tform('body', body_in_odom)
-    rr_tform('gpe', gpe_in_odom)
-    rr_tform('hand', hand_in_odom)
+    body_in_vision = get_a_tform_b(snapshot, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
+    gpe_in_vision = get_a_tform_b(snapshot, VISION_FRAME_NAME, GROUND_PLANE_FRAME_NAME)
+    hand_in_vision = get_a_tform_b(snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
+    rr_tform('body', body_in_vision)
+    rr_tform('gpe', gpe_in_vision)
+    rr_tform('hand', hand_in_vision)
     rr.log_transform3d(f'frames/odom', rr.Translation3D([0, 0, 0]))
 
 

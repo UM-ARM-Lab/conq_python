@@ -1,12 +1,12 @@
 import time
+from conq.hand_motion import hand_pose_cmd_in_frame
+from conq.manipulation import add_follow_with_body
 
 import bosdyn
 import numpy as np
 import rerun as rr
-from bosdyn.api import arm_command_pb2, synchronized_command_pb2, basic_command_pb2, mobility_command_pb2
-from bosdyn.api import robot_command_pb2
 from bosdyn.client import math_helpers
-from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME
+from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME
 from bosdyn.client.image import ImageClient
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
@@ -15,7 +15,8 @@ from bosdyn.client.robot_command import RobotCommandBuilder
 from bosdyn.client.robot_state import RobotStateClient
 
 from conq.clients import Clients
-from conq.rerun_utils import viz_common_frames
+from conq.hand_motion import hand_pose_cmd_to_vision
+from conq.rerun_utils import viz_common_frames, rr_tform
 from conq.utils import setup_and_stand
 
 
@@ -48,13 +49,14 @@ def main():
                           recorder=None)
 
         # poses are relative to the base at the start of the program
-        T = 50
+        T = 100
         poses = np.array([
                              [0, 0, 0.5, 0, 0, 0],
                          ] * T)
         # ramp the x coordinate from 0.5 to 1.5 then back down
         t = np.linspace(0, 1, T)
         poses[:, 0] = np.sin(t * np.pi) + 0.75
+        poses[:, 2] = 0.2 * np.sin(t * np.pi * 4) + 0.3
 
         # ready
         cmd = RobotCommandBuilder.arm_ready_command()
@@ -63,29 +65,28 @@ def main():
         transforms0 = clients.state.get_robot_state().kinematic_state.transforms_snapshot
         body_in_vision0 = get_a_tform_b(transforms0, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
 
+        # visualize EE position over time in rerun
+        points = []
+
         dt = 0.1
         for pose in poses:
             x, y, z, roll, pitch, yaw = pose
 
-            cartesian_velocity = arm_command_pb2.ArmVelocityCommand.CartesianVelocity()
-            cartesian_velocity.frame_name = VISION_FRAME_NAME
-            cartesian_velocity.velocity_in_frame_name.x = -0.1
-            cartesian_velocity.velocity_in_frame_name.y = 0.05
-            cartesian_velocity.velocity_in_frame_name.z = -0.05
-            end_time = bosdyn.util.seconds_to_timestamp(robot.time_sec() + 2 * dt)
-            arm_vel_req = arm_command_pb2.ArmVelocityCommand.Request(cartesian_velocity=cartesian_velocity,
-                                                                     end_time=end_time)
-            arm_cmd = arm_command_pb2.ArmCommand.Request(arm_velocity_command=arm_vel_req)
-
-            mobility_command = mobility_command_pb2.MobilityCommand.Request(
-                follow_arm_request=basic_command_pb2.FollowArmCommand.Request())
-
-            synch_cmd = synchronized_command_pb2.SynchronizedCommand.Request(arm_command=arm_cmd,
-                                                                             mobility_command=mobility_command)
-            cmd = robot_command_pb2.RobotCommand(synchronized_command=synch_cmd)
+            arm_cmd = hand_pose_cmd_in_frame(body_in_vision0, x, y, z, roll, pitch, yaw, duration=2 * dt)
+            cmd = add_follow_with_body(arm_cmd)
             clients.command.robot_command(cmd)
 
+            target_in_vision = hand_pose_cmd_to_vision(body_in_vision0, x, y, z, roll, pitch, yaw)
+            rr_tform('target', target_in_vision)
+            viz_common_frames(clients.state.get_robot_state().kinematic_state.transforms_snapshot)
+
             time.sleep(dt)
+
+            state = clients.state.get_robot_state()
+            ee_in_vision = get_a_tform_b(state.kinematic_state.transforms_snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
+            points.append([ee_in_vision.position.x, ee_in_vision.position.y, ee_in_vision.position.z])
+            rr.log_points('ee_path', points)
+
 
         state = clients.state.get_robot_state()
         viz_common_frames(state.kinematic_state.transforms_snapshot)

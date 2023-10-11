@@ -27,17 +27,22 @@ def hand_pose_cmd(clients: Clients, x, y, z, roll=0., pitch=np.pi / 2, yaw=0., d
     """
     transforms = clients.state.get_robot_state().kinematic_state.transforms_snapshot
     body_in_vision = get_a_tform_b(transforms, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
-    return hose_pose_cmd_in_frame(body_in_vision, x, y, z, roll, pitch, yaw, duration)
+    return hand_pose_cmd_in_frame(body_in_vision, x, y, z, roll, pitch, yaw, duration)
 
 
-def hose_pose_cmd_in_frame(a_in_vision, x, y, z, roll, pitch, yaw, duration):
+def hand_pose_cmd_in_frame(a_in_vision, x, y, z, roll, pitch, yaw, duration):
     """ Move the arm to a pose relative to a frame by applying the given transform for that from to vision """
+    hand_in_vision = hand_pose_cmd_to_vision(a_in_vision, x, y, z, roll, pitch, yaw)
+    return RobotCommandBuilder.arm_pose_command_from_pose(hand_in_vision.to_proto(), VISION_FRAME_NAME, duration)
+
+
+def hand_pose_cmd_to_vision(a_in_vision, x, y, z, roll, pitch, yaw):
     hand_pos_in_body = geometry_pb2.Vec3(x=x, y=y, z=z)
     euler = geometry.EulerZXY(roll=roll, pitch=pitch, yaw=yaw)
     quat_hand = euler.to_quaternion()
     hand_in_body = geometry_pb2.SE3Pose(position=hand_pos_in_body, rotation=quat_hand)
     hand_in_vision = a_in_vision * math_helpers.SE3Pose.from_proto(hand_in_body)
-    return RobotCommandBuilder.arm_pose_command_from_pose(hand_in_vision.to_proto(), VISION_FRAME_NAME, duration)
+    return hand_in_vision
 
 
 def hand_delta_in_body_frame(clients: Clients, dx, dy, dz, follow=True):
