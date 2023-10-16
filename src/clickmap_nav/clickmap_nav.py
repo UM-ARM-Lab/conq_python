@@ -178,9 +178,9 @@ class VTKEngine():
 
 
 class BosdynVTKInterface():
-    def __init__(self, map):
+    def __init__(self, map, vtk_engine):
         self.map = map
-        self.vtkEngine = VTKEngine()
+        self.vtkEngine = vtk_engine
         self.actor_to_id = {}
         # Todo: make the spheres have locations based on the map
         # Todo: when a sphere is clicked, call the command object
@@ -261,8 +261,8 @@ class BosdynVTKInterface():
         :param waypoint_id: the waypoint ID of the waypoint whose point cloud we want to render.
         :return: a vtkActor containing the center of the waypoint as a sphere
         """
-        waypoints = self.waypoints
-        snapshots = self.waypoint_snapshots
+        waypoints = self.map.waypoints
+        snapshots = self.map.waypoint_snapshots
 
         wp = waypoints[waypoint_id]
         snapshot = snapshots[wp.snapshot_id]
@@ -474,7 +474,7 @@ class BosdynVTKInterface():
             # We now know the global pose of this waypoint, so set the pose.
             # waypoint_id_to_actor[curr_waypoint.id].SetUserTransform(mat_to_vtk(curr_element[1]))
             world_tform_current_waypoint = curr_element[1]
-            waypoint_actor = self.create_waypoint_object(curr_waypoint.id, mat_to_vtk(world_tform_current_waypoint))
+            waypoint_actor = self.create_waypoint_object(curr_waypoint.id, world_tform_current_waypoint) #WAS mat_to_vtk()
             self.waypoint_id_to_actor[waypoint_actor] = curr_waypoint.id
             
             # waypoint_id_to_actor[waypoint.id] = self.create_waypoint_object(waypoint.id)
@@ -577,65 +577,65 @@ class MouseInteractorHighLightActor(vtkInteractorStyleTerrain):
 def main():
     vtk_engine = VTKEngine()
 
-#     path, anchoring = get_program_parameters()
-#     spot_map = SpotMap(path)
-#     bosdyn_vtk_interface = BosdynVTKInterface(spot_map, vtk_engine)
+    path, anchoring = get_program_parameters()
+    spot_map = SpotMap(path)
+    bosdyn_vtk_interface = BosdynVTKInterface(spot_map, vtk_engine)
 
-#    # Display map objects extracted from file
-#     if anchoring:
-#         if len(map.graph.anchoring.anchors) == 0:
-#             print('No anchors to draw.')
-#             sys.exit(-1)
-#         avg_pos = bosdyn_vtk_interface.create_anchored_graph_objects()
-#     else:
-#         avg_pos = bosdyn_vtk_interface.create_graph_objects()
+   # Display map objects extracted from file
+    if anchoring:
+        if len(map.graph.anchoring.anchors) == 0:
+            print('No anchors to draw.')
+            sys.exit(-1)
+        avg_pos = bosdyn_vtk_interface.create_anchored_graph_objects()
+    else:
+        avg_pos = bosdyn_vtk_interface.create_graph_objects()
 
 
 
-    randomSequence = vtkMinimalStandardRandomSequence()
-    # randomSequence.SetSeed(1043618065)
-    # randomSequence.SetSeed(5170)
-    randomSequence.SetSeed(8775070)
-    # Add spheres to play with
-    colors = vtkNamedColors()
-    numberOfSpheres = 10
-    for i in range(numberOfSpheres):
-        source = vtkSphereSource()
+    # randomSequence = vtkMinimalStandardRandomSequence()
+    # # randomSequence.SetSeed(1043618065)
+    # # randomSequence.SetSeed(5170)
+    # randomSequence.SetSeed(8775070)
+    # # Add spheres to play with
+    # colors = vtkNamedColors()
+    # numberOfSpheres = 10
+    # for i in range(numberOfSpheres):
+    #     source = vtkSphereSource()
 
-        # random position and radius
-        x = randomSequence.GetRangeValue(-5.0, 5.0)
-        randomSequence.Next()
-        y = randomSequence.GetRangeValue(-5.0, 5.0)
-        randomSequence.Next()
-        z = randomSequence.GetRangeValue(-5.0, 5.0)
-        randomSequence.Next()
-        radius = randomSequence.GetRangeValue(0.5, 1.0)
-        randomSequence.Next()
+    #     # random position and radius
+    #     x = randomSequence.GetRangeValue(-5.0, 5.0)
+    #     randomSequence.Next()
+    #     y = randomSequence.GetRangeValue(-5.0, 5.0)
+    #     randomSequence.Next()
+    #     z = randomSequence.GetRangeValue(-5.0, 5.0)
+    #     randomSequence.Next()
+    #     radius = randomSequence.GetRangeValue(0.5, 1.0)
+    #     randomSequence.Next()
 
-        source.SetRadius(radius)
-        source.SetCenter(x, y, z)
-        source.SetPhiResolution(11)
-        source.SetThetaResolution(21)
+    #     source.SetRadius(radius)
+    #     source.SetCenter(x, y, z)
+    #     source.SetPhiResolution(11)
+    #     source.SetThetaResolution(21)
 
-        mapper = vtkPolyDataMapper()
-        mapper.SetInputConnection(source.GetOutputPort())
-        actor = vtkActor()
-        actor.SetMapper(mapper)
+    #     mapper = vtkPolyDataMapper()
+    #     mapper.SetInputConnection(source.GetOutputPort())
+    #     actor = vtkActor()
+    #     actor.SetMapper(mapper)
 
-        r = randomSequence.GetRangeValue(0.4, 1.0)
-        randomSequence.Next()
-        g = randomSequence.GetRangeValue(0.4, 1.0)
-        randomSequence.Next()
-        b = randomSequence.GetRangeValue(0.4, 1.0)
-        randomSequence.Next()
+    #     r = randomSequence.GetRangeValue(0.4, 1.0)
+    #     randomSequence.Next()
+    #     g = randomSequence.GetRangeValue(0.4, 1.0)
+    #     randomSequence.Next()
+    #     b = randomSequence.GetRangeValue(0.4, 1.0)
+    #     randomSequence.Next()
 
-        actor.GetProperty().SetDiffuseColor(r, g, b)
-        actor.GetProperty().SetDiffuse(0.8)
-        actor.GetProperty().SetSpecular(0.5)
-        actor.GetProperty().SetSpecularColor(colors.GetColor3d('White'))
-        actor.GetProperty().SetSpecularPower(30.0)
+    #     actor.GetProperty().SetDiffuseColor(r, g, b)
+    #     actor.GetProperty().SetDiffuse(0.8)
+    #     actor.GetProperty().SetSpecular(0.5)
+    #     actor.GetProperty().SetSpecularColor(colors.GetColor3d('White'))
+    #     actor.GetProperty().SetSpecularPower(30.0)
 
-        vtk_engine.renderer.AddActor(actor)
+    #     vtk_engine.renderer.AddActor(actor)
 
     vtk_engine.start()
 
