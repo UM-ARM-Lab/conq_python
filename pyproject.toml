@@ -18,7 +18,6 @@ maintainers = [
 
 dependencies = [
     "Pillow",
-    "arm_segmentation",
     "bosdyn-choreography-client",
     "bosdyn-client",
     "bosdyn-mission",
@@ -33,6 +32,7 @@ dependencies = [
 
 [project.optional-dependencies] # Optional
 regrasping_demo = [
+    "arm_segmentation",
     "cvxpy",
     "cvxpylayers",
     "plotly",

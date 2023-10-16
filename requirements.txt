@@ -10,9 +10,5 @@ Pillow
 requests
 rerun-sdk
 roboflow
-scikit-learn
 scipy
 torch
-cvxpy
-cvxpylayers
-plotly
