@@ -253,7 +253,7 @@ class BosdynVTKInterface():
         actor.SetUserTransform(waypoint_tform_cloud)
         return actor
 
-    def create_waypoint_center_object(self,waypoint_id, mat):
+    def create_waypoint_center_object(self, mat):
         """
         Create a VTK object representing the center of a waypoint as a sphere
         :param waypoints: dict of waypoint ID to waypoint.
@@ -288,19 +288,8 @@ class BosdynVTKInterface():
 
         return sphere_actor
 
-    def click_callback(self, obj, event):
-        """
-        Callback function for when a waypoint is clicked.
-        :param obj: The VTK object that was clicked.
-        :param event: The event that was triggered.
-        :return: None.
-        """
-        # Get the waypoint ID from the clicked object.
-        # waypoint_id = obj.GetMapper().GetInput().GetPointData().GetArray('waypoint_id').GetValue(0)
-        # print(f'Clicked on waypoint {waypoint_id}')
-        print("click_callback")
 
-    def create_waypoint_object(self, waypoint_id, mat):
+    def create_waypoint_object(self, waypoint_id, homogeneous_tf):
 
         """
         Creates a VTK object representing a waypoint and its point cloud.
@@ -309,8 +298,8 @@ class BosdynVTKInterface():
         :return: A vtkAssembly representing the waypoint (an axis) and its point cloud.
         """
         renderer = self.vtkEngine.renderer
-        # waypoints = self.map.waypoints
-        # snapshots = self.map.waypoint_snapshots
+        waypoints = self.map.waypoints
+        snapshots = self.map.waypoint_snapshots
 
         # assembly = vtk.vtkAssembly()
         # actor = vtk.vtkAxesActor()
@@ -318,15 +307,17 @@ class BosdynVTKInterface():
         # actor.SetYAxisLabelText('')
         # actor.SetZAxisLabelText('')
         # actor.SetTotalLength(0.2, 0.2, 0.2)
-        # # point_cloud_actor = create_point_cloud_object(waypoints, snapshots, waypoint_id)
-        sphere_center_actor = self.create_waypoint_center_object(waypoint_id, mat)
-
+        point_cloud_actor = self.create_point_cloud_object(waypoints, snapshots, waypoint_id)
+        sphere_center_actor = self.create_waypoint_center_object(homogeneous_tf)
+        # TODO: Add Label here as well
+        
         # assembly.AddPart(actor)
         # # assembly.AddPart(point_cloud_actor)
         # assembly.AddPart(sphere_center_actor)
 
         # renderer.AddActor(assembly)
         # return assembly
+        renderer.AddActor(point_cloud_actor)
         renderer.AddActor(sphere_center_actor)
         return sphere_center_actor
 
@@ -352,15 +343,7 @@ class BosdynVTKInterface():
         renderer.AddActor(actor)
         return actor
 
-
-    def make_text(self, name, pt, renderer):
-        """
-        Creates white text on a black background at a particular point.
-        :param name: The text to display.
-        :param pt: The point in the world where the text will be displayed.
-        :param renderer: The VTK renderer
-        :return: the vtkActor representing the text.
-        """
+    def make_text_actor(self, name, pt):
         actor = vtk.vtkTextActor()
         actor.SetInput(name)
         prop = actor.GetTextProperty()
@@ -370,7 +353,17 @@ class BosdynVTKInterface():
         coord = actor.GetPositionCoordinate()
         coord.SetCoordinateSystemToWorld()
         coord.SetValue((pt[0], pt[1], pt[2]))
+        return actor
 
+    def make_text(self, name, pt, renderer):
+        """
+        Creates white text on a black background at a particular point.
+        :param name: The text to display.
+        :param pt: The point in the world where the text will be displayed.
+        :param renderer: The VTK renderer
+        :return: the vtkActor representing the text.
+        """
+        actor = self.make_text_actor(name, pt)
         renderer.AddActor(actor)
         return actor
 
