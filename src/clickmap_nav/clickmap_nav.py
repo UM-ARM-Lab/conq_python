@@ -261,16 +261,16 @@ class BosdynVTKInterface():
         :param waypoint_id: the waypoint ID of the waypoint whose point cloud we want to render.
         :return: a vtkActor containing the center of the waypoint as a sphere
         """
-        waypoints = self.map.waypoints
-        snapshots = self.map.waypoint_snapshots
+        # waypoints = self.map.waypoints
+        # snapshots = self.map.waypoint_snapshots
 
-        wp = waypoints[waypoint_id]
-        snapshot = snapshots[wp.snapshot_id]
-        cloud = snapshot.point_cloud
-        odom_tform_cloud = get_a_tform_b(cloud.source.transforms_snapshot, ODOM_FRAME_NAME,
-                                            cloud.source.frame_name_sensor)
-        waypoint_tform_odom = SE3Pose.from_proto(wp.waypoint_tform_ko)
-        waypoint_tform_cloud = api_to_vtk_se3_pose(waypoint_tform_odom * odom_tform_cloud)
+        # wp = waypoints[waypoint_id]
+        # snapshot = snapshots[wp.snapshot_id]
+        # cloud = snapshot.point_cloud
+        # odom_tform_cloud = get_a_tform_b(cloud.source.transforms_snapshot, ODOM_FRAME_NAME,
+        #                                     cloud.source.frame_name_sensor)
+        # waypoint_tform_odom = SE3Pose.from_proto(wp.waypoint_tform_ko)
+        # waypoint_tform_cloud = api_to_vtk_se3_pose(waypoint_tform_odom * odom_tform_cloud)
         # print(f"waypoint_tform_cloud: {waypoint_tform_cloud}")
         sphere = vtk.vtkSphereSource()
         
@@ -284,7 +284,7 @@ class BosdynVTKInterface():
         sphere_actor = vtk.vtkActor()
         sphere_actor.SetMapper(sphere_mapper)
         sphere_actor.GetProperty().SetColor(1.0, 1.0, 1.0)
-        sphere_actor.SetUserTransform(waypoint_tform_cloud)
+        # sphere_actor.SetUserTransform(waypoint_tform_cloud)
 
         return sphere_actor
 
@@ -309,24 +309,26 @@ class BosdynVTKInterface():
         :return: A vtkAssembly representing the waypoint (an axis) and its point cloud.
         """
         renderer = self.vtkEngine.renderer
-        waypoints = self.map.waypoints
-        snapshots = self.map.waypoint_snapshots
+        # waypoints = self.map.waypoints
+        # snapshots = self.map.waypoint_snapshots
 
-        assembly = vtk.vtkAssembly()
-        actor = vtk.vtkAxesActor()
-        actor.SetXAxisLabelText('')
-        actor.SetYAxisLabelText('')
-        actor.SetZAxisLabelText('')
-        actor.SetTotalLength(0.2, 0.2, 0.2)
-        # point_cloud_actor = create_point_cloud_object(waypoints, snapshots, waypoint_id)
+        # assembly = vtk.vtkAssembly()
+        # actor = vtk.vtkAxesActor()
+        # actor.SetXAxisLabelText('')
+        # actor.SetYAxisLabelText('')
+        # actor.SetZAxisLabelText('')
+        # actor.SetTotalLength(0.2, 0.2, 0.2)
+        # # point_cloud_actor = create_point_cloud_object(waypoints, snapshots, waypoint_id)
         sphere_center_actor = self.create_waypoint_center_object(waypoint_id, mat)
 
-        assembly.AddPart(actor)
-        # assembly.AddPart(point_cloud_actor)
-        assembly.AddPart(sphere_center_actor)
+        # assembly.AddPart(actor)
+        # # assembly.AddPart(point_cloud_actor)
+        # assembly.AddPart(sphere_center_actor)
 
-        renderer.AddActor(assembly)
-        return assembly
+        # renderer.AddActor(assembly)
+        # return assembly
+        renderer.AddActor(sphere_center_actor)
+        return sphere_center_actor
 
 
     def make_line(self, pt_A, pt_B, renderer):
