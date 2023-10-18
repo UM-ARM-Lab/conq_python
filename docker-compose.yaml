@@ -1,0 +1,9 @@
+version: '3'
+services:
+  app:
+    build:
+      context: .
+    volumes:
+      - .:/app
+    network_mode: host
+    working_dir: /app/conq_python

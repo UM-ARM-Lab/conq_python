@@ -18,31 +18,28 @@ maintainers = [
 
 dependencies = [
     "Pillow",
+    "arm_segmentation",
     "bosdyn-choreography-client",
     "bosdyn-client",
     "bosdyn-mission",
+    "cvxpy",
+    "cvxpylayers",
     "matplotlib",
     "numpy",
     "opencv-python",
     "pip>=23.1.2",
+    "plotly",
+    "pytorch_kinematics",
+    "pytorch_volumetric",
+    "rerun-sdk",
+    "roboflow",
     "scikit-learn",
     "scipy",
     "sortedcontainers",
 ]
 
 [project.optional-dependencies] # Optional
-regrasping_demo = [
-    "arm_segmentation",
-    "cvxpy",
-    "cvxpylayers",
-    "plotly",
-    "pytorch_kinematics",
-    "pytorch_volumetric",
-    "requests",
-    "rerun-sdk",
-    "roboflow",
-    "torch",
-]
+
 
 [tool.setuptools]
 
