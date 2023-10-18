@@ -2,7 +2,6 @@ import time
 from typing import List
 
 import numpy as np
-import rerun as rr
 from bosdyn.api import manipulation_api_pb2
 from bosdyn.client.frame_helpers import get_a_tform_b, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME
 from bosdyn.client.robot_command import block_until_arm_arrives, RobotCommandBuilder
@@ -63,6 +62,7 @@ def force_measure(clients: Clients, force_buffer: List):
         force_buffer.pop(0)
     recent_avg_total_force = float(np.mean(force_buffer))
 
+    import rerun as rr
     rr.log_scalar("force/x", force_reading.x)
     rr.log_scalar("force/y", force_reading.y)
     rr.log_scalar("force/z", force_reading.z)

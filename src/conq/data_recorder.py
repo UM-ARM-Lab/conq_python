@@ -2,7 +2,7 @@ import datetime
 import json
 import pickle
 import time
-from importlib.metadata import version
+from importlib.metadata import version, PackageNotFoundError
 from multiprocessing import Event
 from pathlib import Path
 from threading import Thread
@@ -14,7 +14,6 @@ from bosdyn.client.image import ImageClient, build_image_request
 from bosdyn.client.robot_state import RobotStateClient
 
 from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES
-from conq.rerun_utils import viz_common_frames
 
 
 class LatestImageRecorder:
@@ -38,7 +37,9 @@ class LatestImageRecorder:
     def save_imgs_worker(self, image_client, src, fmt, done: Event):
         while not done.is_set():
             req = build_image_request(src, pixel_format=fmt)
+            t0 = time.perf_counter()
             res = image_client.get_image([req])[0]
+            print(f'Got image from {src} in {time.perf_counter() - t0:.3f}s')
 
             self.latest_img_res = res
 
@@ -51,8 +52,12 @@ class ConqDataRecorder:
         self.image_client = image_client
 
         self.root.mkdir(exist_ok=True, parents=True)
+        try:
+            api_version = version("bosdyn.api")
+        except PackageNotFoundError:
+            api_version = "unknown"
         self.metadata = {
-            'bosdyn.api version': version("bosdyn.api"),
+            'bosdyn.api version': api_version,
             'date':               datetime.datetime.now().isoformat(),
             'rgb_sources':        RGB_SOURCES,
             'depth_sources':      DEPTH_SOURCES,
@@ -117,7 +122,8 @@ class ConqDataRecorder:
             now = time.time()
             state = robot_state_client.get_robot_state()
 
-            viz_common_frames(state.kinematic_state.transforms_snapshot)
+            # from conq.rerun_utils import viz_common_frames
+            # viz_common_frames(state.kinematic_state.transforms_snapshot)
 
             step_data = {
                 'time':             now,
@@ -130,7 +136,7 @@ class ConqDataRecorder:
                 step_data['images'][rec.src] = rec.latest_img_res
 
             episode.append(step_data)
-            print("saving...")
+            # print("saving...")
 
             # save and wait a bit so other threads can run
             with episode_path.open('wb') as f:

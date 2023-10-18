@@ -1,4 +1,7 @@
 import time
+
+from bosdyn.api.arm_command_pb2 import ArmCartesianCommand, ArmCommand
+
 from conq.hand_motion import hand_pose_cmd_in_frame
 from conq.manipulation import add_follow_with_body
 
@@ -49,13 +52,14 @@ def main():
                           recorder=None)
 
         # poses are relative to the base at the start of the program
-        T = 100
+        T = 500
         poses = np.array([
                              [0, 0, 0.5, 0, 0, 0],
                          ] * T)
         # ramp the x coordinate from 0.5 to 1.5 then back down
-        t = np.linspace(0, 1, T)
+        t = np.linspace(0, 1.5 * np.pi, T)
         poses[:, 0] = np.sin(t * np.pi) + 0.75
+        # poses[:, 1] = 0.2 * np.sin(t * np.pi)
         poses[:, 2] = 0.2 * np.sin(t * np.pi * 4) + 0.3
 
         # ready
@@ -66,7 +70,8 @@ def main():
         body_in_vision0 = get_a_tform_b(transforms0, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
 
         # visualize EE position over time in rerun
-        points = []
+        obs_points = []
+        target_points = []
 
         dt = 0.1
         for pose in poses:
@@ -74,6 +79,7 @@ def main():
 
             arm_cmd = hand_pose_cmd_in_frame(body_in_vision0, x, y, z, roll, pitch, yaw, duration=2 * dt)
             cmd = add_follow_with_body(arm_cmd)
+            cmd.synchronized_command.arm_command.arm_cartesian_command.max_linear_velocity.value = 0.3
             clients.command.robot_command(cmd)
 
             target_in_vision = hand_pose_cmd_to_vision(body_in_vision0, x, y, z, roll, pitch, yaw)
@@ -84,9 +90,11 @@ def main():
 
             state = clients.state.get_robot_state()
             ee_in_vision = get_a_tform_b(state.kinematic_state.transforms_snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
-            points.append([ee_in_vision.position.x, ee_in_vision.position.y, ee_in_vision.position.z])
-            rr.log_points('ee_path', points)
-
+            obs_points.append([ee_in_vision.position.x, ee_in_vision.position.y, ee_in_vision.position.z])
+            target_points.append(
+                [target_in_vision.position.x, target_in_vision.position.y, target_in_vision.position.z])
+            rr.log_points('obs_path', obs_points, colors=[1.0, 0, 0])
+            rr.log_points('target_path', target_points, colors=[0, 1.0, 0])
 
         state = clients.state.get_robot_state()
         viz_common_frames(state.kinematic_state.transforms_snapshot)
