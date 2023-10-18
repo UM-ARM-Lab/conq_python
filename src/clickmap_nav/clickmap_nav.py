@@ -124,6 +124,10 @@ class SpotMap():
             # print(f"waypoints dictionary: {self.waypoints}")
             # print(f"waypoint 1: {self.waypoints[1].__dict__}")
 
+class bosdynWaypointActor(vtk.vtkActor):
+    def __init__(self, waypoint_id):
+        super().__init__()
+        self.waypoint_id = waypoint_id
 
 class VTKEngine():
     def __init__(self):
@@ -253,7 +257,7 @@ class BosdynVTKInterface():
         actor.SetUserTransform(waypoint_tform_cloud)
         return actor
 
-    def create_waypoint_center_object(self, mat):
+    def create_waypoint_center_object(self, mat, waypoint_id):
         """
         Create a VTK object representing the center of a waypoint as a sphere
         :param waypoints: dict of waypoint ID to waypoint.
@@ -281,7 +285,7 @@ class BosdynVTKInterface():
 
         sphere_mapper = vtk.vtkPolyDataMapper()
         sphere_mapper.SetInputConnection(sphere.GetOutputPort())
-        sphere_actor = vtk.vtkActor()
+        sphere_actor = bosdynWaypointActor(waypoint_id) #vtk.vtkActor()
         sphere_actor.SetMapper(sphere_mapper)
         sphere_actor.GetProperty().SetColor(1.0, 1.0, 1.0)
         # sphere_actor.SetUserTransform(waypoint_tform_cloud)
@@ -308,7 +312,7 @@ class BosdynVTKInterface():
         # actor.SetZAxisLabelText('')
         # actor.SetTotalLength(0.2, 0.2, 0.2)
         point_cloud_actor = self.create_point_cloud_object(waypoints, snapshots, waypoint_id)
-        sphere_center_actor = self.create_waypoint_center_object(homogeneous_tf)
+        sphere_center_actor = self.create_waypoint_center_object(homogeneous_tf, waypoint_id)
         # TODO: Add Label here as well
         
         # assembly.AddPart(actor)
@@ -528,7 +532,7 @@ class MouseInteractorHighLightActor(vtkInteractorStyleTerrain):
         self.Silhouette = silhouette
         self.SilhouetteActor = silhouetteActor
 
-    def actorSelectedCallback(self, actor):
+    def actorSelectedCallback(self, bosdyn_vtk_actor):
         # Get the actor from the graph and command spot to go
         pass 
     
