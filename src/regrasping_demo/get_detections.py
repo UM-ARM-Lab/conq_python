@@ -119,7 +119,7 @@ def get_object_on_floor(predictor, image_client, object_name: str):
     return detect_in_all_rgb(predictor, image_client, _get_object_on_floor)
 
 
-def get_hose_and_head_point(predictor, image_client):
+def get_hose_head_grasp_point(predictor, image_client):
     def _get_hose_and_head_point(rgb_res, rgb_np, predictions):
         try:
             hose_points = single_frame_planar_cdcpd(rgb_np, predictions)

@@ -149,3 +149,5 @@ def add_follow_with_body(arm_command):
     follow_cmd = RobotCommandBuilder.follow_arm_command()
     arm_and_follow_cmd = RobotCommandBuilder.build_synchro_command(follow_cmd, arm_command)
     return arm_and_follow_cmd
+
+

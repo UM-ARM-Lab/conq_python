@@ -41,7 +41,8 @@ from regrasping_demo.cdcpd_hose_state_predictor import single_frame_planar_cdcpd
 from regrasping_demo.center_object import center_object_step
 from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis, detect_regrasp_point_from_hose
 from regrasping_demo.get_detections import DetectionsResult, np_to_vec2, get_object_on_floor, detect_object_points, \
-    get_body_goal_se2_from_hose_points, get_hose_and_regrasp_point, get_hose_and_head_point
+    get_body_goal_se2_from_hose_points, get_hose_and_regrasp_point, get_hose_head_grasp_point
+from regrasping_demo.rotate_about import rotate_around_point_in_hand_frame
 
 HOME = math_helpers.SE2Pose(0, 0, 0)
 
@@ -221,36 +222,6 @@ def align_with_hose(clients: Clients, get_point_f):
     best_pt_in_hand = pos_in_cam_to_pos_in_hand(best_pt_in_cam)
 
     rotate_around_point_in_hand_frame(clients, best_pt_in_hand, angle)
-
-
-def rotate_around_point_in_hand_frame(clients: Clients, pos: np.ndarray, angle: float):
-    """
-    Moves the body by `angle` degrees, and translate so that `pos` stays in the same place.
-
-    Assumptions:
-     - the hand and the body have aligned X axes
-
-    Args:
-        clients: clients
-        pos: 2D position of the point to rotate around, in the hand frame
-        angle: angle in radians to rotate the body by, around the Z axis
-    """
-    transforms = clients.state.get_robot_state().kinematic_state.transforms_snapshot
-    hand_in_odom = get_se2_a_tform_b(transforms, VISION_FRAME_NAME, HAND_FRAME_NAME)
-    hand_in_body = get_se2_a_tform_b(transforms, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
-    body_in_hand = hand_in_body.inverse()  # NOTE: querying frames in opposite order returns None???
-    body_pt_in_hand = np.array([body_in_hand.x, body_in_hand.y])
-    rotated_body_pos_in_hand = rot_2d(angle) @ body_pt_in_hand + pos
-    rotated_body_in_hand = math_helpers.SE2Pose(rotated_body_pos_in_hand[0], rotated_body_pos_in_hand[1],
-                                                angle + body_in_hand.angle)
-    goal_in_odom = hand_in_odom * rotated_body_in_hand
-    se2_cmd = RobotCommandBuilder.synchro_se2_trajectory_command(goal_se2=goal_in_odom.to_proto(),
-                                                                 frame_name=VISION_FRAME_NAME,
-                                                                 locomotion_hint=spot_command_pb2.HINT_CRAWL)
-    se2_synchro_cmd = RobotCommandBuilder.build_synchro_command(se2_cmd)
-    se2_cmd_id = clients.command.robot_command(lease=None, command=se2_synchro_cmd,
-                                               end_time_secs=time.time() + 999)
-    block_for_trajectory_cmd(clients.command, se2_cmd_id)
 
 
 def retry_grasp_hose(clients: Clients, get_point_f):
@@ -482,7 +453,7 @@ def untangle_hose(clients: Clients, predictor: Predictor, initial_transforms):
 def go_to_goal(predictor, clients, initial_transforms):
     while True:
         # Grasp the hose to DRAG
-        _get_hose_head = partial(get_hose_and_head_point, predictor, clients.image)
+        _get_hose_head = partial(get_hose_head_grasp_point, predictor, clients.image)
         look_at_scene(clients, z=0.4, pitch=np.deg2rad(85))
 
         retry_grasp_hose(clients, _get_hose_head)
