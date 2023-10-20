@@ -13,32 +13,7 @@ from bosdyn.api.robot_state_pb2 import FootState
 from bosdyn.client.image import ImageClient, build_image_request
 from bosdyn.client.robot_state import RobotStateClient
 
-from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES
-
-
-class LatestImageRecorder:
-    """ Constantly queries the cameras and stores the latest image """
-
-    def __init__(self, image_client: ImageClient, src, fmt, done: Event):
-        self.image_client = image_client
-        self.latest_img_path = None
-        self.latest_img_res = None
-        self.src = src
-        self.fmt = fmt
-
-        self.thread = Thread(target=self.save_imgs_worker, args=(image_client, src, fmt, done))
-
-    def start(self):
-        self.thread.start()
-
-    def join(self):
-        self.thread.join()
-
-    def save_imgs_worker(self, image_client, src, fmt, done: Event):
-        while not done.is_set():
-            req = build_image_request(src, pixel_format=fmt)
-            res = image_client.get_image([req])[0]
-            self.latest_img_res = res
+from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES, ALL_FMTS, ALL_SOURCES
 
 
 class ConqDataRecorder:
@@ -63,22 +38,6 @@ class ConqDataRecorder:
         with self.metadata_path.open('w') as f:
             json.dump(self.metadata, f, indent=2)
 
-        self.imgs_done = Event()
-
-        # These are the threads that constantly query the cameras and store the latest image.
-        # They do not start/stop between episodes.
-        self.img_recorders = [
-            LatestImageRecorder(image_client, src, image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8, self.imgs_done)
-            for src in RGB_SOURCES
-        ]
-        self.img_recorders += [
-            LatestImageRecorder(image_client, src, image_pb2.Image.PixelFormat.PIXEL_FORMAT_DEPTH_U16, self.imgs_done)
-            for src in DEPTH_SOURCES
-        ]
-
-        for img_rec in self.img_recorders:
-            img_rec.start()
-
         self.reset()
 
     def reset(self):
@@ -99,7 +58,6 @@ class ConqDataRecorder:
         self.episode_idx += 1
 
     def stop(self):
-        self.imgs_done.set()
         self.saver_thread.join()
         for img_rec in self.img_recorders:
             img_rec.join()
@@ -129,8 +87,16 @@ class ConqDataRecorder:
                 'instruction_time': self.latest_instruction_time,
                 'images':           {},
             }
-            for rec in self.img_recorders:
-                step_data['images'][rec.src] = rec.latest_img_res
+
+            reqs = []
+            for src, fmt in zip(ALL_SOURCES, ALL_FMTS):
+                req = build_image_request(src, pixel_format=fmt)
+                reqs.append(req)
+
+            ress = self.image_client.get_image(reqs)
+
+            for res, src in zip(ress, ALL_SOURCES):
+                step_data['images'][src] = res
 
             episode.append(step_data)
 

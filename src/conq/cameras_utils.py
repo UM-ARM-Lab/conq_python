@@ -134,3 +134,11 @@ DEPTH_SOURCES = [
     'frontleft_depth_in_visual_frame',
     'frontright_depth_in_visual_frame',
 ]
+
+ALL_SOURCES = RGB_SOURCES + DEPTH_SOURCES
+
+ALL_FMTS = []
+for src in RGB_SOURCES:
+    ALL_FMTS.append(image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+for src in DEPTH_SOURCES:
+    ALL_SOURCES.append(image_pb2.Image.PixelFormat.PIXEL_FORMAT_DEPTH_U16)
