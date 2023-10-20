@@ -138,7 +138,7 @@ def get_hose_head_grasp_point(predictor, image_client):
         prev_px = hose_points[prev_idx]
 
         # interpolate from best_px to prev_px
-        alpha = 5  # in pixels
+        alpha = 50  # in pixels
         iterp_dir = (prev_px - best_px).astype(float)
         iterp_dir /= np.linalg.norm(iterp_dir)  # normalize
         iterp_dir *= alpha

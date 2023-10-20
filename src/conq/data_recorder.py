@@ -37,10 +37,7 @@ class LatestImageRecorder:
     def save_imgs_worker(self, image_client, src, fmt, done: Event):
         while not done.is_set():
             req = build_image_request(src, pixel_format=fmt)
-            t0 = time.perf_counter()
             res = image_client.get_image([req])[0]
-            print(f'Got image from {src} in {time.perf_counter() - t0:.3f}s')
-
             self.latest_img_res = res
 
 
@@ -85,25 +82,25 @@ class ConqDataRecorder:
         self.reset()
 
     def reset(self):
-        self.robot_state_thread = None
+        self.saver_thread = None
         self.latest_instruction = None
         self.latest_instruction_time = None
         self.episode_idx = 0
 
     def start_episode(self, mode):
         self.episode_done = Event()
-        self.robot_state_thread = Thread(target=self.save_episode_worker,
-                                         args=(self.robot_state_client, self.episode_done, mode))
-        self.robot_state_thread.start()
+        self.saver_thread = Thread(target=self.save_episode_worker,
+                                   args=(self.robot_state_client, self.episode_done, mode))
+        self.saver_thread.start()
 
     def next_episode(self):
         self.episode_done.set()
-        self.robot_state_thread.join()
+        self.saver_thread.join()
         self.episode_idx += 1
 
     def stop(self):
         self.imgs_done.set()
-        self.robot_state_thread.join()
+        self.saver_thread.join()
         for img_rec in self.img_recorders:
             img_rec.join()
 
@@ -136,7 +133,6 @@ class ConqDataRecorder:
                 step_data['images'][rec.src] = rec.latest_img_res
 
             episode.append(step_data)
-            # print("saving...")
 
             # save and wait a bit so other threads can run
             with episode_path.open('wb') as f:

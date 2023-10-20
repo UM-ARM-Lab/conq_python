@@ -18,8 +18,9 @@ from bosdyn.client.robot_state import RobotStateClient
 from conq.cameras_utils import pos_in_cam_to_pos_in_hand
 from conq.clients import Clients
 from conq.data_recorder import ConqDataRecorder
+from conq.exceptions import DetectionError
 from conq.hand_motion import hand_pose_cmd
-from conq.manipulation import blocking_arm_command, grasp_point_in_image
+from conq.manipulation import blocking_arm_command, grasp_point_in_image, hand_delta_z
 from conq.manipulation import open_gripper
 from conq.utils import setup_and_stand
 from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis
@@ -98,9 +99,9 @@ def main():
 
     # Creates client, robot, and authenticates, and time syncs
     sdk = bosdyn.client.create_standard_sdk('generate_dataset')
-    # robot = sdk.create_robot('192.168.80.3')
+    robot = sdk.create_robot('192.168.80.3')
     # robot = sdk.create_robot('10.0.0.3')
-    robot = sdk.create_robot('10.10.10.135')
+    # robot = sdk.create_robot('10.10.10.135')
     bosdyn.client.util.authenticate(robot)
     robot.time_sync.wait_for_sync()
 
@@ -128,15 +129,23 @@ def main():
 
         open_gripper(clients)
 
-        for mode, num_episodes in [('train', 2), ('val', 1)]:
+        for mode, num_episodes in [('train', 10), ('val', 5)]:
             for episode_idx in range(num_episodes):
-                print(f"Starting {episode_idx}")
-                recorder.start_episode(mode)
-                clients.recorder.add_instruction("grasp hose")
-
-                retry_grasp_hose(clients, partial(get_hose_head_grasp_point, predictor, image_client))
-
-                recorder.next_episode()
+                while True:
+                    print(f"Starting {episode_idx}")
+                    recorder.start_episode(mode)
+                    clients.recorder.add_instruction("grasp hose")
+                    try:
+                        retry_grasp_hose(clients, partial(get_hose_head_grasp_point, predictor, image_client))
+                        hand_delta_z(clients, dz=0.25)
+                        open_gripper(clients)
+                        look_at_scene(clients, z=0.4, pitch=np.deg2rad(85))
+                        print("Success! Pausing before next episode...")
+                        time.sleep(5)
+                        recorder.next_episode()
+                        break
+                    except DetectionError:
+                        input("Re-arrange the hose and press enter to try again")
         recorder.stop()
 
 
