@@ -185,9 +185,6 @@ class BosdynVTKInterface():
     def __init__(self, map, vtk_engine):
         self.map = map
         self.vtkEngine = vtk_engine
-        self.actor_to_id = {}
-        # Todo: make the spheres have locations based on the map
-        # Todo: when a sphere is clicked, call the command object
 
 
     def create_fiducial_object(self,world_object, waypoint, renderer):
@@ -221,8 +218,34 @@ class BosdynVTKInterface():
         renderer.AddActor(actor)
         return actor, waypoint_tform_fiducial_filtered
 
+    def make_point_cloud_actor(self, point_cloud_data, homogeneous_tf, waypoint_id):
+        """
+        Create a VTK actor representing the point cloud in a snapshot. 
+        :param point_cloud_data: (3xN) point cloud data (np.array)
+        :param homogeneous_tf: the 4x4 homogenous transform of the waypoint about which the point cloud is centered (np.array)
+        :param waypoint_id: the waypoint ID of the waypoint whose point cloud we want to render.
+        """
+        # point_cloud_data_transformed = homogeneous_tf[:3,:3]*point_cloud_data + homogeneous_tf[:3, 3]
+        poly_data = numpy_to_poly_data(point_cloud_data) #point_cloud_data_transformed)
+        arr = vtk.vtkFloatArray()
+        for i in range(poly_data.GetNumberOfVerts()): #cloud.num_points):
+            arr.InsertNextValue(point_cloud_data[i, 2])
+        arr.SetName('z_coord')
+        poly_data.GetPointData().AddArray(arr)
+        poly_data.GetPointData().SetActiveScalars('z_coord')
+        actor = bosdynWaypointActor(waypoint_id)
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputData(poly_data)
+        mapper.ScalarVisibilityOn()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetPointSize(2)
+        actor.PickableOff()
+        # actor.SetUserTransform(waypoint_tform_cloud)
+        return actor
 
-    def create_point_cloud_object(self,waypoints, snapshots, waypoint_id):
+
+
+    def create_point_cloud_object(self, homogeneous_tf, waypoint_id):
         """
         Create a VTK object representing the point cloud in a snapshot. Note that in graph_nav, "point cloud" refers to the
         feature cloud of a waypoint -- that is, a collection of visual features observed by all five cameras at a particular
@@ -232,54 +255,30 @@ class BosdynVTKInterface():
         :param waypoint_id: the waypoint ID of the waypoint whose point cloud we want to render.
         :return: a vtkActor containing the point cloud data.
         """
-        wp = waypoints[waypoint_id]
-        snapshot = snapshots[wp.snapshot_id]
+        wp = self.map.waypoints[waypoint_id]
+        snapshot = self.map.waypoint_snapshots[wp.snapshot_id]
         cloud = snapshot.point_cloud
+
         odom_tform_cloud = get_a_tform_b(cloud.source.transforms_snapshot, ODOM_FRAME_NAME,
-                                        cloud.source.frame_name_sensor)
+                                        cloud.source.frame_name_sensor) #SE(3) pose representing the transform from odometry_frame to sensor_frame.
         waypoint_tform_odom = SE3Pose.from_proto(wp.waypoint_tform_ko)
         waypoint_tform_cloud = api_to_vtk_se3_pose(waypoint_tform_odom * odom_tform_cloud)
 
         point_cloud_data = np.frombuffer(cloud.data, dtype=np.float32).reshape(int(cloud.num_points), 3)
-        poly_data = numpy_to_poly_data(point_cloud_data)
-        arr = vtk.vtkFloatArray()
-        for i in range(cloud.num_points):
-            arr.InsertNextValue(point_cloud_data[i, 2])
-        arr.SetName('z_coord')
-        poly_data.GetPointData().AddArray(arr)
-        poly_data.GetPointData().SetActiveScalars('z_coord')
-        actor = vtk.vtkActor()
-        mapper = vtk.vtkPolyDataMapper()
-        mapper.SetInputData(poly_data)
-        mapper.ScalarVisibilityOn()
-        actor.SetMapper(mapper)
-        actor.GetProperty().SetPointSize(2)
-        actor.SetUserTransform(waypoint_tform_cloud)
+        actor = self.make_point_cloud_actor(point_cloud_data, waypoint_tform_odom * odom_tform_cloud, waypoint_id)
+
         return actor
 
-    def create_waypoint_center_object(self, mat, waypoint_id):
+    def make_sphere_actor(self, homogeneous_tf, waypoint_id):
         """
         Create a VTK object representing the center of a waypoint as a sphere
-        :param waypoints: dict of waypoint ID to waypoint.
-        :param snapshots: dict of waypoint snapshot ID to waypoint snapshot.
-        :param waypoint_id: the waypoint ID of the waypoint whose point cloud we want to render.
+        :param homogeneous_tf: the 4x4 homogenous transform of the waypoint (np.array)
+        :param waypoint_id: the waypoint id of the waypoint object we wish to create. (long string)
         :return: a vtkActor containing the center of the waypoint as a sphere
         """
-        # waypoints = self.map.waypoints
-        # snapshots = self.map.waypoint_snapshots
-
-        # wp = waypoints[waypoint_id]
-        # snapshot = snapshots[wp.snapshot_id]
-        # cloud = snapshot.point_cloud
-        # odom_tform_cloud = get_a_tform_b(cloud.source.transforms_snapshot, ODOM_FRAME_NAME,
-        #                                     cloud.source.frame_name_sensor)
-        # waypoint_tform_odom = SE3Pose.from_proto(wp.waypoint_tform_ko)
-        # waypoint_tform_cloud = api_to_vtk_se3_pose(waypoint_tform_odom * odom_tform_cloud)
-        # print(f"waypoint_tform_cloud: {waypoint_tform_cloud}")
         sphere = vtk.vtkSphereSource()
         
-        # sphere.SetCenter(0.0,0.0,0.0) #set to origin, then transform later with SetUserTransform
-        sphere.SetCenter(mat[0,3], mat[1,3], mat[2,3])
+        sphere.SetCenter(homogeneous_tf[0,3], homogeneous_tf[1,3], homogeneous_tf[2,3])
         sphere.SetRadius(0.3)
         sphere.Update()
 
@@ -288,15 +287,14 @@ class BosdynVTKInterface():
         sphere_actor = bosdynWaypointActor(waypoint_id) #vtk.vtkActor()
         sphere_actor.SetMapper(sphere_mapper)
         sphere_actor.GetProperty().SetColor(1.0, 1.0, 1.0)
-        # sphere_actor.SetUserTransform(waypoint_tform_cloud)
 
         return sphere_actor
 
 
-    def create_waypoint_object(self, waypoint_id, homogeneous_tf):
+    def create_waypoint_actors(self, homogeneous_tf, waypoint_id):
 
         """
-        Creates a VTK object representing a waypoint and its point cloud.
+        Creates VTK actors representing a waypoint and its point cloud.
         :param mat: the 4x4 homogenous transform of the waypoint (np.array)
         :param waypoint_id: the waypoint id of the waypoint object we wish to create. (long string)
         :return: A vtkAssembly representing the waypoint (an axis) and its point cloud.
@@ -311,8 +309,8 @@ class BosdynVTKInterface():
         # actor.SetYAxisLabelText('')
         # actor.SetZAxisLabelText('')
         # actor.SetTotalLength(0.2, 0.2, 0.2)
-        point_cloud_actor = self.create_point_cloud_object(waypoints, snapshots, waypoint_id)
-        sphere_center_actor = self.create_waypoint_center_object(homogeneous_tf, waypoint_id)
+        point_cloud_actor = self.create_point_cloud_object(homogeneous_tf, waypoint_id)
+        sphere_center_actor = self.make_sphere_actor(homogeneous_tf, waypoint_id)
         # TODO: Add Label here as well
         
         # assembly.AddPart(actor)
@@ -326,7 +324,7 @@ class BosdynVTKInterface():
         return sphere_center_actor
 
 
-    def make_line(self, pt_A, pt_B, renderer):
+    def make_line_actor(self, pt_A, pt_B, renderer):
         """
         Creates a VTK object which is a white line between two points.
         :param pt_A: starting point of the line.
@@ -344,6 +342,7 @@ class BosdynVTKInterface():
         actor.SetMapper(mapper)
         actor.GetProperty().SetLineWidth(2)
         actor.GetProperty().SetColor(0.7, 0.7, 0.7)
+        actor.PickableOff()
         renderer.AddActor(actor)
         return actor
 
@@ -357,6 +356,7 @@ class BosdynVTKInterface():
         coord = actor.GetPositionCoordinate()
         coord.SetCoordinateSystemToWorld()
         coord.SetValue((pt[0], pt[1], pt[2]))
+        actor.PickableOff()
         return actor
 
     def make_text(self, name, pt, renderer):
@@ -376,7 +376,7 @@ class BosdynVTKInterface():
         # Concatenate the edge transform.
         world_tform_to_wp = np.dot(world_tform_curr_wp, curr_wp_tform_to_wp)
         # Make a line between the current waypoint and the neighbor.
-        self.make_line(world_tform_curr_wp[:3, 3], world_tform_to_wp[:3, 3], renderer)
+        self.make_line_actor(world_tform_curr_wp[:3, 3], world_tform_to_wp[:3, 3], renderer)
         return world_tform_to_wp
 
     def create_anchored_graph_objects(self):
@@ -400,7 +400,7 @@ class BosdynVTKInterface():
             if waypoint.id in current_anchors:
                 seed_tform_waypoint = SE3Pose.from_proto(
                     current_anchors[waypoint.id].seed_tform_waypoint).to_matrix()
-                waypoint_object = self.create_waypoint_object(waypoint.id, mat_to_vtk(seed_tform_waypoint))                
+                waypoint_object = self.create_waypoint_actors(mat_to_vtk(seed_tform_waypoint), waypoint.id)                
                 # print(f"seed_tform_waypoint id: {waypoint.id}: {seed_tform_waypoint}")
 
                 # waypoint_object.SetUserTransform(mat_to_vtk(seed_tform_waypoint))
@@ -444,10 +444,10 @@ class BosdynVTKInterface():
         renderer = self.vtkEngine.renderer
 
         # waypoint_id_to_actor = {}
-        self.waypoint_id_to_actor = {}
+        # self.waypoint_id_to_actor = {}
         # # Create VTK objects associated with each waypoint.
         # for waypoint in current_graph.waypoints:
-        #     waypoint_id_to_actor[waypoint.id] = self.create_waypoint_object(waypoint.id)
+        #     waypoint_id_to_actor[waypoint.id] = self.create_waypoint_actors(waypoint.id)
         # TODO: Do ^^^ as you are performing breadth-first search
 
         # Now, perform a breadth first search of the graph starting from an arbitrary waypoint. Graph nav graphs
@@ -463,8 +463,7 @@ class BosdynVTKInterface():
         # Breadth first search.
         while len(queue) > 0:
             # Visit a waypoint.
-            curr_element = queue[0]
-            queue.pop(0)
+            curr_element = queue.pop(0)
             curr_waypoint = curr_element[0]
             if curr_waypoint.id in visited:
                 continue
@@ -473,10 +472,10 @@ class BosdynVTKInterface():
             # We now know the global pose of this waypoint, so set the pose.
             # waypoint_id_to_actor[curr_waypoint.id].SetUserTransform(mat_to_vtk(curr_element[1]))
             world_tform_current_waypoint = curr_element[1]
-            waypoint_actor = self.create_waypoint_object(curr_waypoint.id, world_tform_current_waypoint) #WAS mat_to_vtk()
-            self.waypoint_id_to_actor[waypoint_actor] = curr_waypoint.id
+            waypoint_actor = self.create_waypoint_actors(world_tform_current_waypoint,curr_waypoint.id ) #WAS mat_to_vtk()
+            # self.waypoint_id_to_actor[waypoint_actor] = curr_waypoint.id
             
-            # waypoint_id_to_actor[waypoint.id] = self.create_waypoint_object(waypoint.id)
+            # waypoint_id_to_actor[waypoint.id] = self.create_waypoint_actors(waypoint.id)
             # Add text to the waypoint.
             self.make_text(curr_waypoint.annotations.name, world_tform_current_waypoint[:3, 3], renderer)
 
@@ -566,11 +565,11 @@ class MouseInteractorHighLightActor(vtkInteractorStyleTerrain):
         self.OnKeyPress()
         return
             
-    def SetSilhouette(self, silhouette):
-        self.Silhouette = silhouette
+    # def SetSilhouette(self, silhouette):
+    #     self.Silhouette = silhouette
 
-    def SetSilhouetteActor(self, silhouetteActor):
-        self.SilhouetteActor = silhouetteActor
+    # def SetSilhouetteActor(self, silhouetteActor):
+    #     self.SilhouetteActor = silhouetteActor
 
    
 def main():
