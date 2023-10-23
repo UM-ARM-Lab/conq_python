@@ -133,9 +133,6 @@ class SpotMap():
                 f'Loaded graph with {len(self.graph.waypoints)} waypoints, {len(self.graph.edges)} edges, '
                 f'{len(self.graph.anchoring.anchors)} anchors, and {len(self.graph.anchoring.objects)} anchored world objects'
             )
-            # print out __dict__ of first waypoint
-            # print(f"waypoints dictionary: {self.waypoints}")
-            # print(f"waypoint 1: {self.waypoints[1].__dict__}")
 
 class bosdynWaypointActor(vtk.vtkActor):
     def __init__(self, waypoint_id):
@@ -170,7 +167,11 @@ class VTKEngine():
         # else:
         #     avg_pos = bosdyn_vtk_interface.create_graph_objects()
         avg_pos = bosdyn_vtk_interface.create_graph_objects()
-        
+        camera_pos = avg_pos + np.array([-1.0, 0.0, 5.0])
+        camera = self.renderer.GetActiveCamera()
+        camera.SetViewUp(0.0, 0.0, 1.0)
+        camera.SetPosition(camera_pos[0], camera_pos[1], camera_pos[2])
+
         # Create the silhouette pipeline, the input data will be set in the
         # interactor
         silhouette = vtkPolyDataSilhouette()
@@ -213,7 +214,6 @@ class BosdynVTKInterface():
     """
     def __init__(self, map, vtk_renderer):
         self.map = map
-        # self.vtkEngine = vtk_engine
         self.renderer = vtk_renderer
 
 
@@ -252,7 +252,6 @@ class BosdynVTKInterface():
         """
         Create a VTK actor representing the point cloud in a snapshot. 
         :param point_cloud_data: (3xN) point cloud data (np.array)
-        :param homogeneous_tf: the 4x4 homogenous transform of the waypoint about which the point cloud is centered (np.array)
         :param waypoint_id: the waypoint ID of the waypoint whose point cloud we want to render.
         """
         poly_data = numpy_to_poly_data(point_cloud_data) 
