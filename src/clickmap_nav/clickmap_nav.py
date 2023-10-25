@@ -1,6 +1,7 @@
 # !/usr/bin/env python
 
 from vtkmodules.vtkCommonColor import vtkNamedColors
+from vtkmodules.vtkCommonCore import Callback
 from vtkmodules.vtkFiltersHybrid import vtkPolyDataSilhouette
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTerrain, vtkInteractorStyleTrackballCamera
 from vtkmodules.vtkRenderingCore import (
@@ -484,10 +485,16 @@ class SpotCommandInteractorStyle(vtkInteractorStyleTerrain):
         self.LastPickedActor = None
         self.Silhouette = silhouette
         self.SilhouetteActor = silhouetteActor
+        self.observers = {}
 
+    def addObserver(self, event, callback):
+        if event in self.observers:
+            self.observers[event].append(callback)
 
-    def actorSelectedCallback(self, bosdyn_vtk_actor):
-        print(f"Actor selected: {bosdyn_vtk_actor.waypoint_id}")
+    def notifyObservers(self, event, data):
+        for callback in self.observers.get(event, []):
+            callback(data)
+
     
     def onKeyPressEvent(self, obj, event):
         key = self.GetInteractor().GetKeySym()
@@ -500,7 +507,8 @@ class SpotCommandInteractorStyle(vtkInteractorStyleTerrain):
             actor = picker.GetActor()
 
             if actor:
-                self.actorSelectedCallback(actor)         
+                print(f"Actor selected: {actor.waypoint_id}")   
+                self.notifyObservers(key, actor.waypoint_id)         
 
             self.LastPickedActor = actor
 
