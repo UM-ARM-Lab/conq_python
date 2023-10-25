@@ -1,7 +1,7 @@
 # !/usr/bin/env python
 
 from vtkmodules.vtkCommonColor import vtkNamedColors
-from vtkmodules.vtkCommonCore import Callback
+# from vtkmodules.vtkCommonCore import Callback
 from vtkmodules.vtkFiltersHybrid import vtkPolyDataSilhouette
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTerrain, vtkInteractorStyleTrackballCamera
 from vtkmodules.vtkRenderingCore import (
@@ -119,9 +119,8 @@ class bosdynWaypointActor(vtk.vtkActor):
         self.waypoint_id = waypoint_id
 
 class VTKEngine():
-    def __init__(self, spot_map):
+    def __init__(self):
 
-        colors = vtkNamedColors()
         # A renderer and render window
         self.renderer = vtkRenderer()
         self.renderer.SetBackground(0.05,0.1,0.15) #colors.GetColor3d('SteelBlue'))
@@ -134,26 +133,17 @@ class VTKEngine():
         self.interactor = vtkRenderWindowInteractor()
         self.interactor.SetRenderWindow(self.renderWindow)
 
-        # Create an interface to create actors from the map datastructure
-        bosdyn_vtk_interface = BosdynVTKInterface(spot_map, self.renderer)
-
-        # # Display map objects extracted from file
-        # if anchoring:
-        #     if len(map.graph.anchoring.anchors) == 0:
-        #         print('No anchors to draw.')
-        #         sys.exit(-1)
-        #     avg_pos = bosdyn_vtk_interface.create_anchored_graph_objects()
-        # else:
-        #     avg_pos = bosdyn_vtk_interface.create_graph_objects()
-        avg_pos = bosdyn_vtk_interface.create_graph_objects()
-        camera_pos = avg_pos + np.array([-1.0, 0.0, 5.0])
+    def set_camera(self, camera_pos):
         camera = self.renderer.GetActiveCamera()
         camera.SetViewUp(0.0, 0.0, 1.0)
         camera.SetPosition(camera_pos[0], camera_pos[1], camera_pos[2])
 
+    def make_silhouette_actor(self):
         # TODO: Move the silhouetteActor generation somewhere else
         # Create the silhouette pipeline, the input data will be set in the
         # interactor
+
+        colors = vtkNamedColors()
         silhouette = vtkPolyDataSilhouette()
         silhouette.SetCamera(self.renderer.GetActiveCamera())
 
@@ -165,18 +155,16 @@ class VTKEngine():
         silhouetteActor.SetMapper(silhouetteMapper)
         silhouetteActor.GetProperty().SetColor(colors.GetColor3d("Tomato"))
         silhouetteActor.GetProperty().SetLineWidth(5)
+        return silhouette, silhouetteActor
 
-        # Set the custom type to use for interaction.
-        style = SpotCommandInteractorStyle(silhouette, silhouetteActor)
+    def set_interactor_style(self, style):
+
         style.SetDefaultRenderer(self.renderer)
 
         # Start
         self.interactor.Initialize()
         self.interactor.SetInteractorStyle(style)
         self.renderWindow.SetWindowName('HighlightWithSilhouette')
-        # self.renderWindow.Render()
-
-        # self.interactor.Start()
 
     def start(self):
         self.renderWindow.Render()
@@ -485,15 +473,6 @@ class SpotCommandInteractorStyle(vtkInteractorStyleTerrain):
         self.LastPickedActor = None
         self.Silhouette = silhouette
         self.SilhouetteActor = silhouetteActor
-        self.observers = {'space': []}
-
-    def add_external_observer(self, event, callback):
-        if event in self.observers:
-            self.observers[event].append(callback)
-
-    def notify_external_observers(self, event, data):
-        for callback in self.observers.get(event, []):
-            callback(data)
 
     
     def onKeyPressEvent(self, obj, event):
@@ -508,7 +487,6 @@ class SpotCommandInteractorStyle(vtkInteractorStyleTerrain):
 
             if actor:
                 print(f"Actor selected: {actor.waypoint_id}")   
-                self.notify_external_observers(key, actor.waypoint_id)         
 
             self.LastPickedActor = actor
 
@@ -532,7 +510,25 @@ def main():
 
     path, anchoring = get_program_parameters()
     spot_map = SpotMap(path)
-    vtk_engine = VTKEngine(spot_map)
+    vtk_engine = VTKEngine()
+
+        # Create an interface to create actors from the map datastructure
+    bosdyn_vtk_interface = BosdynVTKInterface(spot_map, vtk_engine.renderer)
+        # # Display map objects extracted from file
+        # if anchoring:
+        #     if len(map.graph.anchoring.anchors) == 0:
+        #         print('No anchors to draw.')
+        #         sys.exit(-1)
+        #     avg_pos = bosdyn_vtk_interface.create_anchored_graph_objects()
+        # else:
+        #     avg_pos = bosdyn_vtk_interface.create_graph_objects()
+    avg_pos = bosdyn_vtk_interface.create_graph_objects()
+    vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
+
+    silhouette, silhouetteActor = vtk_engine.make_silhouette_actor()
+    style = SpotCommandInteractorStyle(silhouette, silhouetteActor)
+    vtk_engine.set_interactor_style(style)
+
     vtk_engine.start()
 
 

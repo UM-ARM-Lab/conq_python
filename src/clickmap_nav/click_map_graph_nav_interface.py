@@ -5,45 +5,82 @@ import sys
 import bosdyn.client.channel
 import bosdyn.client.util
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
+import numpy as np
 
-from clickmap_nav import SpotMap, VTKEngine
+from clickmap_nav import SpotMap, VTKEngine, BosdynVTKInterface
+from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTerrain
+from vtkmodules.vtkRenderingCore import vtkPropPicker
 
-class ClickMapGraphNavInterface(GraphNavInterface):
-    def __init__(self, robot, upload_path):
-        super().__init__(robot, upload_path)
-        self.spot_map = SpotMap(upload_path)
-        self.vtk_engine = VTKEngine(self.spot_map)
-        self.interactor_style = self.vtk_engine.GetInteractorStyle()
-        self.interactor_style.add_external_observer('space', self._navigate_to()) 
+class ClickMapGraphNavInterface(GraphNavInterface, vtkInteractorStyleTerrain):
+    def __init__(self, robot, upload_path, silhouette=None, silhouetteActor=None):
+        GraphNavInterface.__init__(self,robot, upload_path)
+        vtkInteractorStyleTerrain.__init__(self)
         self._upload_graph_and_snapshots() # option 5
 
-    def run(self):
-        """Main loop for the click-map interface."""
-        # Controls determined in SpotCommandInteractorStyle
-        print("""
-            Controls:
-              (Right-Click)  Zoom
-              (Left-Click)   Rotate
-              (Scroll-Click) Pan
-            (1) Get localization state.
-            (2) Initialize localization to the nearest fiducial (must be in sight of a fiducial).
-            (3) Initialize localization to a specific waypoint (must be exactly at the waypoint).
-            (4) List the waypoint ids and edge ids of the map on the robot.
-            (5) (Re)Upload the graph and its snapshots.
-            (6) Navigate to. The destination waypoint id is the second argument.
-            (7) Navigate route. The (in-order) waypoint ids of the route are the arguments.
-            (8) Navigate to in seed frame. The following options are accepted for arguments: [x, y],
-                [x, y, yaw], [x, y, z, yaw], [x, y, z, qw, qx, qy, qz]. (Don't type the braces).
-                When a value for z is not specified, we use the current z height.
-                When only yaw is specified, the quaternion is constructed from the yaw.
-                When yaw is not specified, an identity quaternion is used.
-            (9) Clear the current graph.
-            (q) Exit.
-            """)
-        self.vtk_engine.start()
-        # vtk engine is callback-based, but I need it to return the waypoint id
-        # and the key that was pressed every time a key is pressed, then use i
-        # that to trigger the corresponding function in the GraphNavInterface class
+        self.AddObserver("KeyPressEvent", self.onKeyPressEvent)
+        self.LastPickedActor = None
+        self.Silhouette = silhouette
+        self.SilhouetteActor = silhouetteActor
+
+    
+    def onKeyPressEvent(self, obj, event):
+        key = self.GetInteractor().GetKeySym()
+        if key == 'space':
+            click_x, click_y = self.GetInteractor().GetEventPosition()
+
+            #  Pick actor at this location.
+            picker = vtkPropPicker()
+            picker.Pick(click_x, click_y, 0, self.GetDefaultRenderer())
+            actor = picker.GetActor()
+
+            if actor:
+                print(f"Actor selected: {actor.waypoint_id}")   
+                self._navigate_to(actor.waypoint_id)         
+
+            self.LastPickedActor = actor
+
+            # If we picked something before, remove the silhouette actor and
+            # generate a new one.
+            if self.LastPickedActor:
+                self.GetDefaultRenderer().RemoveActor(self.SilhouetteActor)
+
+                # Highlight the picked actor by generating a silhouette
+                self.Silhouette.SetInputData(self.LastPickedActor.GetMapper().GetInput())
+                self.GetDefaultRenderer().AddActor(self.SilhouetteActor)
+
+            # render the image
+            self.GetDefaultRenderer().GetRenderWindow().Render()
+        #  Forward events
+        self.OnKeyPress()
+        return
+
+    # def run(self):
+    #     """Main loop for the click-map interface."""
+    #     # Controls determined in SpotCommandInteractorStyle
+    #     print("""
+    #         Controls:
+    #           (Right-Click)  Zoom
+    #           (Left-Click)   Rotate
+    #           (Scroll-Click) Pan
+    #         (1) Get localization state.
+    #         (2) Initialize localization to the nearest fiducial (must be in sight of a fiducial).
+    #         (3) Initialize localization to a specific waypoint (must be exactly at the waypoint).
+    #         (4) List the waypoint ids and edge ids of the map on the robot.
+    #         (5) (Re)Upload the graph and its snapshots.
+    #         (6) Navigate to. The destination waypoint id is the second argument.
+    #         (7) Navigate route. The (in-order) waypoint ids of the route are the arguments.
+    #         (8) Navigate to in seed frame. The following options are accepted for arguments: [x, y],
+    #             [x, y, yaw], [x, y, z, yaw], [x, y, z, qw, qx, qy, qz]. (Don't type the braces).
+    #             When a value for z is not specified, we use the current z height.
+    #             When only yaw is specified, the quaternion is constructed from the yaw.
+    #             When yaw is not specified, an identity quaternion is used.
+    #         (9) Clear the current graph.
+    #         (q) Exit.
+    #         """)
+    #     self.vtk_engine.start()
+    #     # vtk engine is callback-based, but I need it to return the waypoint id
+    #     # and the key that was pressed every time a key is pressed, then use i
+    #     # that to trigger the corresponding function in the GraphNavInterface class
 
 
 
@@ -60,12 +97,34 @@ def main(argv):
     robot = sdk.create_robot(options.hostname)
     bosdyn.client.util.authenticate(robot)
 
-    graph_nav_interface = ClickMapGraphNavInterface(robot, options.upload_filepath)
+    spot_map = SpotMap(options.upload_filepath)
+    vtk_engine = VTKEngine()
+
+        # Create an interface to create actors from the map datastructure
+    bosdyn_vtk_interface = BosdynVTKInterface(spot_map, vtk_engine.renderer)
+        # # Display map objects extracted from file
+        # if anchoring:
+        #     if len(map.graph.anchoring.anchors) == 0:
+        #         print('No anchors to draw.')
+        #         sys.exit(-1)
+        #     avg_pos = bosdyn_vtk_interface.create_anchored_graph_objects()
+        # else:
+        #     avg_pos = bosdyn_vtk_interface.create_graph_objects()
+    avg_pos = bosdyn_vtk_interface.create_graph_objects()
+    vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
+
+    silhouette, silhouetteActor = vtk_engine.make_silhouette_actor()
+    style = ClickMapGraphNavInterface(robot, options.upload_filepath, silhouette, silhouetteActor)
+    vtk_engine.set_interactor_style(style)
+
+    # graph_nav_interface = ClickMapGraphNavInterface(robot, options.upload_filepath)
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
+
+
     try:
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
             try:
-                graph_nav_interface.run()
+                vtk_engine.start()
                 return True
             except Exception as exc:  # pylint: disable=broad-except
                 print(exc)
