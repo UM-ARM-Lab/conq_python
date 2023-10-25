@@ -485,13 +485,13 @@ class SpotCommandInteractorStyle(vtkInteractorStyleTerrain):
         self.LastPickedActor = None
         self.Silhouette = silhouette
         self.SilhouetteActor = silhouetteActor
-        self.observers = {}
+        self.observers = {'space': []}
 
-    def addObserver(self, event, callback):
+    def add_external_observer(self, event, callback):
         if event in self.observers:
             self.observers[event].append(callback)
 
-    def notifyObservers(self, event, data):
+    def notify_external_observers(self, event, data):
         for callback in self.observers.get(event, []):
             callback(data)
 
@@ -508,7 +508,7 @@ class SpotCommandInteractorStyle(vtkInteractorStyleTerrain):
 
             if actor:
                 print(f"Actor selected: {actor.waypoint_id}")   
-                self.notifyObservers(key, actor.waypoint_id)         
+                self.notify_external_observers(key, actor.waypoint_id)         
 
             self.LastPickedActor = actor
 

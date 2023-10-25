@@ -13,7 +13,8 @@ class ClickMapGraphNavInterface(GraphNavInterface):
         super().__init__(robot, upload_path)
         self.spot_map = SpotMap(upload_path)
         self.vtk_engine = VTKEngine(self.spot_map)
-        self.vtk_engine.interactor_style.add_observer('space', self._navigate_to()) 
+        self.interactor_style = self.vtk_engine.GetInteractorStyle()
+        self.interactor_style.add_external_observer('space', self._navigate_to()) 
         self._upload_graph_and_snapshots() # option 5
 
     def run(self):
