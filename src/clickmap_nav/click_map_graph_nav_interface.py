@@ -6,33 +6,29 @@ import bosdyn.client.channel
 import bosdyn.client.util
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 
+from clickmap_nav import SpotMap, VTKEngine
+
 class ClickMapGraphNavInterface(GraphNavInterface):
     def __init__(self, robot, upload_path):
         super().__init__(robot, upload_path)
-        self._command_dictionary = {
-            '1': self._get_localization_state,
-            '2': self._set_initial_localization_fiducial,
-            '3': self._set_initial_localization_waypoint,
-            '4': self._list_graph_waypoint_and_edge_ids,
-            '5': self._upload_graph_and_snapshots,
-            '6': self._navigate_to,
-            '7': self._navigate_route,
-            '8': self._navigate_to_anchor,
-            '9': self._clear_graph
-        }
-    
+        self.spot_map = SpotMap(upload_path)
+        self.vtk_engine = VTKEngine(self.spot_map)
+        self.vtk_engine.interactor_style.add_observer('space', self._navigate_to()) 
+        self._upload_graph_and_snapshots() # option 5
+
     def run(self):
-        """Main loop for the command line interface."""
-        while True:
-            print("""
-            Options:
+        """Main loop for the click-map interface."""
+        # Controls determined in SpotCommandInteractorStyle
+        print("""
+            Controls:
+              (Right-Click)  Zoom
+              (Left-Click)   Rotate
+              (Scroll-Click) Pan
             (1) Get localization state.
             (2) Initialize localization to the nearest fiducial (must be in sight of a fiducial).
-            (3) Initialize localization to a specific waypoint (must be exactly at the waypoint)."""
-
-                  """
+            (3) Initialize localization to a specific waypoint (must be exactly at the waypoint).
             (4) List the waypoint ids and edge ids of the map on the robot.
-            (5) Upload the graph and its snapshots.
+            (5) (Re)Upload the graph and its snapshots.
             (6) Navigate to. The destination waypoint id is the second argument.
             (7) Navigate route. The (in-order) waypoint ids of the route are the arguments.
             (8) Navigate to in seed frame. The following options are accepted for arguments: [x, y],
@@ -43,24 +39,12 @@ class ClickMapGraphNavInterface(GraphNavInterface):
             (9) Clear the current graph.
             (q) Exit.
             """)
-            try:
-                inputs = input('>')
-            except NameError:
-                pass
-            req_type = str.split(inputs)[0]
+        self.vtk_engine.start()
+        # vtk engine is callback-based, but I need it to return the waypoint id
+        # and the key that was pressed every time a key is pressed, then use i
+        # that to trigger the corresponding function in the GraphNavInterface class
 
-            if req_type == 'q':
-                self._on_quit()
-                break
 
-            if req_type not in self._command_dictionary:
-                print('Request not in the known command dictionary.')
-                continue
-            try:
-                cmd_func = self._command_dictionary[req_type]
-                cmd_func(str.split(inputs)[1:])
-            except Exception as e:
-                print(e)
 
 def main(argv):
     """Run the click_map graph_nav interface."""

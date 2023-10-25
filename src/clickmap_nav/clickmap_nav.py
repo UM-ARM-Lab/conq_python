@@ -37,7 +37,7 @@ def get_program_parameters():
 # and are also renderable by VTK. The process should essentially be to read in the data and as you are doing so 
 # create the VTK objects which are immediately rendered and stored in a graph object (as opposed to the current map, 
 # which is a set of dictionaries)
-# TODO: Use the SpotMap across both the armlab_graph_nav_command_line and the clickmap_nav
+# TODO: Use the SpotMap across both the armlab_graph_nav_command_line and the clickmap_nav (make a map class used by the GraphNavInterface base class)
 
 class SpotMap():
     """ 
@@ -479,53 +479,22 @@ class SpotCommandInteractorStyle(vtkInteractorStyleTerrain):
     Custom Interactor that allows the user to click on an actor and highlight it with a silhouette.
     """
     def __init__(self, silhouette=None, silhouetteActor=None):
+        super().__init__()
         self.AddObserver("KeyPressEvent", self.onKeyPressEvent)
         self.LastPickedActor = None
         self.Silhouette = silhouette
         self.SilhouetteActor = silhouetteActor
-        self._graph_nav_client = None
-
 
 
     def actorSelectedCallback(self, bosdyn_vtk_actor):
         print(f"Actor selected: {bosdyn_vtk_actor.waypoint_id}")
-        # # Get the actor from the graph and command spot to go
-        # destination_waypoint = bosdyn_vtk_actor.waypoint_id 
-        # if not destination_waypoint:
-        #     print("Actor doesn't have a correct waypoint id")
-        #     return
-        # if not self.toggle_power(should_power_on=True):
-        #     print('Failed to power on the robot, and cannot complete navigate to request.')
-        #     return
-
-        # nav_to_cmd_id = None
-        # # Navigate to the destination waypoint.
-        # is_finished = False
-        # while not is_finished:
-        #     # Issue the navigation command about twice a second such that it is easy to terminate the
-        #     # navigation command (with estop or killing the program).
-        #     try:
-        #         nav_to_cmd_id = self._graph_nav_client.navigate_to(destination_waypoint, 1.0,
-        #                                                            command_id=nav_to_cmd_id)
-        #     except ResponseError as e:
-        #         print(f'Error while navigating {e}')
-        #         break
-        #     time.sleep(.5)  # Sleep for half a second to allow for command execution.
-        #     # Poll the robot for feedback to determine if the navigation command is complete. Then sit
-        #     # the robot down once it is finished.
-        #     is_finished = self._check_success(nav_to_cmd_id)
-
-        # # Power off the robot if appropriate.
-        # if self._powered_on and not self._started_powered_on:
-        #     # Sit the robot down + power off after the navigation command is complete.
-        #     self.toggle_power(should_power_on=False) 
     
     def onKeyPressEvent(self, obj, event):
         key = self.GetInteractor().GetKeySym()
         if key == 'space':
             click_x, click_y = self.GetInteractor().GetEventPosition()
 
-            #  Pick from this location.
+            #  Pick actor at this location.
             picker = vtkPropPicker()
             picker.Pick(click_x, click_y, 0, self.GetDefaultRenderer())
             actor = picker.GetActor()
