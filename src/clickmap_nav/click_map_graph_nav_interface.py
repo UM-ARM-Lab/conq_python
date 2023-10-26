@@ -113,7 +113,7 @@ def main(argv):
     avg_pos = bosdyn_vtk_interface.create_graph_objects()
     vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
 
-    silhouette, silhouetteActor = vtk_engine.make_silhouette_actor()
+    silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
     style = ClickMapGraphNavInterface(robot, options.upload_filepath, silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
