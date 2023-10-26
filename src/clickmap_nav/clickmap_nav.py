@@ -199,7 +199,7 @@ class BosdynVTKInterface():
         self.renderer.AddActor(actor)
         return actor
 
-    def create_fiducial_object(self,world_object, waypoint, renderer):
+    def create_fiducial_object(self,world_object, waypoint ):
         """
         Creates a VTK object representing a fiducial.
         :param world_object: A WorldObject representing a fiducial.
@@ -214,13 +214,18 @@ class BosdynVTKInterface():
             world_object.apriltag_properties.frame_name_fiducial_filtered)
         waypoint_tform_odom = SE3Pose.from_proto(waypoint.waypoint_tform_ko)
         waypoint_tform_fiducial_filtered = (waypoint_tform_odom * odom_tform_fiducial_filtered)
-        waypoint_tform_fiducial_filtered_vtk = api_to_vtk_se3_pose(waypoint_tform_fiducial_filtered)
+
         # center = np.array([waypoint_tform_fiducial_filtered.x, waypoint_tform_fiducial_filtered.y, waypoint_tform_fiducial_filtered.z])
         actor = self.make_plane_actor(np.array([0.0,0.0,0.0]),
                                       np.array([0.0, 0.0, 1.0]), 
                                       np.array([2*fiducial_object.dimensions.x, 2*fiducial_object.dimensions.y]))
 
-        return actor, waypoint_tform_fiducial_filtered_vtk
+        return actor, waypoint_tform_fiducial_filtered.to_matrix()
+        # (fiducial_object, curr_wp_tform_fiducial) = self.create_fiducial_object(
+        #     fiducial, curr_waypoint, renderer)
+        # world_tform_fiducial = np.dot(world_tform_current_waypoint,
+        #                             vtk_to_mat(curr_wp_tform_fiducial))
+        # fiducial_object.SetUserTransform(mat_to_vtk(world_tform_fiducial))
 
     def make_point_cloud_actor(self, point_cloud_data, waypoint_id):
         """
@@ -434,18 +439,24 @@ class BosdynVTKInterface():
                         fiducial_properties = fiducial.apriltag_properties
                         fiducial_name = f"apriltag {fiducial_properties.tag_id}"
 
-                        # current_waypoint_tform_fiducial = get_a_tform_b(
+                        # # TODO: re-write to not used SetUserTransform, and also to not use create_fiducial_object (it shouldn't need a function)
+                        # # 1. get tf from waypoint to fiducial (broken)
+                        # curr_wp_tform_fiducial = get_a_tform_b(
                         #     fiducial.transforms_snapshot, ODOM_FRAME_NAME,
                         #     fiducial.apriltag_properties.frame_name_fiducial_filtered).to_matrix()
-                        
-                        # world_tform_fiducial = world_tform_current_waypoint * current_waypoint_tform_fiducial
-                        # self.make_plane_actor(world_tform_fiducial[:3, 3],
-                        #                       world_tform_fiducial[:3, 2],
-                        #                       np.array([2*fiducial_properties.dimensions.x, 2*fiducial_properties.dimensions.y]))
+                        # # 2. get tf from world to fiducial
+                        # world_tform_fiducial = world_tform_current_waypoint @ curr_wp_tform_fiducial 
+                        # # 3. create actor at world tf
+                        # fiducial_object = self.make_plane_actor(world_tform_fiducial[:3, 3],
+                        #                                         world_tform_fiducial[:3, 2],
+                        #                                         np.array([2*fiducial_properties.dimensions.x, 2*fiducial_properties.dimensions.y]))
+
+                        # # Working usage
                         (fiducial_object, curr_wp_tform_fiducial) = self.create_fiducial_object(
-                            fiducial, curr_waypoint, renderer)
-                        world_tform_fiducial = np.dot(world_tform_current_waypoint,
-                                                    vtk_to_mat(curr_wp_tform_fiducial))
+                            fiducial, curr_waypoint)
+                        # print(f"curr_wp_tform_fiducial: {curr_wp_tform_fiducial}")
+
+                        world_tform_fiducial = world_tform_current_waypoint @ curr_wp_tform_fiducial
                         fiducial_object.SetUserTransform(mat_to_vtk(world_tform_fiducial))
                         self.make_text_actor(fiducial_name, world_tform_fiducial[:3, 3])
 
