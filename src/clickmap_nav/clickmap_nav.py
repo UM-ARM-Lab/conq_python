@@ -182,6 +182,23 @@ class BosdynVTKInterface():
         silhouetteActor.GetProperty().SetLineWidth(5)
         return silhouette, silhouetteActor
 
+    def make_plane_actor(self, center, normal, dimensions):
+        plane_source = vtk.vtkPlaneSource()
+        plane_source.SetCenter(center[0], center[1], center[2])
+        plane_source.SetNormal(normal[0], normal[1], normal[2])
+        plane_source.Update()
+        plane = plane_source.GetOutput()
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputData(plane)
+
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(0.5, 0.7, 0.9)
+        actor.SetScale(dimensions[0], dimensions[1], 1.0)
+        actor.SetPickable(False)
+        self.renderer.AddActor(actor)
+        return actor
+
     def create_fiducial_object(self,world_object, waypoint, renderer):
         """
         Creates a VTK object representing a fiducial.
@@ -196,22 +213,14 @@ class BosdynVTKInterface():
             world_object.transforms_snapshot, ODOM_FRAME_NAME,
             world_object.apriltag_properties.frame_name_fiducial_filtered)
         waypoint_tform_odom = SE3Pose.from_proto(waypoint.waypoint_tform_ko)
-        waypoint_tform_fiducial_filtered = api_to_vtk_se3_pose(
-            waypoint_tform_odom * odom_tform_fiducial_filtered)
-        plane_source = vtk.vtkPlaneSource()
-        plane_source.SetCenter(0.0, 0.0, 0.0)
-        plane_source.SetNormal(0.0, 0.0, 1.0)
-        plane_source.Update()
-        plane = plane_source.GetOutput()
-        mapper = vtk.vtkPolyDataMapper()
-        mapper.SetInputData(plane)
+        waypoint_tform_fiducial_filtered = (waypoint_tform_odom * odom_tform_fiducial_filtered)
+        waypoint_tform_fiducial_filtered_vtk = api_to_vtk_se3_pose(waypoint_tform_fiducial_filtered)
+        # center = np.array([waypoint_tform_fiducial_filtered.x, waypoint_tform_fiducial_filtered.y, waypoint_tform_fiducial_filtered.z])
+        actor = self.make_plane_actor(np.array([0.0,0.0,0.0]),
+                                      np.array([0.0, 0.0, 1.0]), 
+                                      np.array([2*fiducial_object.dimensions.x, 2*fiducial_object.dimensions.y]))
 
-        actor = vtk.vtkActor()
-        actor.SetMapper(mapper)
-        actor.GetProperty().SetColor(0.5, 0.7, 0.9)
-        actor.SetScale(fiducial_object.dimensions.x, fiducial_object.dimensions.y, 1.0)
-        renderer.AddActor(actor)
-        return actor, waypoint_tform_fiducial_filtered
+        return actor, waypoint_tform_fiducial_filtered_vtk
 
     def make_point_cloud_actor(self, point_cloud_data, waypoint_id):
         """
@@ -422,12 +431,23 @@ class BosdynVTKInterface():
                 snapshot = current_waypoint_snapshots[curr_waypoint.snapshot_id]
                 for fiducial in snapshot.objects:
                     if fiducial.HasField('apriltag_properties'):
+                        fiducial_properties = fiducial.apriltag_properties
+                        fiducial_name = f"apriltag {fiducial_properties.tag_id}"
+
+                        # current_waypoint_tform_fiducial = get_a_tform_b(
+                        #     fiducial.transforms_snapshot, ODOM_FRAME_NAME,
+                        #     fiducial.apriltag_properties.frame_name_fiducial_filtered).to_matrix()
+                        
+                        # world_tform_fiducial = world_tform_current_waypoint * current_waypoint_tform_fiducial
+                        # self.make_plane_actor(world_tform_fiducial[:3, 3],
+                        #                       world_tform_fiducial[:3, 2],
+                        #                       np.array([2*fiducial_properties.dimensions.x, 2*fiducial_properties.dimensions.y]))
                         (fiducial_object, curr_wp_tform_fiducial) = self.create_fiducial_object(
                             fiducial, curr_waypoint, renderer)
                         world_tform_fiducial = np.dot(world_tform_current_waypoint,
                                                     vtk_to_mat(curr_wp_tform_fiducial))
                         fiducial_object.SetUserTransform(mat_to_vtk(world_tform_fiducial))
-                        self.make_text_actor(str(fiducial.apriltag_properties.tag_id), world_tform_fiducial[:3, 3])
+                        self.make_text_actor(fiducial_name, world_tform_fiducial[:3, 3])
 
             # Now, for each edge, walk along the edge and concatenate the transform to the neighbor.
             for edge in current_graph.edges:
