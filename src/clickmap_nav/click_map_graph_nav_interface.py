@@ -14,36 +14,11 @@ from vtkmodules.vtkRenderingCore import vtkPropPicker
 class ClickMapGraphNavInterface(GraphNavInterface, HighlightInteractorStyle): #vtkInteractorStyleTerrain):
     def __init__(self, robot, upload_path, silhouette=None, silhouetteActor=None):
         GraphNavInterface.__init__(self,robot, upload_path)
-        HighlightInteractorStyle.__init__(self)
-        # vtkInteractorStyleTerrain.__init__(self)
-        # self.AddObserver("KeyPressEvent", self.onKeyPressEvent)
-        # self.LastPickedActor = None
-        # self.Silhouette = silhouette
-        # self.SilhouetteActor = silhouetteActor
+        HighlightInteractorStyle.__init__(self, silhouette, silhouetteActor)
 
         self._upload_graph_and_snapshots() # option 5
         self.print_controls()
 
-
-    # def highlight_keypress_location(self):
-    #     """ Get keypress and highlight the actor at the location of the keypress.
-    #     :return: the actor that was selected
-    #     """
-    #     click_x, click_y = self.GetInteractor().GetEventPosition()
-    #     picker = vtkPropPicker()
-    #     picker.Pick(click_x, click_y, 0, self.GetDefaultRenderer())
-    #     actor = picker.GetActor()
-    #     if actor:
-    #         print(f"Actor selected: {actor.waypoint_id}")   
-        
-    #     # update silhouette
-    #     self.LastPickedActor = actor
-    #     if self.LastPickedActor:
-    #         self.GetDefaultRenderer().RemoveActor(self.SilhouetteActor)
-    #         self.Silhouette.SetInputData(self.LastPickedActor.GetMapper().GetInput())
-    #         self.GetDefaultRenderer().AddActor(self.SilhouetteActor)
-    #         self.GetDefaultRenderer().GetRenderWindow().Render()
-    #     return actor 
     
     def onKeyPressEvent(self, obj, event):
         key = self.GetInteractor().GetKeySym()
