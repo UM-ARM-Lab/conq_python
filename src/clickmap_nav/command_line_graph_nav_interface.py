@@ -67,7 +67,7 @@ def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('-u', '--upload-filepath',
                         help='Full filepath to graph and snapshots to be uploaded.', required=True)
-    bosdyn.client.util.add_base_arguments(parser)
+    bosdyn.client.util.add_base_arguments(parser) #includes IP address
     options = parser.parse_args(argv)
 
     # Setup and authenticate the robot.
