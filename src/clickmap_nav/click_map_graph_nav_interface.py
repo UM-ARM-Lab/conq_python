@@ -16,6 +16,7 @@ class ClickMapGraphNavInterface(GraphNavInterface, HighlightInteractorStyle): #v
         GraphNavInterface.__init__(self,robot, upload_path)
         HighlightInteractorStyle.__init__(self, silhouette, silhouetteActor)
 
+        self._list_graph_waypoint_and_edge_ids()
         self._upload_graph_and_snapshots() # option 5
         self.print_controls()
 
@@ -32,17 +33,23 @@ class ClickMapGraphNavInterface(GraphNavInterface, HighlightInteractorStyle): #v
         elif key == '4':
             if actor:
                 print(f"initializing localization to waypoint {actor.waypoint_id}")
-                self._set_initial_localization_waypoint(actor.waypoint_id)
+                self._set_initial_localization_waypoint([actor.waypoint_id])
         elif key == '5':
             print(f"(Re)uploading graph and snapshots")
             self._upload_graph_and_snapshots()
         elif key == '6':
             if actor:
                 print(f"navigating to: {actor.waypoint_id}")
-                self._navigate_to(actor.waypoint_id)
+                self._navigate_to([actor.waypoint_id])
+        elif key == '8':
+            self._list_graph_waypoint_and_edge_ids()
+            self.print_controls()
         elif key == '9':
             print(f"clearing graph")
             self._clear_graph()
+        elif key == 'q':
+            pass
+            # TODO: figure out how to do same as 'e' for exit
 
         #  Forward events
         self.OnKeyPress()
@@ -65,6 +72,7 @@ class ClickMapGraphNavInterface(GraphNavInterface, HighlightInteractorStyle): #v
             (4) Initialize localization to a specific waypoint (must be exactly at the waypoint).
             (5) (Re)Upload the graph and its snapshots.
             (6) Navigate to. The destination waypoint id is the second argument.
+            (8) List the waypoint ids and edge ids of the map on the robot.
             (9) Clear the current graph.
             (q) Exit.
             """)
