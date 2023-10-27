@@ -296,7 +296,7 @@ class BosdynVTKInterface():
         return sphere_actor
 
 
-    def make_line_actor(self, pt_A, pt_B, renderer):
+    def make_line_actor(self, pt_A, pt_B):
         """
         Creates a VTK object which is a white line between two points.
         :param pt_A: starting point of the line.
@@ -315,7 +315,7 @@ class BosdynVTKInterface():
         actor.GetProperty().SetLineWidth(2)
         actor.GetProperty().SetColor(0.7, 0.7, 0.7)
         actor.PickableOff()
-        renderer.AddActor(actor)
+        self.renderer.AddActor(actor)
         return actor
 
     def make_text_actor(self, display_text, xyz_location):
@@ -333,12 +333,6 @@ class BosdynVTKInterface():
         return actor
 
 
-    def create_edge_object(self, curr_wp_tform_to_wp, world_tform_curr_wp, renderer):
-        # Concatenate the edge transform.
-        world_tform_to_wp = np.dot(world_tform_curr_wp, curr_wp_tform_to_wp)
-        # Make a line between the current waypoint and the neighbor.
-        self.make_line_actor(world_tform_curr_wp[:3, 3], world_tform_to_wp[:3, 3], renderer)
-        return world_tform_to_wp
 
     # TODO: Simplify the data reading process so that this function is either unnecessary or merged with the create_graph_objects function
     def create_anchored_graph_objects(self):
@@ -466,20 +460,26 @@ class BosdynVTKInterface():
                 if edge.id.from_waypoint == curr_waypoint.id and edge.id.to_waypoint not in visited_ids:
                     current_waypoint_tform_to_waypoint = SE3Pose.from_proto(
                         edge.from_tform_to).to_matrix()
-                    world_tform_to_wp = self.create_edge_object(current_waypoint_tform_to_waypoint,
-                                                        world_tform_current_waypoint, renderer)
+                    
+                    #concatenate the edge transform
+                    world_tform_to_wp = np.dot(world_tform_current_waypoint, current_waypoint_tform_to_waypoint)
+                    avg_pos += world_tform_to_wp[:3, 3]
+
                     # Add the neighbor to the queue.
                     queue.append((current_waypoints[edge.id.to_waypoint], world_tform_to_wp))
-                    avg_pos += world_tform_to_wp[:3, 3]
+                    self.make_line_actor(world_tform_current_waypoint[:3, 3], world_tform_to_wp[:3, 3])
+
                 # If the edge is directed toward us...
                 elif edge.id.to_waypoint == curr_waypoint.id and edge.id.from_waypoint not in visited_ids:
                     current_waypoint_tform_from_waypoint = (SE3Pose.from_proto(
                         edge.from_tform_to).inverse()).to_matrix()
-                    world_tform_from_wp = self.create_edge_object(current_waypoint_tform_from_waypoint,
-                                                            world_tform_current_waypoint, renderer)
+                    # concatenate the edge transform
+                    world_tform_from_wp = np.dot(world_tform_current_waypoint, current_waypoint_tform_from_waypoint)
+                    avg_pos += world_tform_from_wp[:3, 3]
+
                     # Add the neighbor to the queue.
                     queue.append((current_waypoints[edge.id.from_waypoint], world_tform_from_wp))
-                    avg_pos += world_tform_from_wp[:3, 3]
+                    self.make_line_actor(world_tform_current_waypoint[:3, 3], world_tform_from_wp[:3, 3])
 
         # Compute the average waypoint position to place the camera appropriately.
         avg_pos /= len(current_waypoints)
@@ -523,9 +523,8 @@ class HighlightInteractorStyle(vtkInteractorStyleTerrain):
     def onKeyPressEvent(self, obj, event):
         key = self.GetInteractor().GetKeySym()
         actor = self.highlight_keypress_location()
-        if key == 'space':
-            if actor:
-                print(f"spacebar clicked on actor: {actor.waypoint_id}")   
+        if actor:
+            print(f"'{key}' clicked on actor {actor.waypoint_id}")   
         #  Forward events
         self.OnKeyPress()
         return
