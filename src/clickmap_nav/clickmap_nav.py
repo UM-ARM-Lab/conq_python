@@ -491,7 +491,7 @@ class BosdynVTKInterface():
 # to the rendering window (defines trackball mode), which supports vtkRenderWindowInteractor. 
 # vtkRenderWindowInteractor implements platform dependent key/mouse routing and timer control, 
 # which forwards events in a neutral form to vtkInteractorStyle.
-class SpotCommandInteractorStyle(vtkInteractorStyleTerrain):
+class HighlightInteractorStyle(vtkInteractorStyleTerrain):
     """ 
     Custom Interactor that allows the user to click on an actor and highlight it with a silhouette.
     """
@@ -502,40 +502,32 @@ class SpotCommandInteractorStyle(vtkInteractorStyleTerrain):
         self.Silhouette = silhouette
         self.SilhouetteActor = silhouetteActor
 
+    def highlight_keypress_location(self):
+        """ Get keypress and highlight the actor at the location of the keypress.
+        :return: the actor that was selected
+        """
+        click_x, click_y = self.GetInteractor().GetEventPosition()
+        picker = vtkPropPicker()
+        picker.Pick(click_x, click_y, 0, self.GetDefaultRenderer())
+        actor = picker.GetActor()
+        if actor:
+            print(f"Actor selected: {actor.waypoint_id}")   
+        
+        # update silhouette
+        self.LastPickedActor = actor
+        if self.LastPickedActor:
+            self.GetDefaultRenderer().RemoveActor(self.SilhouetteActor)
+            self.Silhouette.SetInputData(self.LastPickedActor.GetMapper().GetInput())
+            self.GetDefaultRenderer().AddActor(self.SilhouetteActor)
+            self.GetDefaultRenderer().GetRenderWindow().Render()
+        return actor 
     
     def onKeyPressEvent(self, obj, event):
         key = self.GetInteractor().GetKeySym()
+        actor = self.highlight_keypress_location()
         if key == 'space':
-            click_x, click_y = self.GetInteractor().GetEventPosition()
-
-            #  Pick actor at this location.
-            picker = vtkPropPicker()
-            picker.Pick(click_x, click_y, 0, self.GetDefaultRenderer())
-            actor = picker.GetActor()
-
             if actor:
-                print(f"Actor selected: {actor.waypoint_id}")   
-
-            self.LastPickedActor = actor
-
-            # If we picked something before, remove the silhouette actor and
-            # generate a new one.
-            if self.LastPickedActor:
-                self.GetDefaultRenderer().RemoveActor(self.SilhouetteActor)
-
-                #TODO: try to remove the need for the self.Silhouette, and only use the actor
-                # # get the vtkPolyDataSilhoutette object from the actor
-                # silhouette = vtkPolyDataSilhouette()
-                # silhouette.SetCamera(self.GetDefaultRenderer().GetActiveCamera())
-
-                # Reset the input vtkPolyDataSilhouette for our actor
-
-                # Highlight the picked actor by generating a silhouette
-                self.Silhouette.SetInputData(self.LastPickedActor.GetMapper().GetInput())
-                self.GetDefaultRenderer().AddActor(self.SilhouetteActor)
-
-            # render the image
-            self.GetDefaultRenderer().GetRenderWindow().Render()
+                print(f"spacebar: {actor.waypoint_id}")   
         #  Forward events
         self.OnKeyPress()
         return
@@ -561,7 +553,7 @@ def main():
     vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
 
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
-    style = SpotCommandInteractorStyle(silhouette, silhouetteActor)
+    style = HighlightInteractorStyle(silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
     vtk_engine.start()

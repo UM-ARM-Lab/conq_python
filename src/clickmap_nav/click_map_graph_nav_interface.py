@@ -7,80 +7,92 @@ import bosdyn.client.util
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 import numpy as np
 
-from clickmap_nav import SpotMap, VTKEngine, BosdynVTKInterface
+from clickmap_nav import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTerrain
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
-class ClickMapGraphNavInterface(GraphNavInterface, vtkInteractorStyleTerrain):
+class ClickMapGraphNavInterface(GraphNavInterface, HighlightInteractorStyle): #vtkInteractorStyleTerrain):
     def __init__(self, robot, upload_path, silhouette=None, silhouetteActor=None):
         GraphNavInterface.__init__(self,robot, upload_path)
-        vtkInteractorStyleTerrain.__init__(self)
+        HighlightInteractorStyle.__init__(self)
+        # vtkInteractorStyleTerrain.__init__(self)
+        # self.AddObserver("KeyPressEvent", self.onKeyPressEvent)
+        # self.LastPickedActor = None
+        # self.Silhouette = silhouette
+        # self.SilhouetteActor = silhouetteActor
+
         self._upload_graph_and_snapshots() # option 5
+        self.print_controls()
 
-        self.AddObserver("KeyPressEvent", self.onKeyPressEvent)
-        self.LastPickedActor = None
-        self.Silhouette = silhouette
-        self.SilhouetteActor = silhouetteActor
 
+    # def highlight_keypress_location(self):
+    #     """ Get keypress and highlight the actor at the location of the keypress.
+    #     :return: the actor that was selected
+    #     """
+    #     click_x, click_y = self.GetInteractor().GetEventPosition()
+    #     picker = vtkPropPicker()
+    #     picker.Pick(click_x, click_y, 0, self.GetDefaultRenderer())
+    #     actor = picker.GetActor()
+    #     if actor:
+    #         print(f"Actor selected: {actor.waypoint_id}")   
+        
+    #     # update silhouette
+    #     self.LastPickedActor = actor
+    #     if self.LastPickedActor:
+    #         self.GetDefaultRenderer().RemoveActor(self.SilhouetteActor)
+    #         self.Silhouette.SetInputData(self.LastPickedActor.GetMapper().GetInput())
+    #         self.GetDefaultRenderer().AddActor(self.SilhouetteActor)
+    #         self.GetDefaultRenderer().GetRenderWindow().Render()
+    #     return actor 
     
     def onKeyPressEvent(self, obj, event):
         key = self.GetInteractor().GetKeySym()
-        if key == 'space':
-            click_x, click_y = self.GetInteractor().GetEventPosition()
-
-            #  Pick actor at this location.
-            picker = vtkPropPicker()
-            picker.Pick(click_x, click_y, 0, self.GetDefaultRenderer())
-            actor = picker.GetActor()
-
+        actor = self.highlight_keypress_location()
+        if key == '1':
+            self._get_localization_state()
+        elif key == '2':
             if actor:
-                print(f"Actor selected: {actor.waypoint_id}")   
-                self._navigate_to(actor.waypoint_id)         
+                print(f"initializing localization to nearest fiducial")
+                self._set_initial_localization_fiducial()
+        elif key == '4':
+            if actor:
+                print(f"initializing localization to waypoint {actor.waypoint_id}")
+                self._set_initial_localization_waypoint(actor.waypoint_id)
+        elif key == '5':
+            print(f"(Re)uploading graph and snapshots")
+            self._upload_graph_and_snapshots()
+        elif key == '6':
+            if actor:
+                print(f"navigating to: {actor.waypoint_id}")
+                self._navigate_to(actor.waypoint_id)
+        elif key == '9':
+            print(f"clearing graph")
+            self._clear_graph()
 
-            self.LastPickedActor = actor
-
-            # If we picked something before, remove the silhouette actor and
-            # generate a new one.
-            if self.LastPickedActor:
-                self.GetDefaultRenderer().RemoveActor(self.SilhouetteActor)
-
-                # Highlight the picked actor by generating a silhouette
-                self.Silhouette.SetInputData(self.LastPickedActor.GetMapper().GetInput())
-                self.GetDefaultRenderer().AddActor(self.SilhouetteActor)
-
-            # render the image
-            self.GetDefaultRenderer().GetRenderWindow().Render()
         #  Forward events
         self.OnKeyPress()
         return
 
-    # def run(self):
-    #     """Main loop for the click-map interface."""
-    #     # Controls determined in SpotCommandInteractorStyle
-    #     print("""
-    #         Controls:
-    #           (Right-Click)  Zoom
-    #           (Left-Click)   Rotate
-    #           (Scroll-Click) Pan
-    #         (1) Get localization state.
-    #         (2) Initialize localization to the nearest fiducial (must be in sight of a fiducial).
-    #         (3) Initialize localization to a specific waypoint (must be exactly at the waypoint).
-    #         (4) List the waypoint ids and edge ids of the map on the robot.
-    #         (5) (Re)Upload the graph and its snapshots.
-    #         (6) Navigate to. The destination waypoint id is the second argument.
-    #         (7) Navigate route. The (in-order) waypoint ids of the route are the arguments.
-    #         (8) Navigate to in seed frame. The following options are accepted for arguments: [x, y],
-    #             [x, y, yaw], [x, y, z, yaw], [x, y, z, qw, qx, qy, qz]. (Don't type the braces).
-    #             When a value for z is not specified, we use the current z height.
-    #             When only yaw is specified, the quaternion is constructed from the yaw.
-    #             When yaw is not specified, an identity quaternion is used.
-    #         (9) Clear the current graph.
-    #         (q) Exit.
-    #         """)
-    #     self.vtk_engine.start()
-    #     # vtk engine is callback-based, but I need it to return the waypoint id
-    #     # and the key that was pressed every time a key is pressed, then use i
-    #     # that to trigger the corresponding function in the GraphNavInterface class
+    def print_controls(self):
+        print("""
+            Controls:
+              (Right-Click)  Zoom
+              (Left-Click)   Rotate
+              (Scroll-Click) Pan
+              (r) reset the camera
+              (e) exit the program
+              (f) set a new camera focal point and fly towards that point
+              (u) invokes the user event
+              (3) toggles between stereo and non-stero mode
+              (l) toggles on/off a latitude/longitude markers that can be used to estimate/control position.
+            (1) Get localization state.
+            (2) Initialize localization to the nearest fiducial (must be in sight of a fiducial).
+            (4) Initialize localization to a specific waypoint (must be exactly at the waypoint).
+            (5) (Re)Upload the graph and its snapshots.
+            (6) Navigate to. The destination waypoint id is the second argument.
+            (9) Clear the current graph.
+            (q) Exit.
+            """)
 
 
 
