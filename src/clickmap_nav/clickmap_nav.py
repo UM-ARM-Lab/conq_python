@@ -509,9 +509,7 @@ class HighlightInteractorStyle(vtkInteractorStyleTerrain):
         click_x, click_y = self.GetInteractor().GetEventPosition()
         picker = vtkPropPicker()
         picker.Pick(click_x, click_y, 0, self.GetDefaultRenderer())
-        actor = picker.GetActor()
-        if actor:
-            print(f"Actor selected: {actor.waypoint_id}")   
+        actor = picker.GetActor()  
         
         # update silhouette
         self.LastPickedActor = actor
@@ -527,7 +525,7 @@ class HighlightInteractorStyle(vtkInteractorStyleTerrain):
         actor = self.highlight_keypress_location()
         if key == 'space':
             if actor:
-                print(f"spacebar: {actor.waypoint_id}")   
+                print(f"spacebar clicked on actor: {actor.waypoint_id}")   
         #  Forward events
         self.OnKeyPress()
         return

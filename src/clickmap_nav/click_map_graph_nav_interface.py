@@ -30,13 +30,16 @@ class ClickMapGraphNavInterface(GraphNavInterface, HighlightInteractorStyle): #v
             if actor:
                 print(f"initializing localization to nearest fiducial")
                 self._set_initial_localization_fiducial()
+                self.print_controls()
         elif key == '4':
             if actor:
                 print(f"initializing localization to waypoint {actor.waypoint_id}")
                 self._set_initial_localization_waypoint([actor.waypoint_id])
+                self.print_controls()
         elif key == '5':
             print(f"(Re)uploading graph and snapshots")
             self._upload_graph_and_snapshots()
+            self.print_controls()
         elif key == '6':
             if actor:
                 print(f"navigating to: {actor.waypoint_id}")
@@ -47,9 +50,11 @@ class ClickMapGraphNavInterface(GraphNavInterface, HighlightInteractorStyle): #v
         elif key == '9':
             print(f"clearing graph")
             self._clear_graph()
+            self.print_controls()
         elif key == 'q':
-            pass
             # TODO: figure out how to do same as 'e' for exit
+            self._on_quit()
+
 
         #  Forward events
         self.OnKeyPress()
