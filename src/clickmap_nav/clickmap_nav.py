@@ -35,6 +35,13 @@ from bosdyn.client.frame_helpers import *
 from bosdyn.client.math_helpers import *
 from bosdyn_vtk_utils import api_to_vtk_se3_pose, numpy_to_poly_data, vtk_to_mat, mat_to_vtk
 
+import bosdyn.client.channel
+import bosdyn.client.util
+
+import sdk_examples.graph_nav_command_line as GraphNavInterface
+
+
+
 # from sdk_examples.graph_nav_command_line import GraphNavInterface
 # import bosdyn.client.channel
 # import bosdyn.client.util
@@ -528,7 +535,7 @@ class MouseInteractorHighLightActor(vtkInteractorStyleTerrain):
     def actorSelectedCallback(self, bosdyn_vtk_actor):
         pass
         # Get the actor from the graph and command spot to go
-        # destination_waypoint = bosdyn_vtk_actor.waypoint_id 
+        destination_waypoint = bosdyn_vtk_actor.waypoint_id 
         # if not destination_waypoint:
         #     print("Actor doesn't have a correct waypoint id")
         #     return
@@ -597,12 +604,14 @@ def main():
 
     vtk_engine.start()
 
-    #  # Setup and authenticate the robot.
-    # sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
-    # robot = sdk.create_robot(options.hostname)
-    # bosdyn.client.util.authenticate(robot)
 
-    # graph_nav_command_line = GraphNavInterface(robot, options.upload_filepath)
+    #  # Setup and authenticate the robot.
+    sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
+    #From sdk.create_robot(address)... default address is 10.0.0.3. Worth a try?
+    robot = sdk.create_robot('10.0.0.3')
+    bosdyn.client.util.authenticate(robot)
+
+    graph_nav_command_line = GraphNavInterface(robot, path)
     # lease_client = robot.ensure_client(LeaseClient.default_service_name)
     # try:
     #     with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
