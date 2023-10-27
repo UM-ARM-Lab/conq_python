@@ -14,6 +14,7 @@ from vtkmodules.vtkRenderingCore import (
 )
 import argparse
 import os
+import sys
 import numpy as np
 import vtk
 
@@ -120,14 +121,14 @@ class bosdynWaypointActor(vtk.vtkActor):
 
 class VTKEngine():
     def __init__(self):
-
-        # A renderer and render window
+        # Reneder, render window, and Interactor
         self.renderer = vtkRenderer()
         self.renderer.SetBackground(0.05,0.1,0.15) #colors.GetColor3d('SteelBlue'))
 
         self.renderWindow = vtkRenderWindow()
         self.renderWindow.SetSize(640, 480)
         self.renderWindow.AddRenderer(self.renderer)
+        self.renderWindow.SetWindowName('Spot VTK Map')
 
         # An interactor
         self.interactor = vtkRenderWindowInteractor()
@@ -138,21 +139,14 @@ class VTKEngine():
         camera.SetViewUp(0.0, 0.0, 1.0)
         camera.SetPosition(camera_pos[0], camera_pos[1], camera_pos[2])
 
-
-
     def set_interactor_style(self, style):
-
         style.SetDefaultRenderer(self.renderer)
-
-        # Start
         self.interactor.Initialize()
         self.interactor.SetInteractorStyle(style)
-        self.renderWindow.SetWindowName('HighlightWithSilhouette')
 
     def start(self):
         self.renderWindow.Render()
         self.interactor.Start()
-
 
     def render(self):
         self.renderWindow.Render()
@@ -221,11 +215,7 @@ class BosdynVTKInterface():
                                       np.array([2*fiducial_object.dimensions.x, 2*fiducial_object.dimensions.y]))
 
         return actor, waypoint_tform_fiducial_filtered.to_matrix()
-        # (fiducial_object, curr_wp_tform_fiducial) = self.create_fiducial_object(
-        #     fiducial, curr_waypoint, renderer)
-        # world_tform_fiducial = np.dot(world_tform_current_waypoint,
-        #                             vtk_to_mat(curr_wp_tform_fiducial))
-        # fiducial_object.SetUserTransform(mat_to_vtk(world_tform_fiducial))
+
 
     def make_point_cloud_actor(self, point_cloud_data, waypoint_id):
         """
@@ -283,7 +273,7 @@ class BosdynVTKInterface():
         sphere = vtk.vtkSphereSource()
         
         sphere.SetCenter(xyz_location[0], xyz_location[1], xyz_location[2])
-        sphere.SetRadius(0.3)
+        sphere.SetRadius(0.2)
         sphere.Update()
 
         sphere_mapper = vtk.vtkPolyDataMapper()
@@ -294,6 +284,18 @@ class BosdynVTKInterface():
 
         self.renderer.AddActor(sphere_actor)
         return sphere_actor
+
+    def make_axis_actor(self, homogeneous_tf, waypoint_id):
+        axis_actor = vtk.vtkAxesActor()
+        axis_actor.SetXAxisLabelText('')
+        axis_actor.SetYAxisLabelText('')
+        axis_actor.SetZAxisLabelText('')
+        length = 0.4
+        axis_actor.SetTotalLength(length, length, length)
+        axis_actor.SetUserTransform(mat_to_vtk(homogeneous_tf))
+
+        self.renderer.AddActor(axis_actor)
+        return axis_actor
 
 
     def make_line_actor(self, pt_A, pt_B):
@@ -331,59 +333,55 @@ class BosdynVTKInterface():
         actor.PickableOff()
         self.renderer.AddActor(actor)
         return actor
-
+    
 
 
     # TODO: Simplify the data reading process so that this function is either unnecessary or merged with the create_graph_objects function
     def create_anchored_graph_objects(self):
-        pass
-    #     """
-    #     Creates all the VTK objects associated with the graph, in seed frame, if they are anchored.
-    #     :param current_graph: the graph to use.
-    #     :param current_waypoint_snapshots: dict from snapshot id to snapshot.
-    #     :param current_waypoints: dict from waypoint id to waypoint.
-    #     :param renderer: The VTK renderer
-    #     :return: the average position in world space of all the waypoints.
-    #     """
-    #     current_graph = self.map.graph
-    #     current_anchors = self.map.anchors
-    #     current_anchored_world_objects = self.map.anchored_world_objects
-    #     renderer = self.renderer
+        """
+        Creates all the VTK objects associated with the graph, in seed frame, if they are anchored.
+        :param current_graph: the graph to use.
+        :param current_waypoint_snapshots: dict from snapshot id to snapshot.
+        :param current_waypoints: dict from waypoint id to waypoint.
+        :param renderer: The VTK renderer
+        :return: the average position in world space of all the waypoints.
+        """
+        current_graph = self.map.graph
+        current_anchors = self.map.anchors
+        current_anchored_world_objects = self.map.anchored_world_objects
 
-    #     avg_pos = np.array([0.0, 0.0, 0.0])
-    #     waypoints_in_anchoring = 0
-    #     # Create VTK objects associated with each waypoint.
-    #     for waypoint in current_graph.waypoints:
-    #         if waypoint.id in current_anchors:
-    #             seed_tform_waypoint = SE3Pose.from_proto(
-    #                 current_anchors[waypoint.id].seed_tform_waypoint).to_matrix()
-    #             waypoint_object = self.create_waypoint_actors(mat_to_vtk(seed_tform_waypoint), waypoint.id)                
-    #             # print(f"seed_tform_waypoint id: {waypoint.id}: {seed_tform_waypoint}")
+        avg_pos = np.array([0.0, 0.0, 0.0])
+        waypoints_in_anchoring = 0
+        # Create VTK objects associated with each waypoint.
+        for waypoint in current_graph.waypoints:
+            if waypoint.id in current_anchors:
+                seed_tform_waypoint = SE3Pose.from_proto(
+                    current_anchors[waypoint.id].seed_tform_waypoint).to_matrix()
+                self.create_point_cloud_object(seed_tform_waypoint, waypoint.id)
+                self.make_sphere_actor(seed_tform_waypoint[:3, 3], waypoint.id)
+                self.make_text_actor(waypoint.annotations.name, seed_tform_waypoint[:3, 3])
+                avg_pos += seed_tform_waypoint[:3, 3]
+                waypoints_in_anchoring += 1
 
-    #             # waypoint_object.SetUserTransform(mat_to_vtk(seed_tform_waypoint))
-    #             self.make_text_actor(waypoint.annotations.name, seed_tform_waypoint[:3, 3])
-    #             avg_pos += seed_tform_waypoint[:3, 3]
-    #             waypoints_in_anchoring += 1
+        avg_pos /= waypoints_in_anchoring
 
-    #     avg_pos /= waypoints_in_anchoring
+        # Create VTK objects associated with each edge.
+        for edge in current_graph.edges:
+            if edge.id.from_waypoint in current_anchors and edge.id.to_waypoint in current_anchors:
+                seed_tform_from = SE3Pose.from_proto(
+                    current_anchors[edge.id.from_waypoint].seed_tform_waypoint).to_matrix()
+                from_tform_to = SE3Pose.from_proto(edge.from_tform_to).to_matrix()
+                self.make_line_actor(from_tform_to, seed_tform_from)
 
-    #     # Create VTK objects associated with each edge.
-    #     for edge in current_graph.edges:
-    #         if edge.id.from_waypoint in current_anchors and edge.id.to_waypoint in current_anchors:
-    #             seed_tform_from = SE3Pose.from_proto(
-    #                 current_anchors[edge.id.from_waypoint].seed_tform_waypoint).to_matrix()
-    #             from_tform_to = SE3Pose.from_proto(edge.from_tform_to).to_matrix()
-    #             self.create_edge_object(from_tform_to, seed_tform_from, renderer)
+        # Create VTK objects associated with each anchored world object.
+        for anchored_wo in current_anchored_world_objects.values():
+            # anchored_wo is a tuple of (anchored_world_object, waypoint, fiducial).
+            (fiducial_object, _) = self.create_fiducial_object(anchored_wo[2], anchored_wo[1], self.renderer)
+            seed_tform_fiducial = SE3Pose.from_proto(anchored_wo[0].seed_tform_object).to_matrix()
+            fiducial_object.SetUserTransform(mat_to_vtk(seed_tform_fiducial))
+            self.make_text_actor(anchored_wo[0].id, seed_tform_fiducial[:3, 3])
 
-    #     # Create VTK objects associated with each anchored world object.
-    #     for anchored_wo in current_anchored_world_objects.values():
-    #         # anchored_wo is a tuple of (anchored_world_object, waypoint, fiducial).
-    #         (fiducial_object, _) = self.create_fiducial_object(anchored_wo[2], anchored_wo[1], renderer)
-    #         seed_tform_fiducial = SE3Pose.from_proto(anchored_wo[0].seed_tform_object).to_matrix()
-    #         fiducial_object.SetUserTransform(mat_to_vtk(seed_tform_fiducial))
-    #         self.make_text_actor(anchored_wo[0].id, seed_tform_fiducial[:3, 3])
-
-    #     return avg_pos
+        return avg_pos
 
 
     def create_graph_objects(self):
@@ -398,7 +396,6 @@ class BosdynVTKInterface():
         current_graph = self.map.graph
         current_waypoint_snapshots = self.map.waypoint_snapshots
         current_waypoints = self.map.waypoints
-        renderer = self.renderer
 
         # Now, perform a breadth first search of the graph starting from an arbitrary waypoint. Graph nav graphs
         # have no global reference frame. The only thing we can say about waypoints is that they have relative
@@ -424,7 +421,7 @@ class BosdynVTKInterface():
             self.create_point_cloud_object(world_tform_current_waypoint, curr_waypoint.id)
             self.make_sphere_actor(world_tform_current_waypoint[:3,3], curr_waypoint.id)
             self.make_text_actor(curr_waypoint.annotations.name, world_tform_current_waypoint[:3,3])
-
+            self.make_axis_actor(world_tform_current_waypoint, curr_waypoint.id)
             # For each fiducial in the waypoint's snapshot, add an object at the world pose of that fiducial.
             if (curr_waypoint.snapshot_id in current_waypoint_snapshots):
                 snapshot = current_waypoint_snapshots[curr_waypoint.snapshot_id]
@@ -486,11 +483,6 @@ class BosdynVTKInterface():
         return avg_pos
 
 
-
-# vtkInteractorStyle is a base class that provides event-driven interface 
-# to the rendering window (defines trackball mode), which supports vtkRenderWindowInteractor. 
-# vtkRenderWindowInteractor implements platform dependent key/mouse routing and timer control, 
-# which forwards events in a neutral form to vtkInteractorStyle.
 class HighlightInteractorStyle(vtkInteractorStyleTerrain):
     """ 
     Custom Interactor that allows the user to click on an actor and highlight it with a silhouette.
@@ -538,15 +530,15 @@ def main():
 
         # Create an interface to create actors from the map datastructure
     bosdyn_vtk_interface = BosdynVTKInterface(spot_map, vtk_engine.renderer)
-        # # Display map objects extracted from file
-        # if anchoring:
-        #     if len(map.graph.anchoring.anchors) == 0:
-        #         print('No anchors to draw.')
-        #         sys.exit(-1)
-        #     avg_pos = bosdyn_vtk_interface.create_anchored_graph_objects()
-        # else:
-        #     avg_pos = bosdyn_vtk_interface.create_graph_objects()
-    avg_pos = bosdyn_vtk_interface.create_graph_objects()
+    # Display map objects extracted from file
+    if anchoring:
+        if len(spot_map.graph.anchoring.anchors) == 0:
+            print('No anchors to draw.')
+            sys.exit(-1)
+        avg_pos = bosdyn_vtk_interface.create_anchored_graph_objects()
+    else:
+        avg_pos = bosdyn_vtk_interface.create_graph_objects()
+
     vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
 
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
