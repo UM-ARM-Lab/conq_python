@@ -1,7 +1,6 @@
 # !/usr/bin/env python
 
 from vtkmodules.vtkCommonColor import vtkNamedColors
-# from vtkmodules.vtkCommonCore import Callback
 from vtkmodules.vtkFiltersHybrid import vtkPolyDataSilhouette
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTerrain, vtkInteractorStyleTrackballCamera
 from vtkmodules.vtkRenderingCore import (
@@ -21,7 +20,7 @@ import vtk
 from bosdyn.api.graph_nav import map_pb2
 from bosdyn.client.frame_helpers import *
 from bosdyn.client.math_helpers import *
-from bosdyn_vtk_utils import api_to_vtk_se3_pose, numpy_to_poly_data, vtk_to_mat, mat_to_vtk
+from bosdyn_vtk_utils import numpy_to_poly_data, mat_to_vtk
 
 
 def get_program_parameters():
@@ -434,21 +433,9 @@ class BosdynVTKInterface():
                         fiducial_name = f"apriltag {fiducial_properties.tag_id}"
 
                         # # TODO: re-write to not used SetUserTransform, and also to not use create_fiducial_object (it shouldn't need a function)
-                        # # 1. get tf from waypoint to fiducial (broken)
-                        # curr_wp_tform_fiducial = get_a_tform_b(
-                        #     fiducial.transforms_snapshot, ODOM_FRAME_NAME,
-                        #     fiducial.apriltag_properties.frame_name_fiducial_filtered).to_matrix()
-                        # # 2. get tf from world to fiducial
-                        # world_tform_fiducial = world_tform_current_waypoint @ curr_wp_tform_fiducial 
-                        # # 3. create actor at world tf
-                        # fiducial_object = self.make_plane_actor(world_tform_fiducial[:3, 3],
-                        #                                         world_tform_fiducial[:3, 2],
-                        #                                         np.array([2*fiducial_properties.dimensions.x, 2*fiducial_properties.dimensions.y]))
 
-                        # # Working usage
                         (fiducial_object, curr_wp_tform_fiducial) = self.create_fiducial_object(
                             fiducial, curr_waypoint)
-                        # print(f"curr_wp_tform_fiducial: {curr_wp_tform_fiducial}")
 
                         world_tform_fiducial = world_tform_current_waypoint @ curr_wp_tform_fiducial
                         fiducial_object.SetUserTransform(mat_to_vtk(world_tform_fiducial))

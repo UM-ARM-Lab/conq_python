@@ -7,11 +7,9 @@ import bosdyn.client.util
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 import numpy as np
 
-from clickmap_nav import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
-from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTerrain
-from vtkmodules.vtkRenderingCore import vtkPropPicker
+from view_map_with_highlight import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
 
-class ClickMapGraphNavInterface(GraphNavInterface, HighlightInteractorStyle): #vtkInteractorStyleTerrain):
+class ClickMapGraphNavInterface(GraphNavInterface, HighlightInteractorStyle): 
     def __init__(self, robot, upload_path, silhouette=None, silhouetteActor=None):
         GraphNavInterface.__init__(self,robot, upload_path)
         HighlightInteractorStyle.__init__(self, silhouette, silhouetteActor)
@@ -89,6 +87,8 @@ def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('-u', '--upload-filepath',
                         help='Full filepath to graph and snapshots to be uploaded.', required=True)
+    parser.add_argument('-a', '--anchoring', action='store_true',
+                        help='Draw the map according to the anchoring (in seed frame).')
     bosdyn.client.util.add_base_arguments(parser)
     options = parser.parse_args(argv)
 
@@ -102,15 +102,14 @@ def main(argv):
 
         # Create an interface to create actors from the map datastructure
     bosdyn_vtk_interface = BosdynVTKInterface(spot_map, vtk_engine.renderer)
-        # # Display map objects extracted from file
-        # if anchoring:
-        #     if len(map.graph.anchoring.anchors) == 0:
-        #         print('No anchors to draw.')
-        #         sys.exit(-1)
-        #     avg_pos = bosdyn_vtk_interface.create_anchored_graph_objects()
-        # else:
-        #     avg_pos = bosdyn_vtk_interface.create_graph_objects()
-    avg_pos = bosdyn_vtk_interface.create_graph_objects()
+    # Display map objects extracted from file
+    if options.anchoring:
+        if len(spot_map.graph.anchoring.anchors) == 0:
+            print('No anchors to draw.')
+            sys.exit(-1)
+        avg_pos = bosdyn_vtk_interface.create_anchored_graph_objects()
+    else:
+        avg_pos = bosdyn_vtk_interface.create_graph_objects()
     vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
 
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()

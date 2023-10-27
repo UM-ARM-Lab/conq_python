@@ -1,5 +1,5 @@
 # Clickmap_nav: 
-This is a combination of the view_map and graph_nav examples. You can use it to view a map that spot has made, and then click on the map to send commands.
+This is a combination of the view_map and graph_nav examples. You can use it to view a map that spot has made, and then click on the map to send movement commands.
 
 ## Setup Dependencies
 
@@ -19,22 +19,45 @@ python3 -m pip install -r requirements.txt
     - waypoint_snapshots
     - edge_snapshots
 ```
-
-2. Run the map viewer
-
+2. Run the click-map interface
 ```
-python3 -m clickmap_nav <path_to_your_map_directory>
+python3 -m click_map_graph_nav_interface -a <path_to_your_map_directory>
+```
+
+## Testing Subcomponents
+1. Run the map viewer alone
+```
+python3 -m view_map_with_highlight -a <path_to_your_map_directory>
 ```
 For example: 
 ```
-python3 -m clickmap_nav ~/spot/maps/collabspace1/
+python3 -m view_map_with_highlight -a ~/spot/maps/collabspace3.walk
 ```
-## Camera Controls
+Note: -a is for anchoring. You can leave off the -a if your map doesn't have anchoring or if you're ok with a messier map.
 
-- R : reset the camera
-- Left Mouse: rotate the camera
-- Right Mouse: zoom in/out.
-- Middle Mouse: pan the camera.
+2. Run command_line_graph_nav_interface.py alone 
+
+## Camera Controls
+From VTK:
+(Right-Click)  Zoom
+(Left-Click)   Rotate
+(Scroll-Click) Pan
+(r) reset the camera
+(e) exit the program
+(f) set a new camera focal point and fly towards that point
+(u) invokes the user event
+(3) toggles between stereo and non-stero mode
+(l) toggles on/off a latitude/longitude markers that can be used to estimate/control position.
+
+From Boston Dynamics (mostly the same as examples)
+(1) Get localization state.
+(2) Initialize localization to the nearest fiducial (must be in sight of a fiducial).
+(4) Initialize localization to a specific waypoint (must be exactly at the waypoint).
+(5) (Re)Upload the graph and its snapshots.
+(6) Navigate to. The destination waypoint id is the second argument.
+(8) List the waypoint ids and edge ids of the map on the robot.
+(9) Clear the current graph.
+(q) Exit.
 
 ## GraphNav Map Structure
 
