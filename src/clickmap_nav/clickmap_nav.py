@@ -371,7 +371,10 @@ class BosdynVTKInterface():
                 seed_tform_from = SE3Pose.from_proto(
                     current_anchors[edge.id.from_waypoint].seed_tform_waypoint).to_matrix()
                 from_tform_to = SE3Pose.from_proto(edge.from_tform_to).to_matrix()
-                self.make_line_actor(from_tform_to[:3,3], seed_tform_from[:3,3])
+
+                # Concatenate the edge transform.
+                world_tform_to_wp = np.dot(seed_tform_from, from_tform_to)
+                self.make_line_actor( seed_tform_from[:3,3],world_tform_to_wp[:3,3])
 
         # Create VTK objects associated with each anchored world object.
         for anchored_wo in current_anchored_world_objects.values():
@@ -379,7 +382,7 @@ class BosdynVTKInterface():
             (fiducial_object, _) = self.create_fiducial_object(anchored_wo[2], anchored_wo[1])
             seed_tform_fiducial = SE3Pose.from_proto(anchored_wo[0].seed_tform_object).to_matrix()
             fiducial_object.SetUserTransform(mat_to_vtk(seed_tform_fiducial))
-            self.make_text_actor(anchored_wo[0].id, seed_tform_fiducial[:3, 3])
+            self.make_text_actor(f"apriltag {anchored_wo[0].id}", seed_tform_fiducial[:3, 3])
 
         return avg_pos
 
