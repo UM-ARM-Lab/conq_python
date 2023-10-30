@@ -88,6 +88,18 @@ python3 -m view_map_highlighted -a ~/spot/maps/collabspace3.walk
 
 2. Run command_line_interface.py alone (same behavior as the graph_nav_command_line example)
 
+## Code Structure
+graph_nav_interface.py contains a base class with all of the functionality to interact with boston dynamics' graph_nav service, and also maintain the robot lease etc.
+
+click_map_interface.py contains a class that allows you to input commands to the GraphNavInterface base through a visual map. 
+
+command_line_interface.py contains a class that allows you to input commands to the GraphNavInterface base through the command-line. When run, this has the same functionality as the graph_nav_command_line example in the SDK.
+
+view_map_highlighted.py contains classes that make it easier for the Boston Dynamics SDK to work with VTK. For example, the VTKEngine class has all of the standard components necessary to render a map, and the BosdynVTKInterface class has many functions for creating the visual representations (ie. actors) corresponding to each type of map object (ie. waypoint, edge, fiducial, etc). When run, the functionality is similar to the view_map sdk example, but this also includes the ability to highlight actors with a silhouette, and the code is structured into more manageable classes.
+
+bosdyn_vtk_utils.py contains helper functions that link VTK with Boston Dynamics (used for view_map_with_highlighted.py)
+
+graph_nav_util.py contains helper functions for graph_nav_interface.py
 
 ## GraphNav Map Structure
 
