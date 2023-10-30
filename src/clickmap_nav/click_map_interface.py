@@ -9,7 +9,7 @@ import numpy as np
 
 from view_map_with_highlight import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
 
-class ClickMapGraphNavInterface(GraphNavInterface, HighlightInteractorStyle): 
+class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle): 
     def __init__(self, robot, upload_path, silhouette=None, silhouetteActor=None):
         GraphNavInterface.__init__(self,robot, upload_path)
         HighlightInteractorStyle.__init__(self, silhouette, silhouetteActor)
@@ -113,10 +113,10 @@ def main(argv):
     vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
 
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
-    style = ClickMapGraphNavInterface(robot, options.upload_filepath, silhouette, silhouetteActor)
+    style = ClickMapInterface(robot, options.upload_filepath, silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
-    # graph_nav_interface = ClickMapGraphNavInterface(robot, options.upload_filepath)
+    # graph_nav_interface = ClickMapInterface(robot, options.upload_filepath)
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
 

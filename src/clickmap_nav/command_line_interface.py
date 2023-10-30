@@ -6,7 +6,7 @@ import bosdyn.client.channel
 import bosdyn.client.util
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 
-class CommandLineGraphNavInterface(GraphNavInterface):
+class CommandLineInterface(GraphNavInterface):
     def __init__(self, robot, upload_path):
         super().__init__(robot, upload_path)
         self._command_dictionary = {
@@ -75,7 +75,7 @@ def main(argv):
     robot = sdk.create_robot(options.hostname)
     bosdyn.client.util.authenticate(robot)
 
-    graph_nav_interface = CommandLineGraphNavInterface(robot, options.upload_filepath)
+    graph_nav_interface = CommandLineInterface(robot, options.upload_filepath)
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
     try:
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
