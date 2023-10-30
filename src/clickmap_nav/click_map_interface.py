@@ -7,7 +7,7 @@ import bosdyn.client.util
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 import numpy as np
 
-from view_map_with_highlight import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
+from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
 
 class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle): 
     def __init__(self, robot, upload_path, silhouette=None, silhouetteActor=None):

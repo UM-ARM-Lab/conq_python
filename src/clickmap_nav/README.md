@@ -8,10 +8,11 @@ This example requires VTK (visualization toolkit) and Numpy, and requires python
 ```
 python3 -m pip install -r requirements.txt
 ```
+## Preliminaries
 
-## Running the Example
+New users should follow the Quickstart Guide (https://dev.bostondynamics.com/docs/python/quickstart#verify-you-can-command-and-query-spot) to get spot up and running. 
 
-1. Record a map using AutoWalk or the Command Line interface. (If using Autowalk, transfer the map from Documents/bosdyn/autowalk/your_map.walk to your local machine using a USB cable). The map should be a directory of the form:
+1. Record a map using the tablet's AutoWalk or the Command Line interface. (If using Autowalk, transfer the map from Documents/bosdyn/autowalk/your_map.walk to your local machine using a USB cable). The map should be a directory of the form:
 
 ```
 - /your_map.walk
@@ -19,25 +20,41 @@ python3 -m pip install -r requirements.txt
     - waypoint_snapshots
     - edge_snapshots
 ```
-2. Run the click-map interface
+
+Always remove the battery after use!
+
+2. On the tablet, press "power"->'Advanced'->'Release Control' (The tablet will maintain estop control, but not command control). You can also run the estop example if you want estop control on the laptop.
+
+On your laptop, connect to the robot's wifi network and login using the credentials on the sticker of the battery housing. Running the commands below will automatically claim command control
+
+Spot Login info is on a sticker on the battery housing.
+Admin username: admin
+User Username: user
+Core Username: spot
+Core Password: <lab password>
+Spot's IP address: 192.168.80.3
+
+## Running the click-Map Interface 
+From within the clickmap_nav folder, run:
 ```
-python3 -m click_map_graph_nav_interface -a <path_to_your_map_directory>
+python3 -m click_map_interface -a -u <path/to/map/directory> 192.168.80.3
+```
+-a refers to anchoring. You can leave off the -a if your map doesn't have anchoring or if you're ok with a messier map.
+
+-u is the flag to indicate the upload filepath. An example <path/to/map/directory> might look like ~/spot/maps/collabspace3.walk
+
+Note: If you're already running the estop example on the laptop then you may not need the IP address at the end
+
+Note: to avoid having to log in each time, run:
+```
+export BOSDYN_CLIENT_USERNAME=user && export BOSDYN_CLIENT_PASSWORD=<password_on_sticker>
 ```
 
-## Testing Subcomponents
-1. Run the map viewer alone
-```
-python3 -m view_map_with_highlight -a <path_to_your_map_directory>
-```
-For example: 
-```
-python3 -m view_map_with_highlight -a ~/spot/maps/collabspace3.walk
-```
-Note: -a is for anchoring. You can leave off the -a if your map doesn't have anchoring or if you're ok with a messier map.
+## Using the Click-map Interface
+1. You must Initialize the robot to the correct waypoint or fiducial (see controls below) before being able to navigate. Note that the robot must be in the exact position AND ORIENTATION of the waypoint. To do this, put your mouse over the desired waypoint on the map and then press key (4) to activate the initialization command.
+2. To navigate, move your mouse over the desired waypoint and press key (6) to activate the "Navigate To" command. Note that it may take a few seconds to respond.
 
-2. Run command_line_graph_nav_interface.py alone 
-
-## Camera Controls
+## Controls
 From VTK:
 (Right-Click)  Zoom
 (Left-Click)   Rotate
@@ -58,6 +75,19 @@ From Boston Dynamics (mostly the same as examples)
 (8) List the waypoint ids and edge ids of the map on the robot.
 (9) Clear the current graph.
 (q) Exit.
+
+## Testing Subcomponents
+1. Run the map viewer alone
+```
+python3 -m view_map_with_highlight -a <path_to_your_map_directory>
+```
+For example: 
+```
+python3 -m view_map_highlighted -a ~/spot/maps/collabspace3.walk
+```
+
+2. Run command_line_interface.py alone (same behavior as the graph_nav_command_line example)
+
 
 ## GraphNav Map Structure
 
