@@ -160,22 +160,35 @@ class BosdynVTKInterface():
         self.map = map
         self.renderer = vtk_renderer
 
-    def make_silhouette_actor(self):
-        colors = vtkNamedColors()
+    def make_cube_actor(self, center, dimensions, color=(0.5, 0.7, 0.9)):
+        cube = vtk.vtkCubeSource()
+        cube.SetCenter(center[0], center[1], center[2])
+        cube.SetXLength(dimensions[0])
+        cube.SetYLength(dimensions[1])
+        cube.SetZLength(dimensions[2])
+        cube.Update()
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputData(cube.GetOutput())
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(color)
+        actor.SetPickable(False)
+        self.renderer.AddActor(actor)
+        return actor
+
+    def make_silhouette_actor(self, color=(1.0, 0.4, 0.3)):
         silhouette = vtkPolyDataSilhouette()
         silhouette.SetCamera(self.renderer.GetActiveCamera())
-
-        # Create mapper and actor for silhouette
         silhouetteMapper = vtkPolyDataMapper()
         silhouetteMapper.SetInputConnection(silhouette.GetOutputPort())
 
         silhouetteActor = vtkActor()
         silhouetteActor.SetMapper(silhouetteMapper)
-        silhouetteActor.GetProperty().SetColor(colors.GetColor3d("Tomato"))
+        silhouetteActor.GetProperty().SetColor(color)
         silhouetteActor.GetProperty().SetLineWidth(5)
         return silhouette, silhouetteActor
 
-    def make_plane_actor(self, center, normal, dimensions):
+    def make_plane_actor(self, center, normal, dimensions, color=(0.5, 0.7, 0.9)):
         plane_source = vtk.vtkPlaneSource()
         plane_source.SetCenter(center[0], center[1], center[2])
         plane_source.SetNormal(normal[0], normal[1], normal[2])
@@ -186,7 +199,7 @@ class BosdynVTKInterface():
 
         actor = vtk.vtkActor()
         actor.SetMapper(mapper)
-        actor.GetProperty().SetColor(0.5, 0.7, 0.9)
+        actor.GetProperty().SetColor(color)
         actor.SetScale(dimensions[0], dimensions[1], 1.0)
         actor.SetPickable(False)
         self.renderer.AddActor(actor)
@@ -262,7 +275,7 @@ class BosdynVTKInterface():
 
         return actor
 
-    def make_sphere_actor(self, xyz_location, waypoint_id):
+    def make_sphere_actor(self, xyz_location, waypoint_id, color=(1.0, 1.0, 1.0)):
         """
         Create a VTK object representing the center of a waypoint as a sphere
         :param xyz_location: the 4x4 homogenous transform of the waypoint (np.array)
@@ -279,7 +292,7 @@ class BosdynVTKInterface():
         sphere_mapper.SetInputConnection(sphere.GetOutputPort())
         sphere_actor = bosdynWaypointActor(waypoint_id) #vtk.vtkActor()
         sphere_actor.SetMapper(sphere_mapper)
-        sphere_actor.GetProperty().SetColor(1.0, 1.0, 1.0)
+        sphere_actor.GetProperty().SetColor(color)
 
         self.renderer.AddActor(sphere_actor)
         return sphere_actor
@@ -520,6 +533,7 @@ def main():
 
         # Create an interface to create actors from the map datastructure
     bosdyn_vtk_interface = BosdynVTKInterface(spot_map, vtk_engine.renderer)
+
     # Display map objects extracted from file
     if anchoring:
         if len(spot_map.graph.anchoring.anchors) == 0:
