@@ -56,7 +56,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
 
         #  Forward events
         self.OnKeyPress()
-        return
+        return key, actor
 
     def print_controls(self):
         print("""

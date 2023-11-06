@@ -70,7 +70,13 @@ class GraphNavInterface(object):
         print(f'Got localization: \n{state.localization}')
         odom_tform_body = get_odom_tform_body(state.robot_kinematics.transforms_snapshot)
         print(f'Got robot state in kinematic odometry frame: \n{odom_tform_body}')
-
+        # # TODO: Return the id of the waypoint the robot is nearest to.
+        # print(f'state variable also has the following fields: \n{state}')
+        # # search the graph for the nearest waypoint
+        # nearest_waypoint = graph_nav_util.find_nearest_waypoint(state.localization, self._current_graph)
+        # print(f'nearest waypoint: {nearest_waypoint}')
+        # return nearest_waypoint
+    
     def _set_initial_localization_fiducial(self, *args):
         """Trigger localization when near a fiducial."""
         robot_state = self._robot_state_client.get_robot_state()
