@@ -116,9 +116,8 @@ def main(argv):
     style = ClickMapInterface(robot, options.upload_filepath, silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
-    # graph_nav_interface = ClickMapInterface(robot, options.upload_filepath)
+    # TODO: can the lease_client and the while loop be put within the GraphNavInterface or ClickMapInterface class?
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
-
 
     try:
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
