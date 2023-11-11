@@ -7,17 +7,21 @@ import bosdyn.client.channel
 import bosdyn.client.util
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 from bosdyn.client.image import ImageClient
+from bosdyn.client.manipulation_api_client import ManipulationApiClient
 import numpy as np
 
-from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
+from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface
 from conq.cameras_utils import get_color_img #, get_depth_img
+from conq.manipulation import grasp_point_in_image_basic
+
+# TODO: Implement a state machine to deal with edge cases in a structured way
 
 class ToolRetrievalInferface(ClickMapInterface):
     def __init__(self, robot, upload_path, model_path, silhouette=None, silhouetteActor=None):
         super().__init__(self, robot, upload_path, silhouette, silhouetteActor)
         self.predictor = Predictor(model_path)
         self.image_client = robot.ensure_client(ImageClient.default_service_name)
-        self.lease_client = robot.ensure_client(LeaseClient.default_service_name) #TODO: Move to base class
+        self.manipulation_client = robot.ensure_client(ManipulationApiClient.default_service_name)
 
         # Cameras through which to look for objects
         self.cameras = [
@@ -37,39 +41,57 @@ class ToolRetrievalInferface(ClickMapInterface):
                 initial_waypoint_id = self._get_localization_state()
                 print(f"navigating to: {actor.waypoint_id}")
                 self._navigate_to([actor.waypoint_id])
-                self.find_object('hose_handle') # may have to reorient the robot / run multiple times
-                self.pick_up_tool()
+                pixel_xy, rgb_response = self.find_object('hose_handle') # may have to reorient the robot / run multiple times
+                self.pick_up_object(pixel_xy)
                 self._navigate_to([initial_waypoint_id])
             else:
                 print("No waypoint selected")
 
     def find_object(self, object_class: str):
         """
-        Outputs the centroid of the object of type object_class with the highest confidence    
+        Looks through each of the cameras for an object of type object_class
+        Input: 
+            object_class: string corresponding to the class of object to look for
+        Output:
+            the pixel centroid of the object of type object_class with the highest confidence
+            the ImageResponse object corresponding to the camera that saw the object (so the robot can deduce the pose of the object)
         """
+        pixels_and_confidences = []
         # get images from each camera
-        images = self.get_images()
-
-        # run the detector on each image
-        for image in images: 
-            mask = self.predictor.predict(image) # image is rgb numpy array
-
-        # outputs would likely take the form of a camera, pixel coordinates, and a confidence score
-
-
-    def pick_up_object(self, pixel_coords):
-        """ Pick up the object at the given location."""
-        # See the find_plant_demo for an (unorganized) example of how to do this
-        pass
-
-    def get_images(self):
-        # Get images from each camera
-        # Return a list of images, each of which is an RGB numpy array
-        for camera_src in self.cameras:
-            rgb_np, rgb_res = get_color_img(self.image_client, camera_src)
+        for camera in self.cameras:
+            rgb_np, rgb_response = get_color_img(self.image_client, camera)
             # depth_np, depth_res = get_depth_img(self.image_client, 'hand_depth_in_hand_color_frame')
             predictions = self.predictor.predict(rgb_np)
+            # TODO: Get centroid
+            pixel_xy = predictions[object_class]
+            confidence = None
+            pixels_and_confidences.append((pixel_xy, confidence, rgb_response))
+            
+        # find the pixel with the highest confidence
+        max_confidence = 0
+        best_pixel_xy = None
+        best_rgb_response = None
+        for pixel_xy, confidence, rgb_response in pixels_and_confidences:
+            if confidence > max_confidence:
+                max_confidence = confidence
+                best_pixel_xy = pixel_xy
+                best_rgb_response = rgb_response
         
+        return best_pixel_xy, best_rgb_response
+
+
+    def pick_up_object(self, image_response, pixel_xy):
+        """ Pick up the object at the given location."""
+        # See the find_plant_demo for an (unorganized) example of how to do this
+        # or continuous_hose_regrasping_demo for a more structured example
+        grasp_success = False
+        for _ in range(3):
+            # first just try the auto-grasp
+            grasp_success = grasp_point_in_image_basic(self.clients, image_response, pixel_xy)
+            if grasp_success:
+                return grasp_success
+        return grasp_success
+
 
 def main(argv):
     """Run the click_map graph_nav interface."""

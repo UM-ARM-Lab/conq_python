@@ -78,6 +78,14 @@ def force_measure(clients: Clients, force_buffer: List):
 
 
 def grasp_point_in_image(clients: Clients, image_res, pick_vec):
+    """
+    Args:
+        clients: Clients object containing all clients for the robot
+        image_res: ImageResponse obejct
+        pick_vec: np.ndarray, [x, y] in image coordinates
+    Returns:
+        True if grasp succeeded, False otherwise
+    """
     pick_cmd = manipulation_api_pb2.PickObjectInImage(
         pixel_xy=pick_vec,
         transforms_snapshot_for_camera=image_res.shot.transforms_snapshot,
@@ -85,6 +93,37 @@ def grasp_point_in_image(clients: Clients, image_res, pick_vec):
         camera_model=image_res.source.pinhole)
 
     return do_grasp_cmd(clients, pick_cmd)
+
+# TODO: this is a duplicate of grasp_point_in_image
+# WANT: functions that don't require a Clients object for everything. 
+# We should break down our functions by what client they're interacting with.
+# this function needs a manipulation client to move, and also a state client for feedback 
+# (though arguably the feedback could be provided somewhere else, like in a higher-level state machine)
+def grasp_point_in_image_basic(manipulation_client, image_response, pixel_xy):
+    """
+    Args:
+        manipulation_client: ManipulationApiClient
+        image_response: ImageResponse obejct
+        pixel_xy: np.ndarray, [x, y] in image coordinates
+    Returns:
+        True if grasp succeeded, False otherwise
+    """
+    pick_cmd = manipulation_api_pb2.PickObjectInImage(
+        pixel_xy=pixel_xy,
+        transforms_snapshot_for_camera=image_response.shot.transforms_snapshot,
+        frame_name_image_sensor=image_response.shot.frame_name_image_sensor,
+        camera_model=image_response.source.pinhole)
+    
+    grasp_request = manipulation_api_pb2.ManipulationApiRequest(pick_object_in_image=pick_cmd)
+    cmd_response = manipulation_client.manipulation_api_command(manipulation_api_request=grasp_request)
+
+    feedback_request = manipulation_api_pb2.ManipulationApiFeedbackRequest(
+        manipulation_cmd_id=cmd_response.manipulation_cmd_id)
+    feedback_response = manipulation_client.manipulation_api_feedback_command(
+        manipulation_api_feedback_request=feedback_request)
+    print(manipulation_api_pb2.ManipulationFeedbackState.Name(feedback_response.current_state))    
+
+    return feedback_response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_SUCCEEDED
 
 
 def do_grasp_cmd(clients: Clients, pick_cmd: manipulation_api_pb2.PickObjectInImage, timeout=10):
@@ -124,10 +163,10 @@ def do_grasp_cmd(clients: Clients, pick_cmd: manipulation_api_pb2.PickObjectInIm
     return False
 
 
-def get_is_grasping(clients: Clients):
+def get_is_grasping(clients: Clients, percent_open_threshold=5):
     # Now check if we're actually holding something
     robot_state = clients.state.get_robot_state()
-    open_enough = robot_state.manipulator_state.gripper_open_percentage > 5
+    open_enough = robot_state.manipulator_state.gripper_open_percentage > percent_open_threshold
     # is_gripper_holding_item is NOT reliable
     is_grasping = robot_state.manipulator_state.is_gripper_holding_item and open_enough
     return is_grasping

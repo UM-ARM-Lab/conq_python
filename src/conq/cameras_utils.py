@@ -59,11 +59,18 @@ def image_to_opencv(image, auto_rotate=False):
 
 
 def get_color_img(image_client, camera_src: str):
-    """ Gets an image from the camera_src (eg. hand_color_image) """
-    rgb_req = build_image_request(camera_src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
-    rgb_res: ImageResponse = image_client.get_image([rgb_req])[0]
-    rgb_np = image_to_opencv(rgb_res)
-    return rgb_np, rgb_res
+    """ Gets an image from the camera_src (eg. hand_color_image) 
+    Input:
+        image_client: boston dynamics ImageClient object
+        camera_src: string corresponding to the camera source
+    Output:
+        rgb_np: numpy array of the image
+        rgb_response: ImageResponse object
+    """
+    rgb_request = build_image_request(camera_src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+    rgb_response: ImageResponse = image_client.get_image([rgb_request])[0]
+    rgb_np = image_to_opencv(rgb_response)
+    return rgb_np, rgb_response
 
 
 def get_depth_img(image_client, camera_src):
