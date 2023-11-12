@@ -41,6 +41,7 @@ class ToolRetrievalInferface(ClickMapInterface):
             if actor:
                 localization_state = self._get_localization_state()
                 initial_waypoint_id = localization_state.localization.waypoint_id
+                self.toggle_power(should_power_on=True)
                 print(f"navigating to: {actor.waypoint_id}")
                 self._navigate_to([actor.waypoint_id])
                 print(f"Looking for {object_class}...")
@@ -48,6 +49,7 @@ class ToolRetrievalInferface(ClickMapInterface):
                 # self.pick_up_object(rgb_response, pixel_xy)
                 print(f"navigating to {initial_waypoint_id}")
                 self._navigate_to([initial_waypoint_id])
+                self.toggle_power(should_power_on=False)
             else:
                 print("No waypoint selected")
 

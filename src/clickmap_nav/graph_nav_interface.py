@@ -274,10 +274,10 @@ class GraphNavInterface(object):
             # the robot down once it is finished.
             is_finished = self._check_success(nav_to_cmd_id)
 
-        # Power off the robot if appropriate.
-        if self._powered_on and not self._started_powered_on:
-            # Sit the robot down + power off after the navigation command is complete.
-            self.toggle_power(should_power_on=False)
+        # # Power off the robot if appropriate.
+        # if self._powered_on and not self._started_powered_on:
+        #     # Sit the robot down + power off after the navigation command is complete.
+        #     self.toggle_power(should_power_on=False)
 
     def _navigate_route(self, *args):
         """Navigate through a specific route of waypoints."""
