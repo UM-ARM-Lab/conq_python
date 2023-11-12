@@ -116,7 +116,8 @@ def main(argv):
     style = ClickMapInterface(robot, options.upload_filepath, silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
-    # TODO: can the lease_client and the while loop be put within the GraphNavInterface or ClickMapInterface class?
+    # TODO: can all this lease client boilerplate be handled by a ArmlabRobot class? loop below seems it could be reused
+    # How do we want to manage all of the clients and ensuring the clients?
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
     try:
