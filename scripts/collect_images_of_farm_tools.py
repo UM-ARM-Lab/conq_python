@@ -21,9 +21,9 @@ def main(argv):
     robot.sync_with_directory()
     robot.time_sync.wait_for_sync()
 
-    rf = Roboflow(api_key=os.environ['ROBOFLOW_API_KEY'])
+    #rf = Roboflow(api_key=os.environ['ROBOFLOW_API_KEY'])
     #rf = Roboflow(api_key="6YTSOqeLVElbnqBzH66c") ##PRIVATE KEY 
-    project = rf.workspace("Agrobots").project("garden-implements")
+   # project = rf.workspace("Agrobots").project("garden-implements")
 
     now = int(time())
     root = Path(f"data/{now}")
@@ -43,14 +43,14 @@ def main(argv):
         if k == 'q':
             break
 
-    print("Uploading images to Roboflow...")
-    for filename in tqdm(filenames):
-        project.upload(
-            image=str(filename),
-            batch_name=str(root),
-            num_retry_uploads=3
-        )
-    print("Done!")
+    # print("Uploading images to Roboflow...")
+    # for filename in tqdm(filenames):
+    #     project.upload(
+    #         image=str(filename),
+    #         batch_name=str(root),
+    #         num_retry_uploads=3
+    #     )
+    # print("Done!")
 
     return True
 
