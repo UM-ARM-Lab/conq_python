@@ -17,3 +17,4 @@ model.pth
 *.pb
 build
 *.egg-info
+data/
