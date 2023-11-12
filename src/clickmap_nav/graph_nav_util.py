@@ -4,7 +4,7 @@
 # is subject to the terms and conditions of the Boston Dynamics Software
 # Development Kit License (20191101-BDSDK-SL).
 
-"""Graph nav utility functions"""
+"""Functions that siplify the interaction with GraphNav Graphs, Waypoints, etc """
 
 
 def id_to_short_code(id):

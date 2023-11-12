@@ -67,16 +67,11 @@ class GraphNavInterface(object):
     def _get_localization_state(self, *args):
         """Get the current localization and state of the robot."""
         state = self._graph_nav_client.get_localization_state()
-        print(f'Got localization: \n{state.localization}')
+        print(f'Got localization: \n{state.localization}') # state.localization Contains waypoint_id, waypoint_tform_body, seed_tform_body, timestamp
         odom_tform_body = get_odom_tform_body(state.robot_kinematics.transforms_snapshot)
         print(f'Got robot state in kinematic odometry frame: \n{odom_tform_body}')
-        # # TODO: Return the id of the waypoint the robot is nearest to.
-        # print(f'state variable also has the following fields: \n{state}')
-        # # search the graph for the nearest waypoint
-        # nearest_waypoint = graph_nav_util.find_nearest_waypoint(state.localization, self._current_graph)
-        # print(f'nearest waypoint: {nearest_waypoint}')
-        # return nearest_waypoint
-    
+        return state
+
     def _set_initial_localization_fiducial(self, *args):
         """Trigger localization when near a fiducial."""
         robot_state = self._robot_state_client.get_robot_state()
@@ -243,6 +238,7 @@ class GraphNavInterface(object):
             # Sit the robot down + power off after the navigation command is complete.
             self.toggle_power(should_power_on=False)
 
+    # TODO: This is a strict subset of , and is probably unnecessary
     def _navigate_to(self, *args):
         """Navigate to a specific waypoint."""
         # Take the first argument as the destination waypoint.
@@ -251,6 +247,7 @@ class GraphNavInterface(object):
             print('No waypoint provided as a destination for navigate to.')
             return
 
+            # TODO: make this handle non-list  (should be args[0])
         destination_waypoint = graph_nav_util.find_unique_waypoint_id(
             args[0][0], self._current_graph, self._current_annotation_name_to_wp_id)
         if not destination_waypoint:

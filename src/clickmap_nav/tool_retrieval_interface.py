@@ -18,7 +18,7 @@ from conq.manipulation import grasp_point_in_image_basic
 
 class ToolRetrievalInferface(ClickMapInterface):
     def __init__(self, robot, upload_path, model_path, silhouette=None, silhouetteActor=None):
-        super().__init__(self, robot, upload_path, silhouette, silhouetteActor)
+        super().__init__(robot, upload_path, silhouette, silhouetteActor)
         self.predictor = Predictor(model_path)
         self.image_client = robot.ensure_client(ImageClient.default_service_name)
         self.manipulation_client = robot.ensure_client(ManipulationApiClient.default_service_name)
@@ -36,13 +36,17 @@ class ToolRetrievalInferface(ClickMapInterface):
     def onKeyPressEvent(self, obj, event):
         key, actor =  super().onKeyPressEvent(obj, event)
         if key == 'g':
+            object_class = 'hose_handle'
             # Go to a waypoint and pick up the tool, then come back
             if actor:
-                initial_waypoint_id = self._get_localization_state()
+                localization_state = self._get_localization_state()
+                initial_waypoint_id = localization_state.localization.waypoint_id
                 print(f"navigating to: {actor.waypoint_id}")
                 self._navigate_to([actor.waypoint_id])
-                pixel_xy, rgb_response = self.find_object('hose_handle') # may have to reorient the robot / run multiple times
-                self.pick_up_object(pixel_xy)
+                print(f"Looking for {object_class}...")
+                # pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
+                # self.pick_up_object(rgb_response, pixel_xy)
+                print(f"navigating to {initial_waypoint_id}")
                 self._navigate_to([initial_waypoint_id])
             else:
                 print("No waypoint selected")
@@ -76,7 +80,9 @@ class ToolRetrievalInferface(ClickMapInterface):
                 max_confidence = confidence
                 best_pixel_xy = pixel_xy
                 best_rgb_response = rgb_response
-        
+
+        print(f"Found {object_class} at {pixel_xy} in {best_rgb_response}")
+
         return best_pixel_xy, best_rgb_response
 
 
