@@ -44,9 +44,16 @@ class ToolRetrievalInferface(ClickMapInterface):
                 self.toggle_power(should_power_on=True)
                 print(f"navigating to: {actor.waypoint_id}")
                 self._navigate_to([actor.waypoint_id])
+
                 print(f"Looking for {object_class}...")
                 pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
-                # self.pick_up_object(pixel_xy, rgb_response)
+                
+                if rgb_response is not None and pixel_xy is not None:
+                    print(f"Picking up {object_class} at {pixel_xy} in {rgb_response.source.name}")
+                    self.pick_up_object(pixel_xy, rgb_response)
+                else:
+                    print("No objects found")
+
                 print(f"navigating to {initial_waypoint_id}")
                 self._navigate_to([initial_waypoint_id])
                 self.toggle_power(should_power_on=False)
@@ -109,6 +116,12 @@ class ToolRetrievalInferface(ClickMapInterface):
         # or continuous_hose_regrasping_demo for a more structured example
         grasp_success = False
         for _ in range(3):
+            # TODO:
+#               File "/home/niksridhar/spot/conq_python/src/clickmap_nav/tool_retrieval_interface.py", line 120, in pick_up_object
+#     grasp_success = grasp_point_in_image_basic(self.manipulation_client, image_response, pixel_xy)
+#   File "/home/niksridhar/spot/conq_python/src/conq/manipulation.py", line 111, in grasp_point_in_image_basic
+#     pick_cmd = manipulation_api_pb2.PickObjectInImage(
+# TypeError: Message must be initialized with a dict: bosdyn.api.PickObjectInImage
             # first just try the auto-grasp
             grasp_success = grasp_point_in_image_basic(self.manipulation_client, image_response, pixel_xy)
             if grasp_success:
