@@ -129,6 +129,42 @@ def pos_in_cam_to_pos_in_hand(p_in_cam):
     """
     return np.array([-p_in_cam[1], -p_in_cam[0]])
 
+def display_image(img, window_name="OpenCV image", seconds_to_show=4.0):
+        # Show window with what the robot sees
+    img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR) 
+    cv2.namedWindow(window_name)
+    cv2.imshow(window_name, img_bgr)
+    cv2.waitKey(int(seconds_to_show*1000))
+    cv2.destroyAllWindows()
+
+def annotate_frame(image, mask, mask_label=None, color=(0,255,0)):
+    """
+    Draw the contours and centroid of the prediction onto an image
+    Input:
+        image: np.array (3,width,height) (uint8)
+        mask:  np.array of 1s and 0s
+    """
+    if not np.any(mask): return
+
+
+    contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+    cv2.drawContours(image, contours, -1, color, 2)
+    # Calculate image moments of the detected contour
+    center_x, center_y = None, None
+    M = cv2.moments(contours[0])
+    if M['m00'] !=0:
+        center_x = round(M['m10'] / M['m00'])
+        center_y = round(M['m01'] / M['m00'])
+
+        # Draw a circle based centered at centroid coordinates
+        cv2.circle(image, (center_x,center_y), 5, color, -1)
+
+        # Display label (eg class name and confidence)
+        cv2.putText(image, mask_label, (contours[0][0][0][0], contours[0][0][0][1] - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5,color, 1, cv2.LINE_AA)
+
+    return center_x, center_y
 
 RGB_SOURCES = [
     'hand_color_image',

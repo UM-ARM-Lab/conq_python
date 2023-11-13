@@ -11,7 +11,7 @@ from bosdyn.client.manipulation_api_client import ManipulationApiClient
 import numpy as np
 
 from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface
-from conq.cameras_utils import get_color_img #, get_depth_img
+from conq.cameras_utils import get_color_img , display_image, annotate_frame#, get_depth_img
 from conq.manipulation import grasp_point_in_image_basic
 
 # TODO: Implement a state machine to deal with edge cases in a structured way
@@ -45,8 +45,8 @@ class ToolRetrievalInferface(ClickMapInterface):
                 print(f"navigating to: {actor.waypoint_id}")
                 self._navigate_to([actor.waypoint_id])
                 print(f"Looking for {object_class}...")
-                # pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
-                # self.pick_up_object(rgb_response, pixel_xy)
+                pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
+                # self.pick_up_object(pixel_xy, rgb_response)
                 print(f"navigating to {initial_waypoint_id}")
                 self._navigate_to([initial_waypoint_id])
                 self.toggle_power(should_power_on=False)
@@ -66,13 +66,27 @@ class ToolRetrievalInferface(ClickMapInterface):
         # get images from each camera
         for camera in self.cameras:
             rgb_np, rgb_response = get_color_img(self.image_client, camera)
+            rgb_np = np.array(rgb_np, dtype=np.uint8)
             # depth_np, depth_res = get_depth_img(self.image_client, 'hand_depth_in_hand_color_frame')
             predictions = self.predictor.predict(rgb_np)
-            # TODO: Get centroid
-            pixel_xy = predictions[object_class]
-            confidence = None
-            pixels_and_confidences.append((pixel_xy, confidence, rgb_response))
+            # List of dictionaries, where each dict contains a confidence, class, and 
             
+            for prediction in predictions:
+                confidence = prediction["confidence"]
+                predicted_class = prediction["class"]
+                confidence_array = prediction["mask"]
+                if predicted_class == object_class:
+                    binary_mask = (confidence_array >= confidence).astype(np.uint8)
+                    # print(f"rgb_np shape: {rgb_np.shape}, rgb_np.type {type(rgb_np)}, {type(rgb_np[0,0,0])}")
+                    color = (255,0,0) # class_name_to_color[class_name]
+                    label = f"{confidence} {object_class}"
+                    # TODO: .astype(np.uint16)
+                    center_x, center_y = annotate_frame(rgb_np, binary_mask, mask_label=label, color=color)
+
+                    pixels_and_confidences.append(((center_x, center_y), confidence, rgb_response))
+
+            display_image(rgb_np, window_name=camera, seconds_to_show=2)
+        
         # find the pixel with the highest confidence
         max_confidence = 0
         best_pixel_xy = None
@@ -83,19 +97,20 @@ class ToolRetrievalInferface(ClickMapInterface):
                 best_pixel_xy = pixel_xy
                 best_rgb_response = rgb_response
 
-        print(f"Found {object_class} at {pixel_xy} in {best_rgb_response}")
+        # TODO best_rgb_response.frame_name_image_sensor
+        print(f"Found {object_class} at {best_pixel_xy} in {best_rgb_response.source.name} with confidence {max_confidence}")
 
         return best_pixel_xy, best_rgb_response
 
 
-    def pick_up_object(self, image_response, pixel_xy):
+    def pick_up_object(self, pixel_xy,image_response ):
         """ Pick up the object at the given location."""
         # See the find_plant_demo for an (unorganized) example of how to do this
         # or continuous_hose_regrasping_demo for a more structured example
         grasp_success = False
         for _ in range(3):
             # first just try the auto-grasp
-            grasp_success = grasp_point_in_image_basic(self.clients, image_response, pixel_xy)
+            grasp_success = grasp_point_in_image_basic(self.manipulation_client, image_response, pixel_xy)
             if grasp_success:
                 return grasp_success
         return grasp_success

@@ -34,6 +34,11 @@ Core Username: spot
 Core Password: <lab password>
 Spot's IP address: 192.168.80.3
 
+It is often convenient to run (with the correct password): 
+```
+export BOSDYN_CLIENT_USERNAME=user && export ROBOT_IP=192.168.80.3 && export BOSDYN_CLIENT_PASSWORD=
+```
+
 ## Running the click-Map Interface 
 From within the clickmap_nav folder, run:
 ```
