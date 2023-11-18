@@ -12,7 +12,7 @@ import numpy as np
 
 from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface
 from conq.cameras_utils import get_color_img , display_image, annotate_frame#, get_depth_img
-from conq.manipulation import grasp_point_in_image_basic
+from conq.manipulation import grasp_point_in_image_basic, move_gripper_to_pose, blocking_gripper_open_fraction, blocking_arm_stow
 
 # TODO: Implement a state machine to deal with edge cases in a structured way
 
@@ -22,7 +22,6 @@ class ToolRetrievalInferface(ClickMapInterface):
         self.predictor = Predictor(model_path)
         self.image_client = robot.ensure_client(ImageClient.default_service_name)
         self.manipulation_client = robot.ensure_client(ManipulationApiClient.default_service_name)
-
         # Cameras through which to look for objects
         self.cameras = [
             'back_fisheye_image',
@@ -51,15 +50,16 @@ class ToolRetrievalInferface(ClickMapInterface):
                 
                 if rgb_response is not None and pixel_xy is not None:
                     print(f"Picking up {object_class} at {pixel_xy} in {rgb_response.source.name}")
-                    self.pick_up_object(pixel_xy, rgb_response)
-                    self.stow_object()
+                    grasp_success = self.pick_up_object(pixel_xy, rgb_response)
+                    drop_position = [-0.25, 0.0, 0.5]
+                    drop_orientation = [0.0,0.0,1.0,0.0]
+                    self.drop_object(drop_position, drop_orientation)
                 else:
                     print("No objects found")
 
                 print(f"navigating to {initial_waypoint_id}")
                 self._navigate_to([initial_waypoint_id])
                 self.toggle_power(should_power_on=False)
-
 
             else:
                 print("No waypoint selected")
@@ -120,12 +120,6 @@ class ToolRetrievalInferface(ClickMapInterface):
         # or continuous_hose_regrasping_demo for a more structured example
         grasp_success = False
         for _ in range(2):
-            # TODO:
-#               File "/home/niksridhar/spot/conq_python/src/clickmap_nav/tool_retrieval_interface.py", line 120, in pick_up_object
-#     grasp_success = grasp_point_in_image_basic(self.manipulation_client, image_response, pixel_xy)
-#   File "/home/niksridhar/spot/conq_python/src/conq/manipulation.py", line 111, in grasp_point_in_image_basic
-#     pick_cmd = manipulation_api_pb2.PickObjectInImage(
-# TypeError: Message must be initialized with a dict: bosdyn.api.PickObjectInImage
             # first just try the auto-grasp
             grasp_success = grasp_point_in_image_basic(self.manipulation_client, image_response, pixel_xy)
             if grasp_success:
@@ -133,11 +127,19 @@ class ToolRetrievalInferface(ClickMapInterface):
         
         return grasp_success
     
-    def stow_object(self):
+    def drop_object(self, position=None, orientation=None):
         """ Assuming there is an object in the gripper, move the arm above
          the bucket and open the gripper to drop the object in the bucket"""
-        pass
-
+        if position is None:
+            position = [0.5, 0.0, 0.0]
+        if orientation is None:
+            orientation = [1.0, 0.0, 0.0, 0.0]
+        if move_gripper_to_pose(self._robot_command_client, position, orientation):
+            if blocking_gripper_open_fraction(self._robot_command_client, fraction=1.0, timeout_sec=3.0):
+                return blocking_arm_stow(self._robot_command_client, timeout_sec=3.0)
+        
+        print("Failed to stow object")
+        return False
 
 
 def main(argv):
