@@ -1,12 +1,19 @@
+"""
+Functions that make it easier to manipulate objects.
+This primarily uses the manipulation_client, state_client, and command_client 
+This includes functionality such as:
+    - grasping a point in an image
+"""
+
 import time
 from typing import List
-
 import numpy as np
 from bosdyn.api import manipulation_api_pb2
-from bosdyn.client.frame_helpers import get_a_tform_b, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME
+from bosdyn.client.frame_helpers import get_a_tform_b, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME, ODOM_FRAME_NAME
 from bosdyn.client.robot_command import block_until_arm_arrives, RobotCommandBuilder
 from bosdyn.api import geometry_pb2
 from conq.clients import Clients
+from bosdyn.client import math_helpers
 
 
 def blocking_arm_command(clients: Clients, cmd, timeout_sec=3):
@@ -99,7 +106,7 @@ def grasp_point_in_image(clients: Clients, image_res, pick_vec):
 # We should break down our functions by what client they're interacting with.
 # this function needs a manipulation client to move, and also a state client for feedback 
 # (though arguably the feedback could be provided somewhere else, like in a higher-level state machine)
-def grasp_point_in_image_basic(manipulation_client, image_response, pixel_xy, timeout=10):
+def grasp_point_in_image_basic(manipulation_client,state_client, image_response, pixel_xy, timeout=10):
     """
     Args:
         manipulation_client: ManipulationApiClient
@@ -140,7 +147,7 @@ def grasp_point_in_image_basic(manipulation_client, image_response, pixel_xy, ti
         time.sleep(0.25)
 
     if (feedback_response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_SUCCEEDED 
-        and is_grasping(manipulation_client)):
+        and is_grasping(state_client)):
             print("Grasp Succeeded")
             return True
     else:
@@ -220,4 +227,35 @@ def add_follow_with_body(arm_command):
     arm_and_follow_cmd = RobotCommandBuilder.build_synchro_command(follow_cmd, arm_command)
     return arm_and_follow_cmd
 
+# TODO: Move this to a separate file that has to do with the command client
+def move_gripper_to_pose(command_client, state_client, position_xyz, orientation_quat):
+    """
+    Move gripper to a given pose (in meters, wrt gravity-aligned robot frame)
+    position_xyz: [x,y,z]
+    orientation_quat: [w,x,y,z]
 
+    """
+    position_vec = geometry_pb2.Vec3(x=position_xyz[0], y=position_xyz[1], z=position_xyz[2])
+    orientation = geometry_pb2.Quaternion(w=orientation_quat[0],
+                                            x=orientation_quat[1],
+                                            y=orientation_quat[2],
+                                            z=orientation_quat[3])
+
+    pose = geometry_pb2.SE3Pose(position=position_vec, rotation=orientation)
+
+    robot_state = state_client.get_robot_state()
+    odom_T_flat_body = get_a_tform_b(robot_state.kinematic_state.transforms_snapshot,
+                                        ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
+
+    odom_T_hand = odom_T_flat_body * math_helpers.SE3Pose.from_obj(pose)
+
+    seconds = 2 # duration in seconds
+
+    arm_command = RobotCommandBuilder.arm_pose_command(
+        odom_T_hand.x, odom_T_hand.y, odom_T_hand.z, odom_T_hand.rot.w, odom_T_hand.rot.x,
+        odom_T_hand.rot.y, odom_T_hand.rot.z, ODOM_FRAME_NAME, seconds)
+
+    # Send the request
+    cmd_id = command_client.robot_command(arm_command)
+    # Wait until the arm arrives at the goal.
+    block_until_arm_arrives(command_client, cmd_id, 3.0)
