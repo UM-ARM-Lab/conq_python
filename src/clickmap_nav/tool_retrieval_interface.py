@@ -16,8 +16,8 @@ from conq.manipulation import grasp_point_in_image_basic, \
                                 move_gripper_to_pose, \
                                 blocking_gripper_open_fraction, \
                                 blocking_arm_stow, \
-                                follow_gripper_trajectory 
-
+                                follow_gripper_trajectory, \
+                                arm_stow, gripper_open_fraction
 # TODO: Implement a state machine to deal with edge cases in a structured way
 
 class ToolRetrievalInferface(ClickMapInterface):
@@ -152,19 +152,24 @@ class ToolRetrievalInferface(ClickMapInterface):
                             ]
                             
         # if move_gripper_to_pose(self._robot_command_client, position, orientation):
-        success = True
-        success = success and follow_gripper_trajectory(self._robot_command_client, trajectory_points, timeout_sec=10.0)
-        print(f"Follower trajectory success: {success}")
-        success = success and blocking_gripper_open_fraction(self._robot_command_client, fraction=1.0, timeout_sec=3.0)
-        print(f"Open gripper success: {success}")
-        success = success and blocking_arm_stow(self._robot_command_client, timeout_sec=3.0)
-        print(f"Stow arm success: {success}")
-        if success:
-            print("Successfully stowed object")
-            return True
-        else:
-            print("Failed to stow object")
-            return False
+        follow_gripper_trajectory(self._robot_command_client, trajectory_points, timeout_sec=10.0)
+        gripper_open_fraction(self._robot_command_client, fraction=1.0)
+        arm_stow(self._robot_command_client)
+
+        # success = True
+        # print(f"Follower trajectory success: {success}")
+        # success = success and follow_gripper_trajectory(self._robot_command_client, trajectory_points, timeout_sec=10.0)
+        # success = success and blocking_gripper_open_fraction(self._robot_command_client, fraction=1.0, timeout_sec=3.0)
+        # print(f"Open gripper success: {success}")
+        # success = success and blocking_arm_stow(self._robot_command_client, timeout_sec=10.0)
+        # print(f"Stow arm success: {success}")
+        # if success:
+        #     print("Successfully stowed object")
+        #     return True
+        # else:
+        #     print("Failed to stow object")
+        #     return False
+        return True
 
 
 def main(argv):
