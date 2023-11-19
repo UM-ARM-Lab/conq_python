@@ -12,7 +12,11 @@ import numpy as np
 
 from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface
 from conq.cameras_utils import get_color_img , display_image, annotate_frame#, get_depth_img
-from conq.manipulation import grasp_point_in_image_basic, move_gripper_to_pose, blocking_gripper_open_fraction, blocking_arm_stow
+from conq.manipulation import grasp_point_in_image_basic, 
+                                move_gripper_to_pose, 
+                                blocking_gripper_open_fraction, 
+                                blocking_arm_stow, 
+                                follow_gripper_trajectory
 
 # TODO: Implement a state machine to deal with edge cases in a structured way
 
@@ -134,7 +138,16 @@ class ToolRetrievalInferface(ClickMapInterface):
             position = [0.5, 0.0, 0.0]
         if orientation is None:
             orientation = [1.0, 0.0, 0.0, 0.0]
-        if move_gripper_to_pose(self._robot_command_client, position, orientation):
+        # Nx8 list of xyx, quat, time
+        trajectory_points = [[0.80, 0.0, 0.0,   1.0, 0.0, 0.0, 0.0,               2.0 ], # a reasonable position in front of the robot
+                            [0.25, 0.35, 0.5,   1.0, 0.0, 0.0, 0.0,   4.0 ], 
+                            #  [0.25, 0.35, 0.5,   0.7071068, 0.0, 0.0, 0.7071068,   8.0 ], # this pose doesn't match my expectations
+                             [-0.2, 0.0, 0.5,   0.0, 0.0, 1.0, 0.0,               6.0]
+                            #  [-0.2, 0.0, 0.5,  0.0, -0.7071068, 0.7071068, 0.0,   16.0] # rotate sideways
+                            ]
+                            
+        # if move_gripper_to_pose(self._robot_command_client, position, orientation):
+        if follow_gripper_trajectory(self._robot_command_client, trajectory_points):
             if blocking_gripper_open_fraction(self._robot_command_client, fraction=1.0, timeout_sec=3.0):
                 return blocking_arm_stow(self._robot_command_client, timeout_sec=3.0)
         

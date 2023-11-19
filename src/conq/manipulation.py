@@ -11,7 +11,7 @@ import numpy as np
 from bosdyn.api import manipulation_api_pb2
 from bosdyn.client.frame_helpers import get_a_tform_b, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME, ODOM_FRAME_NAME
 from bosdyn.client.robot_command import block_until_arm_arrives, RobotCommandBuilder
-from bosdyn.api import geometry_pb2
+from bosdyn.api import geometry_pb2, arm_command_pb2, trajectory_pb2, synchronized_command_pb2, robot_command_pb2
 from conq.clients import Clients
 from bosdyn.client import math_helpers
 
@@ -273,3 +273,58 @@ def move_gripper_to_pose(command_client, state_client, position_xyz, orientation
     success = block_until_arm_arrives(command_client, cmd_id, duration_seconds +1.0)
     return success
 
+
+
+def follow_gripper_trajectory(command_client, trajectory_points):
+    """
+    Follow a trajectory of the gripper (in meters, wrt gravity-aligned robot frame)
+    trajectory_points: Nx8 list of xyx, quat, time
+    """
+    traj_point_list = []
+    for p in trajectory_points:
+        position_vec = geometry_pb2.Vec3(x=p[0], y=p[1], z=p[2])
+        orientation = geometry_pb2.Quaternion(w=p[3], x=p[4],y=p[5],z=p[6])
+        pose = geometry_pb2.SE3Pose(position=position_vec, rotation=orientation)
+        traj_point = trajectory_pb2.SE3TrajectoryPoint(
+            pose=pose, time_since_reference=seconds_to_duration(p[7]))
+        traj_point_list.append(traj_point)
+    hand_traj = trajectory_pb2.SE3Trajectory(points=traj_point_list)
+
+    arm_cartesian_command = arm_command_pb2.ArmCartesianCommand.Request(
+        pose_trajectory_in_task=hand_traj, root_frame_name=GRAV_ALIGNED_BODY_FRAME_NAME)
+
+    # Pack everything up in protos.
+    arm_command = arm_command_pb2.ArmCommand.Request(
+        arm_cartesian_command=arm_cartesian_command)
+
+    synchronized_command = synchronized_command_pb2.SynchronizedCommand.Request(
+        arm_command=arm_command)
+
+    robot_command = robot_command_pb2.RobotCommand(synchronized_command=synchronized_command)
+
+    # # Keep the gripper closed the whole time.
+    # robot_command = RobotCommandBuilder.claw_gripper_open_fraction_command(
+    #     0, build_on_command=robot_command)
+
+    robot.logger.info("Sending trajectory command...")
+
+    # Send the trajectory to the robot.
+    cmd_id = command_client.robot_command(robot_command)
+
+    # Wait until the arm arrives at the goal.
+    t0 = time.time()
+    while True:
+        feedback_resp = command_client.robot_command_feedback(cmd_id)
+        # robot.logger.info('Distance to final point: ' + '{:.2f} meters'.format(
+        #     feedback_resp.feedback.synchronized_feedback.arm_command_feedback.
+        #     arm_cartesian_feedback.measured_pos_distance_to_goal) + ', {:.2f} radians'.format(
+        #         feedback_resp.feedback.synchronized_feedback.arm_command_feedback.
+        #         arm_cartesian_feedback.measured_rot_distance_to_goal))
+
+        if feedback_resp.feedback.synchronized_feedback.arm_command_feedback.arm_cartesian_feedback.status == arm_command_pb2.ArmCartesianCommand.Feedback.STATUS_TRAJECTORY_COMPLETE:
+            robot.logger.info('Move complete.')
+            return True
+        elif time.time() - t0 > trjectory_points[-1][7] + 5.0:
+            robot.logger.info('Move timed out.')
+            return False
+        time.sleep(0.1)
