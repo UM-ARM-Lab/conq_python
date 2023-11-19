@@ -14,6 +14,7 @@ from bosdyn.client.robot_command import block_until_arm_arrives, RobotCommandBui
 from bosdyn.api import geometry_pb2, arm_command_pb2, trajectory_pb2, synchronized_command_pb2, robot_command_pb2
 from conq.clients import Clients
 from bosdyn.client import math_helpers
+from bosdyn.util import seconds_to_duration
 
 
 def blocking_arm_command(clients: Clients, cmd, timeout_sec=3):
@@ -275,7 +276,7 @@ def move_gripper_to_pose(command_client, state_client, position_xyz, orientation
 
 
 
-def follow_gripper_trajectory(command_client, trajectory_points):
+def follow_gripper_trajectory(command_client, trajectory_points, timeout_sec=5.0):
     """
     Follow a trajectory of the gripper (in meters, wrt gravity-aligned robot frame)
     trajectory_points: Nx8 list of xyx, quat, time
@@ -306,8 +307,6 @@ def follow_gripper_trajectory(command_client, trajectory_points):
     # robot_command = RobotCommandBuilder.claw_gripper_open_fraction_command(
     #     0, build_on_command=robot_command)
 
-    robot.logger.info("Sending trajectory command...")
-
     # Send the trajectory to the robot.
     cmd_id = command_client.robot_command(robot_command)
 
@@ -315,16 +314,10 @@ def follow_gripper_trajectory(command_client, trajectory_points):
     t0 = time.time()
     while True:
         feedback_resp = command_client.robot_command_feedback(cmd_id)
-        # robot.logger.info('Distance to final point: ' + '{:.2f} meters'.format(
-        #     feedback_resp.feedback.synchronized_feedback.arm_command_feedback.
-        #     arm_cartesian_feedback.measured_pos_distance_to_goal) + ', {:.2f} radians'.format(
-        #         feedback_resp.feedback.synchronized_feedback.arm_command_feedback.
-        #         arm_cartesian_feedback.measured_rot_distance_to_goal))
 
         if feedback_resp.feedback.synchronized_feedback.arm_command_feedback.arm_cartesian_feedback.status == arm_command_pb2.ArmCartesianCommand.Feedback.STATUS_TRAJECTORY_COMPLETE:
-            robot.logger.info('Move complete.')
             return True
-        elif time.time() - t0 > trjectory_points[-1][7] + 5.0:
-            robot.logger.info('Move timed out.')
-            return False
+        # elif time.time() - t0 > trajectory_points[-1][7] + timeout_sec:
+        #     print('follow_gripper_trajectory timed out.')
+        #     return False
         time.sleep(0.1)

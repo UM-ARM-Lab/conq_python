@@ -12,11 +12,11 @@ import numpy as np
 
 from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface
 from conq.cameras_utils import get_color_img , display_image, annotate_frame#, get_depth_img
-from conq.manipulation import grasp_point_in_image_basic, 
-                                move_gripper_to_pose, 
-                                blocking_gripper_open_fraction, 
-                                blocking_arm_stow, 
-                                follow_gripper_trajectory
+from conq.manipulation import grasp_point_in_image_basic, \
+                                move_gripper_to_pose, \
+                                blocking_gripper_open_fraction, \
+                                blocking_arm_stow, \
+                                follow_gripper_trajectory 
 
 # TODO: Implement a state machine to deal with edge cases in a structured way
 
@@ -39,7 +39,9 @@ class ToolRetrievalInferface(ClickMapInterface):
     def onKeyPressEvent(self, obj, event):
         key, actor =  super().onKeyPressEvent(obj, event)
         if key == 'g':
+            
             object_class = 'hose_handle'
+            print(f"Looking for {object_class}...")
             # Go to a waypoint and pick up the tool, then come back
             if actor:
                 localization_state = self._get_localization_state()
@@ -113,7 +115,10 @@ class ToolRetrievalInferface(ClickMapInterface):
                 best_rgb_response = rgb_response
 
         # TODO best_rgb_response.frame_name_image_sensor
-        print(f"Found {object_class} at {best_pixel_xy} in {best_rgb_response.source.name} with confidence {max_confidence}")
+        if best_pixel_xy is None or best_rgb_response is None:
+            print(f"Did not find {object_class}")
+        else:
+            print(f"Found {object_class} at {best_pixel_xy} in {best_rgb_response.source.name} with confidence {max_confidence}")
 
         return best_pixel_xy, best_rgb_response
 
@@ -125,7 +130,7 @@ class ToolRetrievalInferface(ClickMapInterface):
         grasp_success = False
         for _ in range(2):
             # first just try the auto-grasp
-            grasp_success = grasp_point_in_image_basic(self.manipulation_client, image_response, pixel_xy)
+            grasp_success = grasp_point_in_image_basic(self.manipulation_client, self._robot_state_client, image_response, pixel_xy)
             if grasp_success:
                 return grasp_success
         
@@ -140,19 +145,26 @@ class ToolRetrievalInferface(ClickMapInterface):
             orientation = [1.0, 0.0, 0.0, 0.0]
         # Nx8 list of xyx, quat, time
         trajectory_points = [[0.80, 0.0, 0.0,   1.0, 0.0, 0.0, 0.0,               2.0 ], # a reasonable position in front of the robot
-                            [0.25, 0.35, 0.5,   1.0, 0.0, 0.0, 0.0,   4.0 ], 
+                            [0.25, 0.35, 0.55,   1.0, 0.0, 0.0, 0.0,   4.0 ], 
                             #  [0.25, 0.35, 0.5,   0.7071068, 0.0, 0.0, 0.7071068,   8.0 ], # this pose doesn't match my expectations
-                             [-0.2, 0.0, 0.5,   0.0, 0.0, 1.0, 0.0,               6.0]
+                             [-0.2, 0.0, 0.55,   0.0, 0.0, 1.0, 0.0,               6.0]
                             #  [-0.2, 0.0, 0.5,  0.0, -0.7071068, 0.7071068, 0.0,   16.0] # rotate sideways
                             ]
                             
         # if move_gripper_to_pose(self._robot_command_client, position, orientation):
-        if follow_gripper_trajectory(self._robot_command_client, trajectory_points):
-            if blocking_gripper_open_fraction(self._robot_command_client, fraction=1.0, timeout_sec=3.0):
-                return blocking_arm_stow(self._robot_command_client, timeout_sec=3.0)
-        
-        print("Failed to stow object")
-        return False
+        success = True
+        success = success and follow_gripper_trajectory(self._robot_command_client, trajectory_points, timeout_sec=10.0)
+        print(f"Follower trajectory success: {success}")
+        success = success and blocking_gripper_open_fraction(self._robot_command_client, fraction=1.0, timeout_sec=3.0)
+        print(f"Open gripper success: {success}")
+        success = success and blocking_arm_stow(self._robot_command_client, timeout_sec=3.0)
+        print(f"Stow arm success: {success}")
+        if success:
+            print("Successfully stowed object")
+            return True
+        else:
+            print("Failed to stow object")
+            return False
 
 
 def main(argv):
