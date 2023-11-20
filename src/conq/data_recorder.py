@@ -58,9 +58,8 @@ class ConqDataRecorder:
         self.episode_idx += 1
 
     def stop(self):
+        self.episode_done.set()
         self.saver_thread.join()
-        for img_rec in self.img_recorders:
-            img_rec.join()
 
     def add_instruction(self, text: str):
         self.latest_instruction = text
@@ -100,9 +99,11 @@ class ConqDataRecorder:
 
             episode.append(step_data)
 
-            # save and wait a bit so other threads can run
-            with episode_path.open('wb') as f:
-                pickle.dump(episode, f)
+            # save
+            if len(episode) % 50 == 0:
+                with episode_path.open('wb') as f:
+                    pickle.dump(episode, f)
+                print("saved")
 
 
 def get_state_vec(state):

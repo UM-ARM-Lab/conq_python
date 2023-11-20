@@ -3,19 +3,19 @@ import numpy as np
 from bosdyn.api import image_pb2
 from bosdyn.api.image_pb2 import ImageResponse
 from bosdyn.client.image import build_image_request
-from scipy import ndimage
+from PIL import Image
 
 ROTATION_ANGLE = {
-    'back_fisheye_image': 0,
-    'frontleft_fisheye_image': -78,
-    'frontright_fisheye_image': -102,
-    'frontleft_depth_in_visual_frame': -78,
+    'back_fisheye_image':               0,
+    'frontleft_fisheye_image':          -78,
+    'frontright_fisheye_image':         -102,
+    'frontleft_depth_in_visual_frame':  -78,
     'frontright_depth_in_visual_frame': -102,
-    'hand_depth_in_hand_color_frame': 0,
-    'hand_depth': 0,
-    'hand_color_image': 0,
-    'left_fisheye_image': 0,
-    'right_fisheye_image': 180
+    'hand_depth_in_hand_color_frame':   0,
+    'hand_depth':                       0,
+    'hand_color_image':                 0,
+    'left_fisheye_image':               0,
+    'right_fisheye_image':              180
 }
 
 
@@ -53,8 +53,13 @@ def image_to_opencv(image, auto_rotate=False):
     if auto_rotate:
         angle = ROTATION_ANGLE[image.source.name]
         if angle != 0:
-            img = ndimage.rotate(img, angle)
+            img = rotate_image(img, angle)
 
+    return img
+
+
+def rotate_image(img, angle):
+    img = np.asarray(Image.fromarray(img).rotate(angle, expand=True))
     return img
 
 
