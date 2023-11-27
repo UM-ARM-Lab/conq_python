@@ -17,7 +17,9 @@ from conq.manipulation import grasp_point_in_image_basic, \
                                 blocking_gripper_open_fraction, \
                                 blocking_arm_stow, \
                                 follow_gripper_trajectory, \
-                                arm_stow, gripper_open_fraction
+                                arm_stow, gripper_open_fraction, \
+                                rotate_body_in_place, move_body, \
+                                is_grasping
 # TODO: Implement a state machine to deal with edge cases in a structured way
 
 class ToolRetrievalInferface(ClickMapInterface):
@@ -51,18 +53,38 @@ class ToolRetrievalInferface(ClickMapInterface):
                 print(f"navigating to: {actor.waypoint_id}")
                 self._navigate_to([actor.waypoint_id])
 
-                print(f"Looking for {object_class}...")
-                pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
-                
-                if rgb_response is not None and pixel_xy is not None:
-                    print(f"Picking up {object_class} at {pixel_xy} in {rgb_response.source.name}")
-                    grasp_success = self.pick_up_object(pixel_xy, rgb_response)
-                    drop_position = [-0.25, 0.0, 0.5]
-                    drop_orientation = [0.0,0.0,1.0,0.0]
-                    self.drop_object(drop_position, drop_orientation)
-                else:
-                    print("No objects found")
+                n_tries = 0
+                while n_tries < 3:
+                    n_tries += 1
 
+                    # Rotate if previous search didn't work
+                    # TODO: Tune rotation and only rotate after the first one
+                    if n_tries >= 0:
+                        move_body(self._robot_command_client, throttle_vx=0.0, throttle_vy=0.0, throttle_vw=1.0)
+                        # what I really want is to set the orientation directly wrt current orientation
+
+                    print(f"Looking for {object_class}...")
+                    pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
+                    
+                    if rgb_response is not None and pixel_xy is not None:
+                        print(f"Picking up {object_class} at {pixel_xy} in {rgb_response.source.name}")
+                        grasp_and_lift_success = self.pick_up_object(pixel_xy, rgb_response)
+                        
+                        if grasp_and_lift_success:
+                            drop_position = [-0.25, 0.0, 0.5] #over the bucket
+                            drop_orientation = [0.0,0.0,1.0,0.0]
+                            self.drop_object(drop_position, drop_orientation)
+                            break # Success, break out of while loop
+                        else:
+                            print(f"Try {n_tries}: Grasp and lift failed")
+
+                        # if grasp or lift failed, while loop will rotate body then try again
+                    else:
+                        print(f"Try {n_tries}: no objects in view")
+                        # If no objects found while loop will rotate body then try again
+                    
+
+                # TODO: Set TravelParams.ignore_final_yaw to True
                 print(f"navigating to {initial_waypoint_id}")
                 self._navigate_to([initial_waypoint_id])
                 self.toggle_power(should_power_on=False)
@@ -102,7 +124,7 @@ class ToolRetrievalInferface(ClickMapInterface):
 
                     pixels_and_confidences.append(((center_x, center_y), confidence, rgb_response))
 
-            display_image(rgb_np, window_name=camera, seconds_to_show=2)
+            display_image(rgb_np, window_name=camera, seconds_to_show=1)
         
         # find the pixel with the highest confidence
         max_confidence = 0
@@ -124,16 +146,17 @@ class ToolRetrievalInferface(ClickMapInterface):
 
 
     def pick_up_object(self, pixel_xy,image_response ):
-        """ Pick up the object at the given location."""
-        # See the find_plant_demo for an (unorganized) example of how to do this
-        # or continuous_hose_regrasping_demo for a more structured example
+        """ Grasp and lift the object at the given location."""
+        # See the find_plant_demo or continuous_hose_regrasping_demo 
         grasp_success = False
-        for _ in range(2):
-            # first just try the auto-grasp
-            grasp_success = grasp_point_in_image_basic(self.manipulation_client, self._robot_state_client, image_response, pixel_xy)
-            if grasp_success:
-                return grasp_success
-        
+        grasp_success = grasp_point_in_image_basic(self.manipulation_client, self._robot_state_client, image_response, pixel_xy)
+        if grasp_success:
+            lift_point = [[0.80, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,  2.0 ]] # a reasonable position in front of the robot
+            follow_gripper_trajectory(self._robot_command_client, lift_point, timeout_sec=10.0)
+
+            grasp_success = is_grasping(self._robot_state_client)
+
+        print(f"Grasp success: {grasp_success}")
         return grasp_success
     
     def drop_object(self, position=None, orientation=None):

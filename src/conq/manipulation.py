@@ -15,7 +15,7 @@ from bosdyn.api import geometry_pb2, arm_command_pb2, trajectory_pb2, synchroniz
 from conq.clients import Clients
 from bosdyn.client import math_helpers
 from bosdyn.util import seconds_to_duration
-
+from bosdyn.geometry import EulerZXY
 
 def blocking_arm_command(clients: Clients, cmd, timeout_sec=3):
     block_until_arm_arrives(clients.command, clients.command.robot_command(cmd), timeout_sec)
@@ -69,7 +69,9 @@ def gripper_open_fraction(command_client, fraction=1.0):
 
 def arm_stow(command_client):
     stow = RobotCommandBuilder.arm_stow_command()
-    stow_command_id = command_client.robot_command(stow)
+    close_gripper = RobotCommandBuilder.claw_gripper_open_fraction_command(0.0)
+    stow_and_close = RobotCommandBuilder.build_synchro_command(stow, close_gripper)
+    stow_command_id = command_client.robot_command(stow_and_close)
     time.sleep(1)  # FIXME: how to block on a gripper command?
     return stow_command_id
 
@@ -334,3 +336,36 @@ def follow_gripper_trajectory(command_client, trajectory_points, timeout_sec=5.0
         #     print('follow_gripper_trajectory timed out.')
         #     return False
         time.sleep(0.1)
+
+# TODO: should this be in a separate file?
+def rotate_body_in_place(command_client, roll=0.0, pitch=0.0, yaw=0.4):
+    footprint_R_body = EulerZXY(yaw=yaw, roll=roll, pitch=pitch)
+    cmd = RobotCommandBuilder.synchro_stand_command(footprint_R_body=footprint_R_body)
+    cmd_id = command_client.robot_command(cmd)
+    print(f'Twisted Stand -- Roll: {roll}, pitch: {pitch}, yaw:{yaw}')
+    return cmd_id
+
+def move_body(command_client, throttle_vx=0.0, throttle_vy=0.0, throttle_omega=0.0, duration_secs=0.6):
+        # def _move(self, left_x, left_y, right_x):
+    """Commands the robot with a velocity command based on left/right stick values.
+
+    Args:
+        throttle_vx: float, [-1, 1] value for x velocity
+        throttle_vy: float, [-1, 1] value for y velocity
+        throttle_omega: float, [-1, 1] value for angular velocity
+    """
+    VELOCITY_BASE_SPEED = 0.5 # m/s
+    VELOCITY_BASE_ANGULAR = 0.8 # rad/s
+
+    v_y = throttle_vx * VELOCITY_BASE_SPEED
+    v_x = throttle_vy * VELOCITY_BASE_SPEED
+    v_rot = throttle_omega * VELOCITY_BASE_ANGULAR
+
+    # # Recreate mobility_params with the latest information
+    # self.mobility_params = RobotCommandBuilder.mobility_params(
+    #     body_height=self.body_height, locomotion_hint=self.mobility_params.locomotion_hint,
+    #     stair_hint=self.mobility_params.stair_hint)
+
+    cmd = RobotCommandBuilder.synchro_velocity_command(v_x=v_x, v_y=v_y, v_rot=v_rot)#,
+                                                        #params=self.mobility_params)
+    command_client.robot_command_async(cmd, end_time_secs=time.time() + duration_secs)
