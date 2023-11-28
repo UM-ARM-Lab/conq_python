@@ -47,19 +47,19 @@ def block_for_manipulation_api_command(clients, cmd_response, period=0.25):
 
     print('Finished.')
 
-# FIXME: this is broken
-def blocking_arm_stow(command_client, timeout_sec=3.0):
-    stow = RobotCommandBuilder.arm_stow_command()
-    stow_command_id = command_client.robot_command(stow)
-    success = block_until_arm_arrives(command_client, stow_command_id, timeout_sec=timeout_sec)
-    return success
+# # FIXME: this is broken
+# def blocking_arm_stow(command_client, timeout_sec=3.0):
+#     stow = RobotCommandBuilder.arm_stow_command()
+#     stow_command_id = command_client.robot_command(stow)
+#     success = block_until_arm_arrives(command_client, stow_command_id, timeout_sec=timeout_sec)
+#     return success
 
-# FIXME: this is broken
-def blocking_gripper_open_fraction(command_client, fraction=1.0, timeout_sec=3.0):
-    gripper_command = RobotCommandBuilder.claw_gripper_open_fraction_command(fraction)
-    cmd_id = command_client.robot_command(gripper_command)
-    success = block_until_arm_arrives(command_client, cmd_id, timeout_sec=timeout_sec)
-    return success
+# # FIXME: this is broken
+# def blocking_gripper_open_fraction(command_client, fraction=1.0, timeout_sec=3.0):
+#     gripper_command = RobotCommandBuilder.claw_gripper_open_fraction_command(fraction)
+#     cmd_id = command_client.robot_command(gripper_command)
+#     success = block_until_arm_arrives(command_client, cmd_id, timeout_sec=timeout_sec)
+#     return success
 
 def gripper_open_fraction(command_client, fraction=1.0):
     gripper_command = RobotCommandBuilder.claw_gripper_open_fraction_command(fraction)
@@ -75,7 +75,6 @@ def arm_stow(command_client):
     time.sleep(1)  # FIXME: how to block on a gripper command?
     return stow_command_id
 
-# TODO: Deprecated in favor of blocking_gripper_open_fraction
 def open_gripper(clients: Clients):
     clients.command.robot_command(RobotCommandBuilder.claw_gripper_open_command())
     time.sleep(1)  # FIXME: how to block on a gripper command?

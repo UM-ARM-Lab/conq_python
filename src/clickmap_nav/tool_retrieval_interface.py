@@ -14,8 +14,6 @@ from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface
 from conq.cameras_utils import get_color_img , display_image, annotate_frame#, get_depth_img
 from conq.manipulation import grasp_point_in_image_basic, \
                                 move_gripper_to_pose, \
-                                blocking_gripper_open_fraction, \
-                                blocking_arm_stow, \
                                 follow_gripper_trajectory, \
                                 arm_stow, gripper_open_fraction, \
                                 rotate_body_in_place, move_body, \
@@ -40,57 +38,76 @@ class ToolRetrievalInferface(ClickMapInterface):
 
     def onKeyPressEvent(self, obj, event):
         key, actor =  super().onKeyPressEvent(obj, event)
+        object_class = None
         if key == 'g':
-            
             object_class = 'hose_handle'
-            print(f"Looking for {object_class}...")
+        elif key == 'h':
+            object_class = 'trowel'
+        elif key == 'j':
+            object_class = 'clippers'
+        elif key == 'k':
+            object_class = 'shovel'
+
+        if object_class is not None:
             # Go to a waypoint and pick up the tool, then come back
             if actor:
-                localization_state = self._get_localization_state()
-                initial_waypoint_id = localization_state.localization.waypoint_id
-                self.toggle_power(should_power_on=True)
-                
-                print(f"navigating to: {actor.waypoint_id}")
-                self._navigate_to([actor.waypoint_id])
-
-                n_tries = 0
-                while n_tries < 3:
-                    n_tries += 1
-
-                    # Rotate if previous search didn't work
-                    # TODO: Tune rotation and only rotate after the first one
-                    if n_tries >= 0:
-                        move_body(self._robot_command_client, throttle_vx=0.0, throttle_vy=0.0, throttle_vw=1.0)
-                        # what I really want is to set the orientation directly wrt current orientation
-
-                    print(f"Looking for {object_class}...")
-                    pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
-                    
-                    if rgb_response is not None and pixel_xy is not None:
-                        print(f"Picking up {object_class} at {pixel_xy} in {rgb_response.source.name}")
-                        grasp_and_lift_success = self.pick_up_object(pixel_xy, rgb_response)
-                        
-                        if grasp_and_lift_success:
-                            drop_position = [-0.25, 0.0, 0.5] #over the bucket
-                            drop_orientation = [0.0,0.0,1.0,0.0]
-                            self.drop_object(drop_position, drop_orientation)
-                            break # Success, break out of while loop
-                        else:
-                            print(f"Try {n_tries}: Grasp and lift failed")
-
-                        # if grasp or lift failed, while loop will rotate body then try again
-                    else:
-                        print(f"Try {n_tries}: no objects in view")
-                        # If no objects found while loop will rotate body then try again
-                    
-
-                # TODO: Set TravelParams.ignore_final_yaw to True
-                print(f"navigating to {initial_waypoint_id}")
-                self._navigate_to([initial_waypoint_id])
-                self.toggle_power(should_power_on=False)
-
+                print(f"Looking for {object_class}...")
+                self.fetch_object(object_class, actor.waypoint_id)
             else:
                 print("No waypoint selected")
+
+    def fetch_object(self, object_class: str, waypoint_id: str):
+        """Navigate to the given waypoint
+         pick up the object of type object_class, and drop it in the bucket
+         Then return to the original waypoint
+         """
+        localization_state = self._get_localization_state()
+        initial_waypoint_id = localization_state.localization.waypoint_id
+        self.toggle_power(should_power_on=True)
+        
+        print(f"navigating to: {waypoint_id}")
+        self._navigate_to([waypoint_id])
+
+        n_tries = 0
+        n_tries_max = 3
+        while n_tries < n_tries_max:
+            n_tries += 1
+
+            # Rotate if previous search didn't work
+            # TODO: Tune rotation and only rotate after the first one
+            if n_tries >= 0:
+                move_body(self._robot_command_client, throttle_vx=0.0, throttle_vy=0.0, throttle_vw=1.0)
+                # what I really want is to set the orientation directly wrt current orientation
+
+            print(f"Looking for {object_class}...")
+            pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
+            
+            if rgb_response is not None and pixel_xy is not None:
+                print(f"Picking up {object_class} at {pixel_xy} in {rgb_response.source.name}")
+                grasp_and_lift_success = self.pick_up_object(pixel_xy, rgb_response)
+                
+                if grasp_and_lift_success:
+                    drop_position = [-0.25, 0.0, 0.5] #over the bucket
+                    drop_orientation = [0.0,0.0,1.0,0.0]
+                    self.drop_object(drop_position, drop_orientation)
+                    break # Success, break out of while loop
+                else:
+                    print(f"Try {n_tries}: Grasp and lift failed")
+
+                # if grasp or lift failed, while loop will rotate body then try again
+            else:
+                print(f"Try {n_tries}: no objects in view")
+                # If no objects found while loop will rotate body then try again
+            
+
+        # TODO: Set TravelParams.ignore_final_yaw to True
+        print(f"navigating to {initial_waypoint_id}")
+        self._navigate_to([initial_waypoint_id])
+        self.toggle_power(should_power_on=False)
+
+        return n_tries < n_tries_max
+        
+
 
     def find_object(self, object_class: str):
         """
