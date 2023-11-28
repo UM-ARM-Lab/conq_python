@@ -16,7 +16,7 @@ It is often convenient to run (with the correct password):
 export BOSDYN_CLIENT_USERNAME=user && export ROBOT_IP=192.168.80.3 && export BOSDYN_CLIENT_PASSWORD=
 ```
 
-Running the tool_retrieval_interface (a descendent of ClickMapInterface) might look like:
+Go into the src/clickmap_nav folder. then running the tool_retrieval_interface (a descendent of ClickMapInterface) might look like:
 ```
 python3 -m tool_retrieval_interface -a -u ~/spot/maps/collabspace3.walk --model-filepath ~/spot/models/garden_implements_model.pth 192.168.80.3
 ```
