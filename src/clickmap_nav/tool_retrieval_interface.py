@@ -52,64 +52,75 @@ class ToolRetrievalInferface(ClickMapInterface):
             # Go to a waypoint and pick up the tool, then come back
             if actor:
                 print(f"Looking for {object_class}...")
-                self.fetch_object(object_class, actor.waypoint_id)
+                fetch_success = self.fetch_object(object_class, actor.waypoint_id)
+                print(f"Fetch success: {fetch_success}")
             else:
                 print("No waypoint selected")
+            self.print_controls()
+        
 
     def fetch_object(self, object_class: str, waypoint_id: str):
         """Navigate to the given waypoint
          pick up the object of type object_class, and drop it in the bucket
          Then return to the original waypoint
          """
+        
+        self.toggle_power(should_power_on=True)
         localization_state = self._get_localization_state()
         initial_waypoint_id = localization_state.localization.waypoint_id
-        self.toggle_power(should_power_on=True)
         
         print(f"navigating to: {waypoint_id}")
-        self._navigate_to([waypoint_id])
+        navigation_success = self._navigate_to([waypoint_id])
 
         n_tries = 0
         n_tries_max = 3
-        while n_tries < n_tries_max:
-            n_tries += 1
+        if navigation_success:
+            while n_tries < n_tries_max:
+                n_tries += 1
 
-            # Rotate if previous search didn't work
-            # TODO: Tune rotation and only rotate after the first one
-            if n_tries >= 0:
-                move_body(self._robot_command_client, throttle_vx=0.0, throttle_vy=0.0, throttle_vw=1.0)
-                # what I really want is to set the orientation directly wrt current orientation
+                # Rotate if previous search didn't work
+                # TODO: Tune rotation and only rotate after the first one
+                if n_tries > 1:
+                    move_body(self._robot_command_client, throttle_vx=0.0, throttle_vy=0.0, throttle_omega=1.0, duration_secs=2.0)
+                    # what I really want is to set the orientation directly wrt current orientation
 
-            print(f"Looking for {object_class}...")
-            pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
-            
-            if rgb_response is not None and pixel_xy is not None:
-                print(f"Picking up {object_class} at {pixel_xy} in {rgb_response.source.name}")
-                grasp_and_lift_success = self.pick_up_object(pixel_xy, rgb_response)
+                print(f"Looking for {object_class}...")
+                pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
                 
-                if grasp_and_lift_success:
-                    drop_position = [-0.25, 0.0, 0.5] #over the bucket
-                    drop_orientation = [0.0,0.0,1.0,0.0]
-                    self.drop_object(drop_position, drop_orientation)
-                    break # Success, break out of while loop
-                else:
-                    print(f"Try {n_tries}: Grasp and lift failed")
+                if rgb_response is not None and pixel_xy is not None:
+                    print(f"Picking up {object_class} at {pixel_xy} in {rgb_response.source.name}")
+                    grasp_and_lift_success = self.pick_up_object(pixel_xy, rgb_response)
+                    
+                    if grasp_and_lift_success:
+                        drop_position = [-0.25, 0.0, 0.5] #over the bucket
+                        drop_orientation = [0.0,0.0,1.0,0.0]
+                        self.drop_object(drop_position, drop_orientation)
+                        break # Success, break out of while loop
+                    else:
+                        print(f"Try {n_tries}: Grasp and lift failed")
 
-                # if grasp or lift failed, while loop will rotate body then try again
-            else:
-                print(f"Try {n_tries}: no objects in view")
-                # If no objects found while loop will rotate body then try again
-            
+                    # if grasp or lift failed, while loop will rotate body then try again
+                else:
+                    print(f"Try {n_tries}: no objects in view")
+                    # If no objects found while loop will rotate body then try again
+        else: 
+            print("Navigation failed")   
 
         # TODO: Set TravelParams.ignore_final_yaw to True
         print(f"navigating to {initial_waypoint_id}")
         self._navigate_to([initial_waypoint_id])
-        self.toggle_power(should_power_on=False)
+
+        # Power off the robot if appropriate.
+        if self._powered_on and not self._started_powered_on:
+            # Sit the robot down + power off after the navigation command is complete.
+            self.toggle_power(should_power_on=False)
+        # self.toggle_power(should_power_on=False)
 
         return n_tries < n_tries_max
         
 
 
-    def find_object(self, object_class: str):
+    def find_object(self, object_class: str, min_confidence_thresh=0.65):
         """
         Looks through each of the cameras for an object of type object_class
         Input: 
@@ -131,12 +142,10 @@ class ToolRetrievalInferface(ClickMapInterface):
                 confidence = prediction["confidence"]
                 predicted_class = prediction["class"]
                 confidence_array = prediction["mask"]
-                if predicted_class == object_class:
+                if predicted_class == object_class and confidence >= min_confidence_thresh:
                     binary_mask = (confidence_array >= confidence).astype(np.uint8)
-                    # print(f"rgb_np shape: {rgb_np.shape}, rgb_np.type {type(rgb_np)}, {type(rgb_np[0,0,0])}")
                     color = (255,0,0) # class_name_to_color[class_name]
                     label = f"{confidence} {object_class}"
-                    # TODO: .astype(np.uint16)
                     center_x, center_y = annotate_frame(rgb_np, binary_mask, mask_label=label, color=color)
 
                     pixels_and_confidences.append(((center_x, center_y), confidence, rgb_response))
@@ -210,6 +219,32 @@ class ToolRetrievalInferface(ClickMapInterface):
         #     print("Failed to stow object")
         #     return False
         return True
+    
+    def print_controls(self):
+        print("""
+            Controls:
+              (Right-Click)  Zoom
+              (Left-Click)   Rotate
+              (Scroll-Click) Pan
+              (r) reset the camera
+              (e) exit the program
+              (f) set a new camera focal point and fly towards that point
+              (u) invokes the user event
+              (3) toggles between stereo and non-stero mode
+              (l) toggles on/off a latitude/longitude markers that can be used to estimate/control position.
+            (1) Get localization state.
+            (2) Initialize localization to the nearest fiducial (must be in sight of a fiducial).
+            (4) Initialize localization to a specific waypoint (must be exactly at the waypoint).
+            (5) (Re)Upload the graph and its snapshots.
+            (6) Navigate to. The destination waypoint id is the second argument.
+            (8) List the waypoint ids and edge ids of the map on the robot.
+            (9) Clear the current graph.
+            (q) Exit.
+            (g) Fetch the hose handle
+            (h) Fetch the trowel
+            (j) Fetch the clippers
+            (k) Fetch the shovel
+            """)
 
 
 def main(argv):

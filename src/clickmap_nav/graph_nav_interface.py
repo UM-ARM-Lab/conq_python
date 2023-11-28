@@ -259,6 +259,7 @@ class GraphNavInterface(object):
 
         nav_to_cmd_id = None
         # Navigate to the destination waypoint.
+        success_int = 1
         is_finished = False
         while not is_finished:
             # Issue the navigation command about twice a second such that it is easy to terminate the
@@ -273,11 +274,17 @@ class GraphNavInterface(object):
             # Poll the robot for feedback to determine if the navigation command is complete. Then sit
             # the robot down once it is finished.
             is_finished = self._check_success(nav_to_cmd_id)
+            
 
         # # Power off the robot if appropriate.
         # if self._powered_on and not self._started_powered_on:
         #     # Sit the robot down + power off after the navigation command is complete.
         #     self.toggle_power(should_power_on=False)
+        success_int = self._check_status(nav_to_cmd_id)
+        if success_int == 0:
+            return True
+        else:
+            return False
 
     def _navigate_route(self, *args):
         """Navigate through a specific route of waypoints."""
@@ -371,6 +378,32 @@ class GraphNavInterface(object):
         self._powered_on = (power_state.motor_power_state == power_state.STATE_ON)
         return self._powered_on
 
+    def _check_status(self, command_id=-1):
+        """ Use a navigation command id to get feedback from the robot. 
+        Return 0 if the navigation has completed successfully,
+        1 if the navigation is still in progress,
+        and 2 if the navigation has failed.
+        """
+        if command_id == -1:
+            print("_check_status has no status to check.")
+            return 2
+        status = self._graph_nav_client.navigation_feedback(command_id)
+        if status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_REACHED_GOAL:
+            # Successfully completed the navigation commands!
+            return 0
+        elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_LOST:
+            print('Robot got lost when navigating the route, the robot will now sit down.')
+            return 2
+        elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_STUCK:
+            print('Robot got stuck when navigating the route, the robot will now sit down.')
+            return 2
+        elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_ROBOT_IMPAIRED:
+            print('Robot is impaired.')
+            return 2
+        else:
+            # Navigation command is not complete yet.
+            return 1
+        
     def _check_success(self, command_id=-1):
         """Use a navigation command id to get feedback from the robot and sit when command succeeds."""
         if command_id == -1:

@@ -164,7 +164,7 @@ def grasp_point_in_image_basic(manipulation_client,state_client, image_response,
         feedback_response = manipulation_client.manipulation_api_feedback_command(
             manipulation_api_feedback_request=feedback_request)
         
-        print(f"Current State: {manipulation_api_pb2.ManipulationFeedbackState.Name(feedback_response.current_state)}")    
+        # print(f"Current State: {manipulation_api_pb2.ManipulationFeedbackState.Name(feedback_response.current_state)}")    
 
         if (feedback_response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_SUCCEEDED
             or feedback_response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_FAILED
@@ -176,10 +176,8 @@ def grasp_point_in_image_basic(manipulation_client,state_client, image_response,
 
     if (feedback_response.current_state == manipulation_api_pb2.MANIP_STATE_GRASP_SUCCEEDED 
         and is_grasping(state_client)):
-            print("Grasp Succeeded")
             return True
     else:
-        print("Grasp failed")
         return False
 
 
@@ -368,3 +366,4 @@ def move_body(command_client, throttle_vx=0.0, throttle_vy=0.0, throttle_omega=0
     cmd = RobotCommandBuilder.synchro_velocity_command(v_x=v_x, v_y=v_y, v_rot=v_rot)#,
                                                         #params=self.mobility_params)
     command_client.robot_command_async(cmd, end_time_secs=time.time() + duration_secs)
+    time.sleep(0.2)
