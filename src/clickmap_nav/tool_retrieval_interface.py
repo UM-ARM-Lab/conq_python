@@ -103,6 +103,8 @@ class ToolRetrievalInferface(ClickMapInterface):
                 else:
                     print(f"Try {n_tries}: no objects in view")
                     # If no objects found while loop will rotate body then try again
+                
+                arm_stow(self._robot_command_client) #regardless of grip success, don't want to navigate with arm out
         else: 
             print("Navigation failed")   
 
@@ -199,11 +201,13 @@ class ToolRetrievalInferface(ClickMapInterface):
                              [-0.2, 0.0, 0.55,   0.0, 0.0, 1.0, 0.0,               6.0]
                             #  [-0.2, 0.0, 0.5,  0.0, -0.7071068, 0.7071068, 0.0,   16.0] # rotate sideways
                             ]
-                            
+        print(f"Placing item in bucket")                    
         # if move_gripper_to_pose(self._robot_command_client, position, orientation):
-        follow_gripper_trajectory(self._robot_command_client, trajectory_points, timeout_sec=10.0)
-        gripper_open_fraction(self._robot_command_client, fraction=1.0)
-        arm_stow(self._robot_command_client)
+        success = follow_gripper_trajectory(self._robot_command_client, trajectory_points, timeout_sec=10.0)
+        if not success: print("Failed to follow trajectory")
+        success = gripper_open_fraction(self._robot_command_client, fraction=1.0) and success
+        if not success: print("Failed to open gripper")
+        success = arm_stow(self._robot_command_client) and success
 
         # success = True
         # print(f"Follower trajectory success: {success}")
@@ -218,7 +222,7 @@ class ToolRetrievalInferface(ClickMapInterface):
         # else:
         #     print("Failed to stow object")
         #     return False
-        return True
+        return success
     
     def print_controls(self):
         print("""

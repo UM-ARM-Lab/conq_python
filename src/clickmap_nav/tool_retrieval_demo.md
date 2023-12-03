@@ -20,6 +20,9 @@ Go into the src/clickmap_nav folder. then running the tool_retrieval_interface (
 ```
 python3 -m tool_retrieval_interface -a -u ~/spot/maps/collabspace3.walk --model-filepath ~/spot/models/garden_implements_model.pth 192.168.80.3
 ```
+```
+python3 -m tool_retrieval_interface -a -u ~/spot/maps/dude_design_studio1.walk --model-filepath ~/spot/models/model2.pth 192.168.80.3
+```
 
 1. You must Initialize the robot to the correct waypoint or fiducial (see controls below) before being able to navigate. Note that the robot must be in the exact position AND ORIENTATION of the waypoint. To do this, put your mouse over the desired waypoint on the map and then press key (4) to activate the initialization command.
 2. To navigate, move your mouse over the desired waypoint and press key (g),(h),(j),or (k) to pick up the desired object.

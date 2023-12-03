@@ -288,7 +288,7 @@ def move_gripper_to_pose(command_client, state_client, position_xyz, orientation
 
 
 
-def follow_gripper_trajectory(command_client, trajectory_points, timeout_sec=5.0):
+def follow_gripper_trajectory(command_client, trajectory_points, timeout_sec=10.0):
     """
     Follow a trajectory of the gripper (in meters, wrt gravity-aligned robot frame)
     trajectory_points: Nx8 list of xyx, quat, time
@@ -329,9 +329,9 @@ def follow_gripper_trajectory(command_client, trajectory_points, timeout_sec=5.0
 
         if feedback_resp.feedback.synchronized_feedback.arm_command_feedback.arm_cartesian_feedback.status == arm_command_pb2.ArmCartesianCommand.Feedback.STATUS_TRAJECTORY_COMPLETE:
             return True
-        # elif time.time() - t0 > trajectory_points[-1][7] + timeout_sec:
-        #     print('follow_gripper_trajectory timed out.')
-        #     return False
+        elif time.time() - t0 > timeout_sec:
+            print('follow_gripper_trajectory timed out.')
+            return False
         time.sleep(0.1)
 
 # TODO: should this be in a separate file?
