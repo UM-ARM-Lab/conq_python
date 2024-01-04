@@ -42,8 +42,8 @@ class ConqDataRecorder:
 
     def reset(self):
         self.saver_thread = None
-        self.latest_instruction = None
-        self.latest_instruction_time = None
+        self.latest_instruction = "no instruction"
+        self.latest_instruction_time = time.time()
         self.episode_idx = 0
 
     def start_episode(self, mode):
