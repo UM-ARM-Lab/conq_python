@@ -12,10 +12,10 @@ def viz_common_frames(snapshot):
     rr_tform('body', body_in_vision)
     rr_tform('gpe', gpe_in_vision)
     rr_tform('hand', hand_in_vision)
-    rr.log_transform3d(f'frames/odom', rr.Translation3D([0, 0, 0]))
+    rr.log(f'frames/vision', rr.Transform3D(translation=[0., 0., 0.]))
 
 
 def rr_tform(child_frame: str, tform: math_helpers.SE3Pose):
     translation = np.array([tform.position.x, tform.position.y, tform.position.z])
     rot_mat = tform.rotation.to_matrix()
-    rr.log_transform3d(f'frames/{child_frame}', rr.TranslationAndMat3(translation, rot_mat))
+    rr.log(f'frames/{child_frame}', rr.Transform3D(rr.TranslationAndMat3x3(translation, rot_mat)))
