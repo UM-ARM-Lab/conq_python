@@ -13,15 +13,21 @@ from bosdyn.api.robot_state_pb2 import FootState
 from bosdyn.client.image import ImageClient, build_image_request
 from bosdyn.client.robot_state import RobotStateClient
 
-from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES, ALL_FMTS, ALL_SOURCES
+from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES, ALL_FMTS, ALL_SOURCES, source_to_fmt
 
 
 class ConqDataRecorder:
 
-    def __init__(self, root: Path, robot_state_client: RobotStateClient, image_client: ImageClient):
+    def __init__(self, root: Path, robot_state_client: RobotStateClient, image_client: ImageClient, sources=None):
         self.root = root
         self.robot_state_client = robot_state_client
         self.image_client = image_client
+
+        if sources is None:
+            self.sources = ALL_SOURCES
+        else:
+            self.sources = sources
+        self.fmts = [source_to_fmt(src) for src in self.sources]
 
         self.root.mkdir(exist_ok=True, parents=True)
         try:
@@ -88,13 +94,13 @@ class ConqDataRecorder:
             }
 
             reqs = []
-            for src, fmt in zip(ALL_SOURCES, ALL_FMTS):
+            for src, fmt in zip(self.sources, self.fmts):
                 req = build_image_request(src, pixel_format=fmt)
                 reqs.append(req)
 
             ress = self.image_client.get_image(reqs)
 
-            for res, src in zip(ress, ALL_SOURCES):
+            for res, src in zip(ress, self.sources):
                 step_data['images'][src] = res
 
             episode.append(step_data)
@@ -103,7 +109,6 @@ class ConqDataRecorder:
             if len(episode) % 50 == 0:
                 with episode_path.open('wb') as f:
                     pickle.dump(episode, f)
-                print("saved")
 
 
 def get_state_vec(state):

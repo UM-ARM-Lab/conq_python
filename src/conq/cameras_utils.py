@@ -142,8 +142,13 @@ DEPTH_SOURCES = [
 
 ALL_SOURCES = RGB_SOURCES + DEPTH_SOURCES
 
-ALL_FMTS = []
-for src in RGB_SOURCES:
-    ALL_FMTS.append(image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
-for src in DEPTH_SOURCES:
-    ALL_SOURCES.append(image_pb2.Image.PixelFormat.PIXEL_FORMAT_DEPTH_U16)
+def source_to_fmt(src):
+    if src in RGB_SOURCES:
+        return image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8
+    elif src in DEPTH_SOURCES:
+        return image_pb2.Image.PixelFormat.PIXEL_FORMAT_DEPTH_U16
+    else:
+        raise NotImplementedError(f'Unknown source type: {src}')
+
+
+ALL_FMTS = [source_to_fmt(src) for src in ALL_SOURCES]
