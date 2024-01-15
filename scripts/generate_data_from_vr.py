@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+"""
+This script receives teleop commands from the Unity VR system, and sends them to Conq.
+Press and hold the grip button on the VR controller to start recording an episode.
+Release the grip button to stop recording an episode.
+Press the trackpad button to stop the script.
+Use the trigger to open and close the gripper, it's mapped to the open fraction of the gripper.
+The motion will be relative in gripper frame to the pose of the gripper when you started recording.
+see the vr_ros2_bridge repo for setup instructions.
+"""
 
 from rclpy.node import Node
 import argparse
@@ -44,6 +53,10 @@ def controller_info_to_se3_pose(controller_info):
                             z=pose_msg.orientation.z))
 
 
+def ease_func(speed):
+    return max(speed, speed ** 2)
+
+
 class GenerateDataVRNode(Node):
 
     def __init__(self, recorder: ConqDataRecorder, conq_clients: Clients, follow_arm_with_body=True, viz_only=False):
@@ -62,6 +75,8 @@ class GenerateDataVRNode(Node):
         self.is_recording = False
         self.is_done = False
 
+        self.on_reset()
+
     def send_cmd(self, target_hand_in_vision: SE3Pose, open_fraction: float):
         hand_pose_msg = target_hand_in_vision.to_proto()
         arm_cmd = RobotCommandBuilder.arm_pose_command_from_pose(hand_pose_msg, VISION_FRAME_NAME, 0.1)
@@ -69,8 +84,8 @@ class GenerateDataVRNode(Node):
             arm_body_cmd = add_follow_with_body(arm_cmd)
         else:
             arm_body_cmd = arm_cmd
-        # arm_body_cmd.synchronized_command.arm_command.arm_cartesian_command.max_linear_velocity.value = 0.3
-        # arm_body_cmd.synchronized_command.arm_command.arm_cartesian_command.max_angular_velocity.value = 000
+        arm_body_cmd.synchronized_command.arm_command.arm_cartesian_command.max_linear_velocity.value = 999
+        arm_body_cmd.synchronized_command.arm_command.arm_cartesian_command.max_angular_velocity.value = 999
 
         gripper_cmd = RobotCommandBuilder.claw_gripper_open_fraction_command(open_fraction)
         arm_body_gripper_cmd = RobotCommandBuilder.build_synchro_command(arm_body_cmd, gripper_cmd)
@@ -82,6 +97,8 @@ class GenerateDataVRNode(Node):
 
         open_gripper(self.conq_clients)
         blocking_arm_command(self.conq_clients, RobotCommandBuilder.arm_stow_command())
+
+        rclpy.shutdown()
 
     def on_controllers_info(self, msg: ControllersInfo):
         if len(msg.controllers_info) == 0:
@@ -98,9 +115,13 @@ class GenerateDataVRNode(Node):
             self.is_recording = False
             self.on_stop_recording()
 
-        if self.has_started and controller_info.trackpad_button:
-            self.is_done = True
-            self.on_done()
+        # TODO: check for a double click or some other unique event to stop the script
+        # if self.has_started and controller_info.trackpad_button:
+        #     self.is_done = True
+        #     self.on_done()
+
+        if not self.is_recording and controller_info.trackpad_button:
+            self.on_reset()
 
         if self.is_recording:
             # for debugging purposes, we publish a fixed transform from "VR" frame to "VISION" frame,
@@ -113,12 +134,7 @@ class GenerateDataVRNode(Node):
             vr_to_vision.transform.rotation.w = 1.
             self.tf_broadcaster.sendTransform(vr_to_vision)
 
-            # translate delta pose in VR frame to delta pose in VISION frame and send a command to the robot!
-            current_controller_in_vr = controller_info_to_se3_pose(controller_info)
-            self.pub_se3_pose_to_tf(current_controller_in_vr, 'current VR', VR_FRAME_NAME)
-            delta_in_vr = self.controller_in_vr0.inverse() * current_controller_in_vr
-            delta_in_vision = delta_in_vr  # NOTE: may need a rotation here
-            target_hand_in_vision = self.hand_in_vision0 * delta_in_vision
+            target_hand_in_vision = self.get_target_in_vision(controller_info)
 
             snapshot = self.conq_clients.state.get_robot_state().kinematic_state.transforms_snapshot
             hand_in_vision = get_a_tform_b(snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
@@ -132,6 +148,45 @@ class GenerateDataVRNode(Node):
 
             if not self.viz_only:
                 self.send_cmd(target_hand_in_vision, open_fraction)
+
+    def get_target_in_vision(self, controller_info: ControllerInfo):
+        """ Translate delta pose in VR frame to delta pose in VISION frame and send a command to the robot! """
+        current_controller_in_vr = controller_info_to_se3_pose(controller_info)
+        self.pub_se3_pose_to_tf(current_controller_in_vr, 'current VR', VR_FRAME_NAME)
+        delta_in_vr = self.controller_in_vr0.inverse() * current_controller_in_vr
+
+        # TODO: add a rotation here to account for the fact that we might not want VR controller frame and
+        #  hand frame to be the same orientation?
+        delta_in_vision = delta_in_vr
+
+        # Apply an "easing function" so that we exaggerate slow or fast motion of the controller, scaling up or down
+        # the motion of the hand in vision frame.
+        linear_velocity = np.array([controller_info.controller_velocity.linear.x,
+                                    controller_info.controller_velocity.linear.y,
+                                    controller_info.controller_velocity.linear.z])
+        angular_velocity = np.array([controller_info.controller_velocity.angular.x,
+                                     controller_info.controller_velocity.angular.y,
+                                     controller_info.controller_velocity.angular.z])
+        linear_speed = np.linalg.norm(linear_velocity)
+        angular_speed = np.linalg.norm(angular_velocity)
+
+        delta_in_vision_scaled = delta_in_vision
+        # the translation part can be scaled by vector-scalar multiplications
+        delta_in_vision_scaled.x *= 1.25
+        delta_in_vision_scaled.y *= 1.25
+        delta_in_vision_scaled.z *= 1.25
+        # but the rotation part needs to be treated differently.
+        # TODO: figure out how to scale the rotation part
+
+        target_hand_in_vision = self.hand_in_vision0 * delta_in_vision_scaled
+        return target_hand_in_vision
+
+    def on_reset(self):
+        open_gripper(self.conq_clients)
+        look_cmd = hand_pose_cmd(self.conq_clients, 0.6, 0, 0.6, 0, np.deg2rad(0), 0, duration=0.5)
+        blocking_arm_command(self.conq_clients, look_cmd)
+        look_cmd = hand_pose_cmd(self.conq_clients, 0.8, 0, 0.2, 0, np.deg2rad(0), 0, duration=0.5)
+        blocking_arm_command(self.conq_clients, look_cmd)
 
     def on_start_recording(self, controller_info: ControllerInfo):
         # Store the initial pose of the hand in vision frame, as well as the controller pose which is in VR frame
@@ -148,7 +203,7 @@ class GenerateDataVRNode(Node):
         print(f"Stopping recording episode {self.recorder.episode_idx}")
         self.recorder.next_episode()
 
-    def pub_se3_pose_to_tf(self, pose: SE3Pose, child_frame_name: str, parent_frame_name:str):
+    def pub_se3_pose_to_tf(self, pose: SE3Pose, child_frame_name: str, parent_frame_name: str):
         t = TransformStamped()
 
         t.header.stamp = self.get_clock().now().to_msg()
@@ -207,13 +262,8 @@ def main():
                           image=image_client, raycast=rc_client, command=command_client, robot=robot,
                           recorder=recorder)
 
-        if not viz_only:
-            look_cmd = hand_pose_cmd(clients, 0.6, 0, 0.6, 0, np.deg2rad(0), 0, duration=0.5)
-            blocking_arm_command(clients, look_cmd)
-            open_gripper(clients)
-
-        rclpy.init(args=None)
-        node = GenerateDataVRNode(recorder, clients, follow_arm_with_body=True, viz_only=viz_only)
+        rclpy.init()
+        node = GenerateDataVRNode(recorder, clients, follow_arm_with_body=False, viz_only=viz_only)
         rclpy.spin(node)
 
 

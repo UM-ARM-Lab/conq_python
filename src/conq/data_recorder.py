@@ -110,6 +110,10 @@ class ConqDataRecorder:
                 with episode_path.open('wb') as f:
                     pickle.dump(episode, f)
 
+        # ensure we save before exiting or moving on to the next episode
+        with episode_path.open('wb') as f:
+            pickle.dump(episode, f)
+
 
 def get_state_vec(state):
     joint_positions = [js.position.value for js in state.kinematic_state.joint_states]
