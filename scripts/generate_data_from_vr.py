@@ -14,6 +14,7 @@ import argparse
 import time
 from pathlib import Path
 
+import rerun as rr
 import bosdyn.client
 import bosdyn.client.util
 import numpy as np
@@ -57,6 +58,10 @@ def ease_func(speed):
     return max(speed, speed ** 2)
 
 
+def np_sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
 class GenerateDataVRNode(Node):
 
     def __init__(self, recorder: ConqDataRecorder, conq_clients: Clients, follow_arm_with_body=True, viz_only=False):
@@ -93,7 +98,8 @@ class GenerateDataVRNode(Node):
         self.conq_clients.command.robot_command(arm_body_gripper_cmd)
 
     def on_done(self):
-        self.recorder.stop()
+        if not self.viz_only:
+            self.recorder.stop()
 
         open_gripper(self.conq_clients)
         blocking_arm_command(self.conq_clients, RobotCommandBuilder.arm_stow_command())
@@ -115,10 +121,9 @@ class GenerateDataVRNode(Node):
             self.is_recording = False
             self.on_stop_recording()
 
-        # TODO: check for a double click or some other unique event to stop the script
-        # if self.has_started and controller_info.trackpad_button:
-        #     self.is_done = True
-        #     self.on_done()
+        if self.has_started and controller_info.menu_button:
+            self.is_done = True
+            self.on_done()
 
         if not self.is_recording and controller_info.trackpad_button:
             self.on_reset()
@@ -159,6 +164,12 @@ class GenerateDataVRNode(Node):
         #  hand frame to be the same orientation?
         delta_in_vision = delta_in_vr
 
+        delta_in_vision_scaled = self.scale_control(controller_info, delta_in_vision)
+
+        target_hand_in_vision = self.hand_in_vision0 * delta_in_vision_scaled
+        return target_hand_in_vision
+
+    def scale_control(self, controller_info: ControllerInfo, delta_in_vision: SE3Pose):
         # Apply an "easing function" so that we exaggerate slow or fast motion of the controller, scaling up or down
         # the motion of the hand in vision frame.
         linear_velocity = np.array([controller_info.controller_velocity.linear.x,
@@ -170,18 +181,18 @@ class GenerateDataVRNode(Node):
         linear_speed = np.linalg.norm(linear_velocity)
         angular_speed = np.linalg.norm(angular_velocity)
 
-        delta_in_vision_scaled = delta_in_vision
-        # the translation part can be scaled by vector-scalar multiplications
-        delta_in_vision_scaled.x *= 1.25
-        delta_in_vision_scaled.y *= 1.25
-        delta_in_vision_scaled.z *= 1.25
-        # but the rotation part needs to be treated differently.
-        # TODO: figure out how to scale the rotation part
+        linear_scale = 0.85
 
-        target_hand_in_vision = self.hand_in_vision0 * delta_in_vision_scaled
-        return target_hand_in_vision
+        delta_in_vision_scaled = delta_in_vision
+        delta_in_vision_scaled.x *= linear_scale
+        delta_in_vision_scaled.y *= linear_scale
+        delta_in_vision_scaled.z *= linear_scale
+        return delta_in_vision_scaled
 
     def on_reset(self):
+        if self.viz_only:
+            return
+
         open_gripper(self.conq_clients)
         look_cmd = hand_pose_cmd(self.conq_clients, 0.6, 0, 0.6, 0, np.deg2rad(0), 0, duration=0.5)
         blocking_arm_command(self.conq_clients, look_cmd)
@@ -197,11 +208,13 @@ class GenerateDataVRNode(Node):
         self.hand_in_vision0 = get_a_tform_b(snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
 
         mode = "unsorted"
-        self.recorder.start_episode(mode)
+        if not self.viz_only:
+            self.recorder.start_episode(mode, "grasp hose")
 
     def on_stop_recording(self):
         print(f"Stopping recording episode {self.recorder.episode_idx}")
-        self.recorder.next_episode()
+        if not self.viz_only:
+            self.recorder.next_episode()
 
     def pub_se3_pose_to_tf(self, pose: SE3Pose, child_frame_name: str, parent_frame_name: str):
         t = TransformStamped()
@@ -227,6 +240,9 @@ def main():
     np.set_printoptions(precision=3, suppress=True)
     parser = argparse.ArgumentParser()
     bosdyn.client.util.add_base_arguments(parser)
+
+    rr.init("generate_data_from_vr")
+    rr.connect()
 
     # Creates client, robot, and authenticates, and time syncs
     viz_only = False

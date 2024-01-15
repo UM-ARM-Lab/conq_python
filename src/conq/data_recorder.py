@@ -52,11 +52,12 @@ class ConqDataRecorder:
         self.latest_instruction_time = time.time()
         self.episode_idx = 0
 
-    def start_episode(self, mode):
+    def start_episode(self, mode, instruction):
         self.episode_done = Event()
         self.saver_thread = Thread(target=self.save_episode_worker,
                                    args=(self.robot_state_client, self.episode_done, mode))
         self.saver_thread.start()
+        self.add_instruction(instruction)
 
     def next_episode(self):
         self.episode_done.set()
@@ -109,6 +110,10 @@ class ConqDataRecorder:
             if len(episode) % 50 == 0:
                 with episode_path.open('wb') as f:
                     pickle.dump(episode, f)
+
+        if len(episode) < 15:
+            print(f"WARNING: episode {self.episode_idx} has only {len(episode)} steps!")
+            print("This may mean that the demonstrator mis-clicked and did not actually perform the task.")
 
         # ensure we save before exiting or moving on to the next episode
         with episode_path.open('wb') as f:
