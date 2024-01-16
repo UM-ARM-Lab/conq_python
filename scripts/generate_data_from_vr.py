@@ -10,7 +10,6 @@ see the vr_ros2_bridge repo for setup instructions.
 """
 
 from rclpy.node import Node
-import argparse
 import time
 from pathlib import Path
 
@@ -38,6 +37,7 @@ from conq.hand_motion import hand_pose_cmd
 from conq.manipulation import blocking_arm_command, add_follow_with_body
 from conq.manipulation import open_gripper
 from conq.utils import setup_and_stand, setup
+from vr.controller_utils import AxisVelocityHandler, TestAxisVelocityHandler
 from vr_ros2_bridge_msgs.msg import ControllersInfo, ControllerInfo
 
 VR_FRAME_NAME = 'vr'
@@ -66,6 +66,8 @@ class GenerateDataVRNode(Node):
 
     def __init__(self, recorder: ConqDataRecorder, conq_clients: Clients, follow_arm_with_body=True, viz_only=False):
         super().__init__("generate_data_from_vr")
+        self.linear_velocity_scale = 1.
+        self.trackpad_y_axis_velocity_handler = AxisVelocityHandler()
         self.follow_arm_with_body = follow_arm_with_body
         self.recorder = recorder
         self.conq_clients = conq_clients  # Node already has a clients attribute, hence the name change
@@ -128,6 +130,10 @@ class GenerateDataVRNode(Node):
         if not self.is_recording and controller_info.trackpad_button:
             self.on_reset()
 
+        trackpad_y_velocity = self.trackpad_y_axis_velocity_handler.update(controller_info.trackpad_axis_touch_y)
+        self.linear_velocity_scale += trackpad_y_velocity * 0.1
+        rr.log('linear_velocity_scale', rr.TimeSeriesScalar(self.linear_velocity_scale))
+
         if self.is_recording:
             # for debugging purposes, we publish a fixed transform from "VR" frame to "VISION" frame,
             # even though we don't ever actually use this transform for controlling the robot.
@@ -164,29 +170,16 @@ class GenerateDataVRNode(Node):
         #  hand frame to be the same orientation?
         delta_in_vision = delta_in_vr
 
-        delta_in_vision_scaled = self.scale_control(controller_info, delta_in_vision)
+        delta_in_vision_scaled = self.scale_control(delta_in_vision)
 
         target_hand_in_vision = self.hand_in_vision0 * delta_in_vision_scaled
         return target_hand_in_vision
 
-    def scale_control(self, controller_info: ControllerInfo, delta_in_vision: SE3Pose):
-        # Apply an "easing function" so that we exaggerate slow or fast motion of the controller, scaling up or down
-        # the motion of the hand in vision frame.
-        linear_velocity = np.array([controller_info.controller_velocity.linear.x,
-                                    controller_info.controller_velocity.linear.y,
-                                    controller_info.controller_velocity.linear.z])
-        angular_velocity = np.array([controller_info.controller_velocity.angular.x,
-                                     controller_info.controller_velocity.angular.y,
-                                     controller_info.controller_velocity.angular.z])
-        linear_speed = np.linalg.norm(linear_velocity)
-        angular_speed = np.linalg.norm(angular_velocity)
-
-        linear_scale = 0.85
-
+    def scale_control(self, delta_in_vision: SE3Pose):
         delta_in_vision_scaled = delta_in_vision
-        delta_in_vision_scaled.x *= linear_scale
-        delta_in_vision_scaled.y *= linear_scale
-        delta_in_vision_scaled.z *= linear_scale
+        delta_in_vision_scaled.x *= self.linear_velocity_scale
+        delta_in_vision_scaled.y *= self.linear_velocity_scale
+        delta_in_vision_scaled.z *= self.linear_velocity_scale
         return delta_in_vision_scaled
 
     def on_reset(self):
@@ -238,8 +231,6 @@ class GenerateDataVRNode(Node):
 def main():
     np.seterr(all='raise')
     np.set_printoptions(precision=3, suppress=True)
-    parser = argparse.ArgumentParser()
-    bosdyn.client.util.add_base_arguments(parser)
 
     rr.init("generate_data_from_vr")
     rr.connect()
