@@ -6,22 +6,34 @@ from importlib.metadata import version, PackageNotFoundError
 from multiprocessing import Event
 from pathlib import Path
 from threading import Thread
+from typing import Optional, Callable
 
 import numpy as np
-from bosdyn.api import image_pb2
 from bosdyn.api.robot_state_pb2 import FootState
 from bosdyn.client.image import ImageClient, build_image_request
 from bosdyn.client.robot_state import RobotStateClient
 
-from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES, ALL_FMTS, ALL_SOURCES, source_to_fmt
+from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES, ALL_SOURCES, source_to_fmt
 
 
 class ConqDataRecorder:
 
-    def __init__(self, root: Path, robot_state_client: RobotStateClient, image_client: ImageClient, sources=None):
+    def __init__(self, root: Path, robot_state_client: RobotStateClient, image_client: ImageClient, sources=None,
+                 get_latest_action: Optional[Callable] = None, period: Optional[float] = None):
+        """
+
+        Args:
+            root:
+            robot_state_client:
+            image_client:
+            sources:
+            get_latest_action: callable that returns the action we're currently commanding. For recording teleop demos.
+        """
+        self.period = period
         self.root = root
         self.robot_state_client = robot_state_client
         self.image_client = image_client
+        self.get_latest_action = get_latest_action
 
         if sources is None:
             self.sources = ALL_SOURCES
@@ -36,9 +48,10 @@ class ConqDataRecorder:
             api_version = "unknown"
         self.metadata = {
             'bosdyn.api version': api_version,
-            'date':               datetime.datetime.now().isoformat(),
-            'rgb_sources':        RGB_SOURCES,
-            'depth_sources':      DEPTH_SOURCES,
+            'date': datetime.datetime.now().isoformat(),
+            'rgb_sources': RGB_SOURCES,
+            'depth_sources': DEPTH_SOURCES,
+            'period': self.period,
         }
         self.metadata_path = self.root / 'metadata.json'
         with self.metadata_path.open('w') as f:
@@ -87,11 +100,11 @@ class ConqDataRecorder:
             # viz_common_frames(state.kinematic_state.transforms_snapshot)
 
             step_data = {
-                'time':             now,
-                'robot_state':      state,
-                'instruction':      self.latest_instruction,
+                'time': now,
+                'robot_state': state,
+                'instruction': self.latest_instruction,
                 'instruction_time': self.latest_instruction_time,
-                'images':           {},
+                'images': {},
             }
 
             reqs = []
@@ -104,7 +117,16 @@ class ConqDataRecorder:
             for res, src in zip(ress, self.sources):
                 step_data['images'][src] = res
 
+            # Get the action at the end, so we can see what the demonstrator was trying to do most recently.
+            step_data['action'] = self.get_latest_action(now)
+
             episode.append(step_data)
+
+            if self.period is not None:
+                # sleep to achieve the desired frequency
+                sleep_dt = self.period - (time.time() - now)
+                if sleep_dt > 0:
+                    time.sleep(sleep_dt)
 
             # save
             if len(episode) % 50 == 0:

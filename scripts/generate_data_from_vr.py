@@ -9,15 +9,13 @@ The motion will be relative in gripper frame to the pose of the gripper when you
 see the vr_ros2_bridge repo for setup instructions.
 """
 
-from rclpy.node import Node
 import time
 from pathlib import Path
 
-import rerun as rr
 import bosdyn.client
 import bosdyn.client.util
 import numpy as np
-import rclpy
+import rerun as rr
 from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, HAND_FRAME_NAME
 from bosdyn.client.image import ImageClient
 from bosdyn.client.lease import LeaseKeepAlive, LeaseClient
@@ -26,19 +24,23 @@ from bosdyn.client.math_helpers import SE3Pose, Quat
 from bosdyn.client.ray_cast import RayCastClient
 from bosdyn.client.robot_command import RobotCommandBuilder, RobotCommandClient
 from bosdyn.client.robot_state import RobotStateClient
-from geometry_msgs.msg import Pose
-from geometry_msgs.msg import TransformStamped
-from tf2_ros import TransformBroadcaster
-from turtlesim.msg import Pose
 
+import rclpy
 from conq.clients import Clients
 from conq.data_recorder import ConqDataRecorder
 from conq.hand_motion import hand_pose_cmd
 from conq.manipulation import blocking_arm_command, add_follow_with_body
 from conq.manipulation import open_gripper
 from conq.utils import setup_and_stand, setup
-from vr.controller_utils import AxisVelocityHandler, TestAxisVelocityHandler
+from geometry_msgs.msg import Pose
+from geometry_msgs.msg import TransformStamped
+from rclpy.node import Node
+from tf2_ros import TransformBroadcaster
+from turtlesim.msg import Pose
+from vr.controller_utils import AxisVelocityHandler
 from vr_ros2_bridge_msgs.msg import ControllersInfo, ControllerInfo
+
+VR_DATA_PERIOD = 7.5
 
 VR_FRAME_NAME = 'vr'
 
@@ -64,16 +66,27 @@ def np_sigmoid(x):
 
 class GenerateDataVRNode(Node):
 
-    def __init__(self, recorder: ConqDataRecorder, conq_clients: Clients, follow_arm_with_body=True, viz_only=False):
+    def __init__(self, conq_clients: Clients, follow_arm_with_body=True, viz_only=False):
         super().__init__("generate_data_from_vr")
+        self.latest_action = SE3Pose.from_identity()
         self.linear_velocity_scale = 1.
         self.trackpad_y_axis_velocity_handler = AxisVelocityHandler()
         self.follow_arm_with_body = follow_arm_with_body
-        self.recorder = recorder
         self.conq_clients = conq_clients  # Node already has a clients attribute, hence the name change
         self.viz_only = viz_only
         self.hand_in_vision0 = SE3Pose.from_identity()
         self.controller_in_vr0 = SE3Pose.from_identity()
+
+        now = int(time.time())
+        root = Path(f"data/conq_vr_data_{now}")
+        self.recorder = ConqDataRecorder(root, conq_clients.state, conq_clients.image,
+                                         sources=[
+                                             'hand_color_image',
+                                             'frontleft_fisheye_image',
+                                             'frontright_fisheye_image',
+                                         ],
+                                         get_latest_action=self.get_latest_action,
+                                         period=1 / VR_DATA_PERIOD)
 
         self.tf_broadcaster = TransformBroadcaster(self)
         self.vr_sub = self.create_subscription(ControllersInfo, "vr_controller_info", self.on_controllers_info, 10)
@@ -86,13 +99,11 @@ class GenerateDataVRNode(Node):
 
     def send_cmd(self, target_hand_in_vision: SE3Pose, open_fraction: float):
         hand_pose_msg = target_hand_in_vision.to_proto()
-        arm_cmd = RobotCommandBuilder.arm_pose_command_from_pose(hand_pose_msg, VISION_FRAME_NAME, 0.1)
+        arm_cmd = RobotCommandBuilder.arm_pose_command_from_pose(hand_pose_msg, VISION_FRAME_NAME, 0.25)
         if self.follow_arm_with_body:
             arm_body_cmd = add_follow_with_body(arm_cmd)
         else:
             arm_body_cmd = arm_cmd
-        arm_body_cmd.synchronized_command.arm_command.arm_cartesian_command.max_linear_velocity.value = 999
-        arm_body_cmd.synchronized_command.arm_command.arm_cartesian_command.max_angular_velocity.value = 999
 
         gripper_cmd = RobotCommandBuilder.claw_gripper_open_fraction_command(open_fraction)
         arm_body_gripper_cmd = RobotCommandBuilder.build_synchro_command(arm_body_cmd, gripper_cmd)
@@ -106,7 +117,7 @@ class GenerateDataVRNode(Node):
         open_gripper(self.conq_clients)
         blocking_arm_command(self.conq_clients, RobotCommandBuilder.arm_stow_command())
 
-        rclpy.shutdown()
+        raise SystemExit("Done!")
 
     def on_controllers_info(self, msg: ControllersInfo):
         if len(msg.controllers_info) == 0:
@@ -152,6 +163,12 @@ class GenerateDataVRNode(Node):
 
             open_fraction = 1 - controller_info.trigger_axis
 
+            # Save for the data recorder
+            self.latest_action = {
+                'target_hand_in_vision': target_hand_in_vision,
+                'open_fraction': open_fraction
+            }
+
             self.pub_se3_pose_to_tf(self.controller_in_vr0, 'controller_in_vr0', VR_FRAME_NAME)
             self.pub_se3_pose_to_tf(self.hand_in_vision0, 'hand_in_vision0', VISION_FRAME_NAME)
             self.pub_se3_pose_to_tf(hand_in_vision, 'hand_in_vision', VISION_FRAME_NAME)
@@ -160,7 +177,7 @@ class GenerateDataVRNode(Node):
             if not self.viz_only:
                 self.send_cmd(target_hand_in_vision, open_fraction)
 
-    def get_target_in_vision(self, controller_info: ControllerInfo):
+    def get_target_in_vision(self, controller_info: ControllerInfo) -> SE3Pose:
         """ Translate delta pose in VR frame to delta pose in VISION frame and send a command to the robot! """
         current_controller_in_vr = controller_info_to_se3_pose(controller_info)
         self.pub_se3_pose_to_tf(current_controller_in_vr, 'current VR', VR_FRAME_NAME)
@@ -187,8 +204,6 @@ class GenerateDataVRNode(Node):
             return
 
         open_gripper(self.conq_clients)
-        look_cmd = hand_pose_cmd(self.conq_clients, 0.6, 0, 0.6, 0, np.deg2rad(0), 0, duration=0.5)
-        blocking_arm_command(self.conq_clients, look_cmd)
         look_cmd = hand_pose_cmd(self.conq_clients, 0.8, 0, 0.2, 0, np.deg2rad(0), 0, duration=0.5)
         blocking_arm_command(self.conq_clients, look_cmd)
 
@@ -227,6 +242,9 @@ class GenerateDataVRNode(Node):
 
         self.tf_broadcaster.sendTransform(t)
 
+    def get_latest_action(self, _):
+        return self.latest_action
+
 
 def main():
     np.seterr(all='raise')
@@ -250,14 +268,6 @@ def main():
 
     lease_client.take()
 
-    now = int(time.time())
-    root = Path(f"data/conq_vr_data_{now}")
-    recorder = ConqDataRecorder(root, robot_state_client, image_client, sources=[
-        'hand_color_image',
-        'frontleft_fisheye_image',
-        'frontright_fisheye_image',
-    ])
-
     with (LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True)):
         if viz_only:
             setup(robot)
@@ -266,12 +276,17 @@ def main():
             command_client = setup_and_stand(robot)
 
         clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client,
-                          image=image_client, raycast=rc_client, command=command_client, robot=robot,
-                          recorder=recorder)
+                          image=image_client, raycast=rc_client, command=command_client, robot=robot)
 
         rclpy.init()
-        node = GenerateDataVRNode(recorder, clients, follow_arm_with_body=False, viz_only=viz_only)
-        rclpy.spin(node)
+        node = GenerateDataVRNode(clients, follow_arm_with_body=False, viz_only=viz_only)
+        try:
+            rclpy.spin(node)
+        except SystemExit:
+            pass
+
+        rclpy.shutdown()
+        print("Done!")
 
 
 if __name__ == '__main__':
