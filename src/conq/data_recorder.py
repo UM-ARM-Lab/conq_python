@@ -96,8 +96,8 @@ class ConqDataRecorder:
             now = time.time()
             state = robot_state_client.get_robot_state()
 
-            # from conq.rerun_utils import viz_common_frames
-            # viz_common_frames(state.kinematic_state.transforms_snapshot)
+            from conq.rerun_utils import viz_common_frames
+            viz_common_frames(state.kinematic_state.transforms_snapshot)
 
             step_data = {
                 'time': now,

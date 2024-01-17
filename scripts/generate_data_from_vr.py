@@ -38,11 +38,8 @@ from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
 from turtlesim.msg import Pose
 from vr.controller_utils import AxisVelocityHandler
+from vr.constants import VR_DATA_PERIOD, VR_CMD_PERIOD, VR_FRAME_NAME
 from vr_ros2_bridge_msgs.msg import ControllersInfo, ControllerInfo
-
-VR_DATA_PERIOD = 7.5
-
-VR_FRAME_NAME = 'vr'
 
 
 def controller_info_to_se3_pose(controller_info):
@@ -99,7 +96,8 @@ class GenerateDataVRNode(Node):
 
     def send_cmd(self, target_hand_in_vision: SE3Pose, open_fraction: float):
         hand_pose_msg = target_hand_in_vision.to_proto()
-        arm_cmd = RobotCommandBuilder.arm_pose_command_from_pose(hand_pose_msg, VISION_FRAME_NAME, 0.25)
+        arm_cmd = RobotCommandBuilder.arm_pose_command_from_pose(hand_pose_msg, VISION_FRAME_NAME,
+                                                                 seconds=1 / VR_CMD_PERIOD)
         if self.follow_arm_with_body:
             arm_body_cmd = add_follow_with_body(arm_cmd)
         else:
@@ -256,7 +254,8 @@ def main():
     # Creates client, robot, and authenticates, and time syncs
     viz_only = False
     sdk = bosdyn.client.create_standard_sdk('generate_dataset')
-    robot = sdk.create_robot('192.168.80.3')
+    # robot = sdk.create_robot('192.168.80.3')
+    robot = sdk.create_robot('10.0.0.3')
     bosdyn.client.util.authenticate(robot)
     robot.time_sync.wait_for_sync()
 
