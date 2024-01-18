@@ -5,10 +5,10 @@ from conq.logging.exceptions import ImageSourceUnavailableError
 
 class MessagePacket:
 
-    def __init__(self, packet_raw: Dict[str, Any], rgb_sources_available: List[str],
-                 depth_sources_available: List[str]):
-        self.rgb_sources_available: List[str] = rgb_sources_available
-        self.depth_sources_available: List[str] = depth_sources_available
+    def __init__(self, packet_raw: Dict[str, Any], rgb_sources_available: Optional[List[str]],
+                 depth_sources_available: Optional[List[str]]):
+        self.rgb_sources_available: Optional[List[str]] = rgb_sources_available
+        self.depth_sources_available: Optional[List[str]] = depth_sources_available
         self.timestamp: float = packet_raw["time"]
         self.robot_state = packet_raw["robot_state"]
         self.images: Dict[str, Any] = packet_raw["images"]
@@ -38,9 +38,14 @@ class MessagePacket:
     def _verify_depth_sources(self, sources: Optional[List[str]]):
         self._verify_img_sources(sources, self.depth_sources_available)
 
-    def _verify_img_sources(self, sources_requested: Optional[List[str]], sources_avail: List[str]):
-        """Verifies the requested image sources are present in the log"""
-        if sources_requested is None:
+    def _verify_img_sources(self, sources_requested: Optional[List[str]],
+                            sources_avail: Optional[List[str]]):
+        """Verifies the requested image sources are present in the log
+
+        If no source requests were provided or if no metadata is available on available sources,
+        that's fine.
+        """
+        if (sources_requested is None) or (sources_avail is None):
             return
 
         sources_requested = set(sources_requested)
