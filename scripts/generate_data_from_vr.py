@@ -38,7 +38,7 @@ from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
 from turtlesim.msg import Pose
 from vr.controller_utils import AxisVelocityHandler
-from vr.constants import VR_DATA_PERIOD, VR_CMD_PERIOD, VR_FRAME_NAME
+from vr.constants import VR_FRAME_NAME, ARM_POSE_CMD_DURATION, ARM_POSE_CMD_PERIOD
 from vr_ros2_bridge_msgs.msg import ControllersInfo, ControllerInfo
 
 
@@ -83,7 +83,7 @@ class GenerateDataVRNode(Node):
                                              'frontright_fisheye_image',
                                          ],
                                          get_latest_action=self.get_latest_action,
-                                         period=1 / VR_DATA_PERIOD)
+                                         period=ARM_POSE_CMD_PERIOD)
 
         self.tf_broadcaster = TransformBroadcaster(self)
         self.vr_sub = self.create_subscription(ControllersInfo, "vr_controller_info", self.on_controllers_info, 10)
@@ -97,7 +97,7 @@ class GenerateDataVRNode(Node):
     def send_cmd(self, target_hand_in_vision: SE3Pose, open_fraction: float):
         hand_pose_msg = target_hand_in_vision.to_proto()
         arm_cmd = RobotCommandBuilder.arm_pose_command_from_pose(hand_pose_msg, VISION_FRAME_NAME,
-                                                                 seconds=1 / VR_CMD_PERIOD)
+                                                                 seconds=ARM_POSE_CMD_DURATION)
         if self.follow_arm_with_body:
             arm_body_cmd = add_follow_with_body(arm_cmd)
         else:
