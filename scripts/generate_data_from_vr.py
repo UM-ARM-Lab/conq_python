@@ -42,7 +42,7 @@ from vr.controller_utils import AxisVelocityHandler
 from vr_ros2_bridge_msgs.msg import ControllersInfo, ControllerInfo
 
 
-def controller_info_to_se3_pose(controller_info):
+def controller_info_to_se3_pose(controller_info: ControllerInfo):
     pose_msg: Pose = controller_info.controller_pose
     return SE3Pose(x=pose_msg.position.x,
                    y=pose_msg.position.y,
@@ -65,7 +65,7 @@ class GenerateDataVRNode(Node):
 
     def __init__(self, conq_clients: Clients, follow_arm_with_body=True, viz_only=False):
         super().__init__("generate_data_from_vr")
-        self.latest_action = SE3Pose.from_identity()
+        self.latest_action = None
         self.trackpad_y_axis_velocity_handler = AxisVelocityHandler()
         self.follow_arm_with_body = follow_arm_with_body
         self.conq_clients = conq_clients  # Node already has a clients attribute, hence the name change
@@ -170,8 +170,10 @@ class GenerateDataVRNode(Node):
             if not self.viz_only:
                 self.send_cmd(target_hand_in_body, open_fraction)
 
+    def get_velocity(self, controller_info: ControllerInfo):
+        controller_info.controller_velocity
+
     def get_target_in_body(self, controller_info: ControllerInfo) -> SE3Pose:
-        """ Translate delta pose in VR frame to delta pose in body frame and send a command to the robot! """
         current_controller_in_vr = controller_info_to_se3_pose(controller_info)
         self.pub_se3_pose_to_tf(current_controller_in_vr, 'current VR', VR_FRAME_NAME)
         delta_in_vr = self.controller_in_vr0.inverse() * current_controller_in_vr
