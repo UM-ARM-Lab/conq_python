@@ -16,7 +16,7 @@ import bosdyn.client
 import bosdyn.client.util
 import numpy as np
 import rerun as rr
-from bosdyn.client.frame_helpers import get_a_tform_b, HAND_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME
+from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, HAND_FRAME_NAME
 from bosdyn.client.image import ImageClient
 from bosdyn.client.lease import LeaseKeepAlive, LeaseClient
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
@@ -42,7 +42,7 @@ from vr.controller_utils import AxisVelocityHandler
 from vr_ros2_bridge_msgs.msg import ControllersInfo, ControllerInfo
 
 
-def controller_info_to_se3_pose(controller_info: ControllerInfo):
+def controller_info_to_se3_pose(controller_info):
     pose_msg: Pose = controller_info.controller_pose
     return SE3Pose(x=pose_msg.position.x,
                    y=pose_msg.position.y,
@@ -65,12 +65,13 @@ class GenerateDataVRNode(Node):
 
     def __init__(self, conq_clients: Clients, follow_arm_with_body=True, viz_only=False):
         super().__init__("generate_data_from_vr")
-        self.latest_action = None
+        self.latest_action = SE3Pose.from_identity()
+        self.linear_velocity_scale = 1.
         self.trackpad_y_axis_velocity_handler = AxisVelocityHandler()
         self.follow_arm_with_body = follow_arm_with_body
         self.conq_clients = conq_clients  # Node already has a clients attribute, hence the name change
         self.viz_only = viz_only
-        self.hand_in_body0 = SE3Pose.from_identity()
+        self.hand_in_vision0 = SE3Pose.from_identity()
         self.controller_in_vr0 = SE3Pose.from_identity()
 
         now = int(time.time())
@@ -93,9 +94,9 @@ class GenerateDataVRNode(Node):
 
         self.on_reset()
 
-    def send_cmd(self, target_hand_in_body: SE3Pose, open_fraction: float):
-        hand_pose_msg = target_hand_in_body.to_proto()
-        arm_cmd = RobotCommandBuilder.arm_pose_command_from_pose(hand_pose_msg, GRAV_ALIGNED_BODY_FRAME_NAME,
+    def send_cmd(self, target_hand_in_vision: SE3Pose, open_fraction: float):
+        hand_pose_msg = target_hand_in_vision.to_proto()
+        arm_cmd = RobotCommandBuilder.arm_pose_command_from_pose(hand_pose_msg, VISION_FRAME_NAME,
                                                                  seconds=ARM_POSE_CMD_DURATION)
         if self.follow_arm_with_body:
             arm_body_cmd = add_follow_with_body(arm_cmd)
@@ -138,52 +139,64 @@ class GenerateDataVRNode(Node):
         if not self.is_recording and controller_info.trackpad_button:
             self.on_reset()
 
-        if self.is_recording:
-            # for debugging purposes, we publish a fixed transform from vr frame to body frame,
-            # even though we don't ever actually use this transform for controlling the robot.
-            vr_to_body = TransformStamped()
-            vr_to_body.header.stamp = self.get_clock().now().to_msg()
-            vr_to_body.header.frame_id = VR_FRAME_NAME
-            vr_to_body.child_frame_id = GRAV_ALIGNED_BODY_FRAME_NAME
-            vr_to_body.transform.translation.x = 1.5
-            vr_to_body.transform.rotation.w = 1.
-            self.tf_broadcaster.sendTransform(vr_to_body)
+        trackpad_y_velocity = self.trackpad_y_axis_velocity_handler.update(controller_info.trackpad_axis_touch_y)
+        self.linear_velocity_scale += trackpad_y_velocity * 0.1
+        rr.log('linear_velocity_scale', rr.TimeSeriesScalar(self.linear_velocity_scale))
 
-            target_hand_in_body = self.get_target_in_body(controller_info)
+        if self.is_recording:
+            # for debugging purposes, we publish a fixed transform from "VR" frame to "VISION" frame,
+            # even though we don't ever actually use this transform for controlling the robot.
+            vr_to_vision = TransformStamped()
+            vr_to_vision.header.stamp = self.get_clock().now().to_msg()
+            vr_to_vision.header.frame_id = VR_FRAME_NAME
+            vr_to_vision.child_frame_id = VISION_FRAME_NAME
+            vr_to_vision.transform.translation.x = 1.5
+            vr_to_vision.transform.rotation.w = 1.
+            self.tf_broadcaster.sendTransform(vr_to_vision)
+
+            target_hand_in_vision = self.get_target_in_vision(controller_info)
 
             snapshot = self.conq_clients.state.get_robot_state().kinematic_state.transforms_snapshot
-            hand_in_body = get_a_tform_b(snapshot, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
+            hand_in_vision = get_a_tform_b(snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
 
             open_fraction = 1 - controller_info.trigger_axis
 
             # Save for the data recorder
             self.latest_action = {
-                'target_hand_in_body': target_hand_in_body,
+                'target_hand_in_vision': target_hand_in_vision,
                 'open_fraction': open_fraction
             }
 
             self.pub_se3_pose_to_tf(self.controller_in_vr0, 'controller_in_vr0', VR_FRAME_NAME)
-            self.pub_se3_pose_to_tf(self.hand_in_body0, 'hand_in_body0', GRAV_ALIGNED_BODY_FRAME_NAME)
-            self.pub_se3_pose_to_tf(hand_in_body, 'hand_in_body', GRAV_ALIGNED_BODY_FRAME_NAME)
-            self.pub_se3_pose_to_tf(target_hand_in_body, 'target_in_body', GRAV_ALIGNED_BODY_FRAME_NAME)
+            self.pub_se3_pose_to_tf(self.hand_in_vision0, 'hand_in_vision0', VISION_FRAME_NAME)
+            self.pub_se3_pose_to_tf(hand_in_vision, 'hand_in_vision', VISION_FRAME_NAME)
+            self.pub_se3_pose_to_tf(target_hand_in_vision, 'target_in_vision', VISION_FRAME_NAME)
 
             if not self.viz_only:
-                self.send_cmd(target_hand_in_body, open_fraction)
+                self.send_cmd(target_hand_in_vision, open_fraction)
 
-    def get_velocity(self, controller_info: ControllerInfo):
-        controller_info.controller_velocity
-
-    def get_target_in_body(self, controller_info: ControllerInfo) -> SE3Pose:
+    def get_target_in_vision(self, controller_info: ControllerInfo) -> SE3Pose:
+        """ Translate delta pose in VR frame to delta pose in VISION frame and send a command to the robot! """
         current_controller_in_vr = controller_info_to_se3_pose(controller_info)
         self.pub_se3_pose_to_tf(current_controller_in_vr, 'current VR', VR_FRAME_NAME)
         delta_in_vr = self.controller_in_vr0.inverse() * current_controller_in_vr
 
         # TODO: add a rotation here to account for the fact that we might not want VR controller frame and
         #  hand frame to be the same orientation?
-        delta_in_body = delta_in_vr
+        delta_in_vision = delta_in_vr
 
-        target_hand_in_body = self.hand_in_body0 * delta_in_body
-        return target_hand_in_body
+        delta_in_vision_scaled = self.scale_control(delta_in_vision)
+
+        target_hand_in_vision = self.hand_in_vision0 * delta_in_vision_scaled
+        return target_hand_in_vision
+
+    def scale_control(self, delta_in_vision: SE3Pose):
+        delta_in_vision_scaled = delta_in_vision
+        # TODO: also scale rotational velocity
+        delta_in_vision_scaled.x *= self.linear_velocity_scale
+        delta_in_vision_scaled.y *= self.linear_velocity_scale
+        delta_in_vision_scaled.z *= self.linear_velocity_scale
+        return delta_in_vision_scaled
 
     def on_reset(self):
         if self.viz_only:
@@ -194,12 +207,12 @@ class GenerateDataVRNode(Node):
         blocking_arm_command(self.conq_clients, look_cmd)
 
     def on_start_recording(self, controller_info: ControllerInfo):
-        # Store the initial pose of the hand in body frame, as well as the controller pose which is in VR frame
+        # Store the initial pose of the hand in vision frame, as well as the controller pose which is in VR frame
         print(f"Starting recording episode {self.recorder.episode_idx}")
 
         self.controller_in_vr0 = controller_info_to_se3_pose(controller_info)
         snapshot = self.conq_clients.state.get_robot_state().kinematic_state.transforms_snapshot
-        self.hand_in_body0 = get_a_tform_b(snapshot, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
+        self.hand_in_vision0 = get_a_tform_b(snapshot, VISION_FRAME_NAME, HAND_FRAME_NAME)
 
         mode = "unsorted"
         if not self.viz_only:
