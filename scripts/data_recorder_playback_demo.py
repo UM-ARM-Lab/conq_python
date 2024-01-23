@@ -73,8 +73,7 @@ if __name__ == "__main__":
         "--metadata-path",
         "-m",
         type=Path,
-        help=("Path to the metadata file corresponding to the given log file. Optional if "
-              "`--log-file` is not specified as it defaults to demo log metadata file."))
+        help="Path to the metadata file corresponding to the given log file. Optional.")
 
     args = parser.parse_args()
     log_path = args.log_path
@@ -94,7 +93,7 @@ if __name__ == "__main__":
         if not metadata_path.exists():
             raise FileNotFoundError(
                 f"Couldn't find metadata file '{metadata_path}'. Is Big Narstie mounted?")
-    else:
-        raise RuntimeError("Must specify either both log and metadata path or neither.")
+    elif (not is_log_path_specifed) and is_metadata_path_specified:
+        raise RuntimeError("Must specify log file if providing metadata file.")
 
     main(log_path, metadata_path)
