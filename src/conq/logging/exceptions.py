@@ -1,0 +1,2 @@
+class ImageSourceUnavailableError(Exception):
+    pass
