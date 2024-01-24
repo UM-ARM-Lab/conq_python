@@ -1,4 +1,7 @@
 from graph_nav_interface import GraphNavInterface
+from conq.data_recorder import ConqDataRecorder
+from conq.clients import Clients
+
 import argparse
 import os
 import sys
@@ -6,13 +9,23 @@ import bosdyn.client.channel
 import bosdyn.client.util
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 import numpy as np
+import time
+from pathlib import Path
 
 from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
 
 class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle): 
-    def __init__(self, robot, upload_path, silhouette=None, silhouetteActor=None):
+    def __init__(self, robot, upload_path, clients: Clients=None, silhouette=None, silhouetteActor=None):
         GraphNavInterface.__init__(self,robot, upload_path)
         HighlightInteractorStyle.__init__(self, silhouette, silhouetteActor)
+        
+        self.clients = clients
+        self.clients.graphnav = self._graph_nav_client
+        self.clients.state = self._robot_state_client
+        now = int(time.Time())
+        root = Path(f"data/click_map_data_{now}")
+        self.recorder = ConqDataRecorder(root, self.clients, source=[])
+        self.client.recorder = self.recorder
 
         self._list_graph_waypoint_and_edge_ids()
         self._upload_graph_and_snapshots() # option 5
@@ -51,6 +64,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
             self.print_controls()
         elif key == 'q':
             # TODO: figure out how to do same as 'e' for exit
+            self.recorder.stop() # Stop recording on exit
             self._on_quit()
 
 
@@ -113,13 +127,17 @@ def main(argv):
     vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
 
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
+    lease_client = robot.ensure_client(LeaseClient.default_service_name)
+    clients = Clients(lease=lease_client, state=None, manipulation=None,
+                          image=None, graphnav=None, raycast=None, command=None, robot=robot, recorder=None)
     style = ClickMapInterface(robot, options.upload_filepath, silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
+    # Start recording
+    style.recorder.start_episode(mode="localization", instruction="", save_interval=200)
+
     # graph_nav_interface = ClickMapInterface(robot, options.upload_filepath)
-    lease_client = robot.ensure_client(LeaseClient.default_service_name)
-
-
+    
     try:
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
             try:
