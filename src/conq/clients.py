@@ -8,6 +8,7 @@ from bosdyn.client.ray_cast import RayCastClient
 from bosdyn.client.robot import Robot
 from bosdyn.client.robot_command import RobotCommandClient
 from bosdyn.client.robot_state import RobotStateClient
+from bosdyn.client.graph_nav import GraphNavClient
 
 from conq.data_recorder import ConqDataRecorder
 
@@ -18,6 +19,7 @@ class Clients:
     state: RobotStateClient
     manipulation: ManipulationApiClient
     image: ImageClient
+    graphnav: GraphNavClient
     raycast: RayCastClient
     command: RobotCommandClient
     robot: Robot

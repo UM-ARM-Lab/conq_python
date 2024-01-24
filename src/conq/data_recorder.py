@@ -10,15 +10,15 @@ from typing import Optional, Callable
 
 import numpy as np
 from bosdyn.api.robot_state_pb2 import FootState
-from bosdyn.client.image import ImageClient, build_image_request
-from bosdyn.client.robot_state import RobotStateClient
+from bosdyn.client.image import build_image_request
 
 from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES, ALL_SOURCES, source_to_fmt
+from conq.clients import Clients
 
 
 class ConqDataRecorder:
 
-    def __init__(self, root: Path, robot_state_client: RobotStateClient, image_client: ImageClient, sources=None,
+    def __init__(self, root: Path, clients: Clients, sources=None,
                  get_latest_action: Optional[Callable] = None, period: Optional[float] = None):
         """
 
@@ -31,8 +31,7 @@ class ConqDataRecorder:
         """
         self.period = period
         self.root = root
-        self.robot_state_client = robot_state_client
-        self.image_client = image_client
+        self.clients = clients
         self.get_latest_action = get_latest_action
 
         if sources is None:
@@ -68,7 +67,7 @@ class ConqDataRecorder:
     def start_episode(self, mode, instruction):
         self.episode_done = Event()
         self.saver_thread = Thread(target=self.save_episode_worker,
-                                   args=(self.robot_state_client, self.episode_done, mode))
+                                   args=(self.clients, self.episode_done, mode))
         self.saver_thread.start()
         self.add_instruction(instruction)
 
@@ -85,7 +84,7 @@ class ConqDataRecorder:
         self.latest_instruction = text
         self.latest_instruction_time = time.time()
 
-    def save_episode_worker(self, robot_state_client, done: Event, mode: str):
+    def save_episode_worker(self, clients, done: Event, mode: str, save_interval: int = 50):
         mode_path = self.root / mode
         mode_path.mkdir(exist_ok=True, parents=True)
 
@@ -94,7 +93,8 @@ class ConqDataRecorder:
 
         while not done.is_set():
             now = time.time()
-            state = robot_state_client.get_robot_state()
+            state = clients.state.get_robot_state()
+            localization_state = clients.graphnav.get_localization_state()
 
             from conq.rerun_utils import viz_common_frames
             viz_common_frames(state.kinematic_state.transforms_snapshot)
@@ -102,6 +102,8 @@ class ConqDataRecorder:
             step_data = {
                 'time': now,
                 'robot_state': state,
+                'localization': localization_state.localization,
+                'is_lost': localization_state.lost_detector_state.is_lost,
                 'instruction': self.latest_instruction,
                 'instruction_time': self.latest_instruction_time,
                 'images': {},
@@ -112,7 +114,7 @@ class ConqDataRecorder:
                 req = build_image_request(src, pixel_format=fmt)
                 reqs.append(req)
 
-            ress = self.image_client.get_image(reqs)
+            ress = clients.image.get_image(reqs)
 
             for res, src in zip(ress, self.sources):
                 step_data['images'][src] = res
@@ -129,7 +131,7 @@ class ConqDataRecorder:
                     time.sleep(sleep_dt)
 
             # save
-            if len(episode) % 50 == 0:
+            if len(episode) % save_interval == 0:
                 with episode_path.open('wb') as f:
                     pickle.dump(episode, f)
 
