@@ -64,10 +64,10 @@ class ConqDataRecorder:
         self.latest_instruction_time = time.time()
         self.episode_idx = 0
 
-    def start_episode(self, mode, instruction):
+    def start_episode(self, mode, instruction, save_interval: int = 50):
         self.episode_done = Event()
         self.saver_thread = Thread(target=self.save_episode_worker,
-                                   args=(self.clients, self.episode_done, mode))
+                                   args=(self.clients, self.episode_done, mode, save_interval))
         self.saver_thread.start()
         self.add_instruction(instruction)
 
@@ -84,7 +84,7 @@ class ConqDataRecorder:
         self.latest_instruction = text
         self.latest_instruction_time = time.time()
 
-    def save_episode_worker(self, clients, done: Event, mode: str, save_interval: int = 50):
+    def save_episode_worker(self, clients, done: Event, mode: str, save_interval):
         mode_path = self.root / mode
         mode_path.mkdir(exist_ok=True, parents=True)
 
