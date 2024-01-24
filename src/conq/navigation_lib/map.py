@@ -34,6 +34,23 @@ def get_point_cloud_data_in_seed_frame(waypoints, snapshots, anchorings, waypoin
     return seed_tform_cloud.transform_cloud(point_cloud_data)
 
 
+def extract_full_point_cloud_in_seed_frame(current_graph, current_waypoints,
+                                           current_waypoint_snapshots,
+                                           current_anchors) -> np.ndarray:
+    """Extracts a full point cloud of visual features from an anchored map"""
+    pc = None
+    for wp in current_graph.waypoints:
+        cloud_data = get_point_cloud_data_in_seed_frame(current_waypoints,
+                                                        current_waypoint_snapshots, current_anchors,
+                                                        wp.id)
+
+        if pc is None:
+            pc = cloud_data
+        else:
+            pc = np.concatenate((pc, cloud_data))
+    return pc
+
+
 def load_map(path: Path):
     """
     Load a map from the given file path.
