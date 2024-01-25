@@ -1,3 +1,4 @@
+from typing import Optional
 from pathlib import Path
 
 import rerun as rr
@@ -25,7 +26,10 @@ def get_default_log_paths():
     return pkl_path, metadata_path
 
 
-def main(pkl_path: Path, metadata_path: Path):
+def main(pkl_path: Path, metadata_path: Path, map_path: Optional[Path] = None):
+    if map_path is not None:
+        raise NotImplementedError()
+
     log = ConqLog(pkl_path, metadata_path)
 
     rr.init("data_recorder_playback_rerun", spawn=True)
@@ -71,9 +75,14 @@ if __name__ == "__main__":
               "Narstie for demonstration purposes."))
     parser.add_argument(
         "--metadata-path",
-        "-m",
+        "-d",
         type=Path,
         help="Path to the metadata file corresponding to the given log file. Optional.")
+    parser.add_argument("--map-path",
+                        "-m",
+                        type=Path,
+                        help="Path to GraphNav map directory",
+                        default=None)
 
     args = parser.parse_args()
     log_path = args.log_path
@@ -96,4 +105,4 @@ if __name__ == "__main__":
     elif (not is_log_path_specifed) and is_metadata_path_specified:
         raise RuntimeError("Must specify log file if providing metadata file.")
 
-    main(log_path, metadata_path)
+    main(log_path, metadata_path, args.map_path)
