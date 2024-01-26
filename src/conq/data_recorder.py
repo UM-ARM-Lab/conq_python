@@ -132,7 +132,8 @@ class ConqDataRecorder:
                     step_data['images'][src] = res
 
             # Get the action at the end, so we can see what the demonstrator was trying to do most recently.
-            step_data['action'] = self.get_latest_action(now)
+            if self.get_latest_action is not None:
+                step_data['action'] = self.get_latest_action(now)
 
             episode.append(step_data)
 
