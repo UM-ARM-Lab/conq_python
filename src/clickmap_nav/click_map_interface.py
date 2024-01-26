@@ -24,9 +24,9 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         self.clients = clients
         self.clients.graphnav = self._graph_nav_client
         self.clients.state = self._robot_state_client
-        now = int(time.Time())
+        now = int(time.time())
         root = Path(f"data/click_map_data_{now}")
-        self.recorder = ConqDataRecorder(root, self.clients, source=RGB_SOURCES)
+        self.recorder = ConqDataRecorder(root, self.clients, sources=RGB_SOURCES)
         self.recorder_started = False
 
         self._list_graph_waypoint_and_edge_ids()
@@ -152,6 +152,7 @@ def main(argv):
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
             try:
                 vtk_engine.start()
+                style.recorder.stop()
                 return True
             except Exception as exc:  # pylint: disable=broad-except
                 print(exc)
