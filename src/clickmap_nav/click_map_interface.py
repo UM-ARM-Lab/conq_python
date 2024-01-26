@@ -1,6 +1,7 @@
 from graph_nav_interface import GraphNavInterface
 from conq.data_recorder import ConqDataRecorder
 from conq.clients import Clients
+from conq.cameras_utils import RGB_SOURCES
 
 import argparse
 import os
@@ -25,7 +26,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         self.clients.state = self._robot_state_client
         now = int(time.Time())
         root = Path(f"data/click_map_data_{now}")
-        self.recorder = ConqDataRecorder(root, self.clients, source=[])
+        self.recorder = ConqDataRecorder(root, self.clients, source=RGB_SOURCES)
         self.recorder_started = False
 
         self._list_graph_waypoint_and_edge_ids()
