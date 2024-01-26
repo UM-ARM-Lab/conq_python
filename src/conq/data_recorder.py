@@ -14,6 +14,8 @@ from bosdyn.client.image import build_image_request
 
 from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES, ALL_SOURCES, source_to_fmt
 from conq.clients import Clients
+from conq.rerun_utils import viz_common_frames
+
 
 
 class ConqDataRecorder:
@@ -110,7 +112,6 @@ class ConqDataRecorder:
             # Check that the right cleint being requested is set before setting the step_data
             if clients.state is not None:
                 state = clients.state.get_robot_state()
-                from conq.rerun_utils import viz_common_frames
                 viz_common_frames(state.kinematic_state.transforms_snapshot)
                 step_data['robot_state'] = state
 
