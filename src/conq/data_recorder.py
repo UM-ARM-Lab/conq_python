@@ -84,7 +84,7 @@ class ConqDataRecorder:
         self.latest_instruction = text
         self.latest_instruction_time = time.time()
 
-    def save_episode_worker(self, clients, done: Event, mode: str, save_interval):
+    def save_episode_worker(self, clients, done: Event, mode: str, episode_save_interval):
         mode_path = self.root / mode
         mode_path.mkdir(exist_ok=True, parents=True)
 
@@ -131,7 +131,7 @@ class ConqDataRecorder:
                     time.sleep(sleep_dt)
 
             # save
-            if len(episode) % save_interval == 0:
+            if len(episode) % episode_save_interval == 0:
                 with episode_path.open('wb') as f:
                     pickle.dump(episode, f)
 
