@@ -11,6 +11,7 @@ from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClai
 import numpy as np
 import time
 from pathlib import Path
+from threading import Timer
 
 from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
 
@@ -25,7 +26,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         now = int(time.Time())
         root = Path(f"data/click_map_data_{now}")
         self.recorder = ConqDataRecorder(root, self.clients, source=[])
-        self.client.recorder = self.recorder
+        self.recorder_started = False
 
         self._list_graph_waypoint_and_edge_ids()
         self._upload_graph_and_snapshots() # option 5
@@ -93,6 +94,15 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
             (9) Clear the current graph.
             (q) Exit.
             """)
+        
+    def start_recording(self):
+        if self.recorder_started:
+            self.recorder.next_episode()
+        else:
+            self.recorder_started = True
+
+        Timer(20, self.start_recording).start()
+        self.recorder.start_episode(mode="localization", instruction="no instruction", save_interval=200)
 
 
 
@@ -129,12 +139,11 @@ def main(argv):
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
     clients = Clients(lease=lease_client, state=None, manipulation=None,
-                          image=None, graphnav=None, raycast=None, command=None, robot=robot, recorder=None)
-    style = ClickMapInterface(robot, options.upload_filepath, silhouette, silhouetteActor)
+                          image=None, graphnav=None, raycast=None, command=None, robot=robot)
+    style = ClickMapInterface(robot, options.upload_filepath, clients, silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
-    # Start recording
-    style.recorder.start_episode(mode="localization", instruction="", save_interval=200)
+    style.start_recording()
 
     # graph_nav_interface = ClickMapInterface(robot, options.upload_filepath)
     
