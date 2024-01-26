@@ -10,8 +10,6 @@ from bosdyn.client.robot_command import RobotCommandClient
 from bosdyn.client.robot_state import RobotStateClient
 from bosdyn.client.graph_nav import GraphNavClient
 
-from conq.data_recorder import ConqDataRecorder
-
 
 @dataclass
 class Clients:
@@ -23,4 +21,3 @@ class Clients:
     raycast: RayCastClient
     command: RobotCommandClient
     robot: Robot
-    recorder: Optional[ConqDataRecorder] = None

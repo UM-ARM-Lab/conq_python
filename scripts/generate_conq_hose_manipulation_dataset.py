@@ -168,10 +168,8 @@ def main():
         command_client = setup_and_stand(robot)
 
         clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client,
-                          image=image_client, raycast=rc_client, command=command_client, robot=robot,
-                          recorder=None)
+                          image=image_client, raycast=rc_client, command=command_client, robot=robot)
         recorder = ConqDataRecorder(root, clients=clients)
-        clients.recorder = recorder
 
         open_gripper(clients)
         look_at_scene(clients, z=0.4, pitch=np.deg2rad(85))
