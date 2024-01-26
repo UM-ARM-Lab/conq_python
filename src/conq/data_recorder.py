@@ -84,7 +84,7 @@ class ConqDataRecorder:
         self.latest_instruction = text
         self.latest_instruction_time = time.time()
 
-    def save_episode_worker(self, clients, done: Event, mode: str, save_interval):
+    def save_episode_worker(self, clients, done: Event, mode: str, episode_save_interval):
         mode_path = self.root / mode
         mode_path.mkdir(exist_ok=True, parents=True)
 
@@ -93,31 +93,42 @@ class ConqDataRecorder:
 
         while not done.is_set():
             now = time.time()
-            state = clients.state.get_robot_state()
-            localization_state = clients.graphnav.get_localization_state()
+            state = None
+            localization_state = None
 
-            from conq.rerun_utils import viz_common_frames
-            viz_common_frames(state.kinematic_state.transforms_snapshot)
-
+            # Initialize step_data
             step_data = {
                 'time': now,
-                'robot_state': state,
-                'localization': localization_state.localization,
-                'is_lost': localization_state.lost_detector_state.is_lost,
+                'robot_state': None,
+                'localization': None,
+                'is_lost': None,
                 'instruction': self.latest_instruction,
                 'instruction_time': self.latest_instruction_time,
                 'images': {},
             }
 
-            reqs = []
-            for src, fmt in zip(self.sources, self.fmts):
-                req = build_image_request(src, pixel_format=fmt)
-                reqs.append(req)
+            # Check that the right cleint being requested is set before setting the step_data
+            if clients.state is not None:
+                state = clients.state.get_robot_state()
+                from conq.rerun_utils import viz_common_frames
+                viz_common_frames(state.kinematic_state.transforms_snapshot)
+                step_data['robot_state'] = state
 
-            ress = clients.image.get_image(reqs)
+            if clients.graphnav is not None:
+                localization_state = clients.graphnav.get_localization_state()
+                step_data['localization'] = localization_state.localization
+                step_data['is_lost'] = localization_state.lost_detector_state.is_lost
 
-            for res, src in zip(ress, self.sources):
-                step_data['images'][src] = res
+            if clients.image is not None:
+                reqs = []
+                for src, fmt in zip(self.sources, self.fmts):
+                    req = build_image_request(src, pixel_format=fmt)
+                    reqs.append(req)
+
+                ress = clients.image.get_image(reqs)
+
+                for res, src in zip(ress, self.sources):
+                    step_data['images'][src] = res
 
             # Get the action at the end, so we can see what the demonstrator was trying to do most recently.
             step_data['action'] = self.get_latest_action(now)
@@ -131,7 +142,7 @@ class ConqDataRecorder:
                     time.sleep(sleep_dt)
 
             # save
-            if len(episode) % save_interval == 0:
+            if len(episode) % episode_save_interval == 0:
                 with episode_path.open('wb') as f:
                     pickle.dump(episode, f)
 
