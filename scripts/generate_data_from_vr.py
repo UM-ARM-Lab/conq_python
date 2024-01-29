@@ -76,7 +76,7 @@ class GenerateDataVRNode(Node):
 
         now = int(time.time())
         root = Path(f"data/conq_vr_data_{now}")
-        self.recorder = ConqDataRecorder(root, conq_clients.state, conq_clients.image,
+        self.recorder = ConqDataRecorder(root, conq_clients,
                                          sources=[
                                              'hand_color_image',
                                              'frontleft_fisheye_image',

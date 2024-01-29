@@ -163,14 +163,13 @@ def main():
 
     now = int(time.time())
     root = Path(f"data/conq_hose_manipulation_data_{now}")
-    recorder = ConqDataRecorder(root, robot_state_client, image_client)
 
     with (LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True)):
         command_client = setup_and_stand(robot)
 
         clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client,
-                          image=image_client, raycast=rc_client, command=command_client, robot=robot,
-                          recorder=recorder)
+                          image=image_client, raycast=rc_client, command=command_client, robot=robot)
+        recorder = ConqDataRecorder(root, clients=clients)
 
         open_gripper(clients)
         look_at_scene(clients, z=0.4, pitch=np.deg2rad(85))
