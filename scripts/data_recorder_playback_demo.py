@@ -14,12 +14,12 @@ def get_default_log_paths():
 
     This is just a convenience function to make the main function less cluttered.
     """
-    root_path = Path("/media/big_narstie/datasets/conq_hose_manipulation_raw/")
-    exp_name = "conq_hose_manipulation_data_1700079751"
+    root_path = Path("~/Documents/UmichRobotics/ARM-Lab/data/") # Path("/media/big_narstie/datasets/conq_hose_manipulation_raw/")
+    exp_name = "click_map_data_1706298758"
     exp_path = root_path / exp_name
     episode_num = 0
 
-    pkl_path = exp_path / "train" / f"episode_{episode_num}.pkl"
+    pkl_path = exp_path / "localization" / f"episode_{episode_num}.pkl"
     metadata_path = exp_path / "metadata.json"
 
     return pkl_path, metadata_path
