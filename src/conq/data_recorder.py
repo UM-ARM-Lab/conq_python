@@ -101,9 +101,6 @@ class ConqDataRecorder:
             # Initialize step_data
             step_data = {
                 'time': now,
-                'robot_state': None,
-                'localization': None,
-                'is_lost': None,
                 'instruction': self.latest_instruction,
                 'instruction_time': self.latest_instruction_time,
                 'images': {},
