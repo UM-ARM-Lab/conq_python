@@ -8,7 +8,10 @@ from conq.logging.replay.message_packet import MessagePacket
 
 class ConqLog:
 
-    def __init__(self, log_path: Path, metadata_path: Optional[Path] = None):
+    def __init__(self,
+                 log_path: Path,
+                 metadata_path: Optional[Path] = None,
+                 episode_rate_limit_hz: float = 2):
         """Log file of recorded raw protobuf messages received from Conq for use in playback
 
         Has some simple useful features like rate-limiting messages for playback.
@@ -16,6 +19,7 @@ class ConqLog:
         self.log_path: Path = self._verify_path_exists(log_path)
         self.metadata_path: Optional[Path] = self._verify_path_exists(metadata_path)
         self.metadata: Optional[Dict[str, Any]] = self._read_metadata()
+        self.episode_rate_limit_hz: float = episode_rate_limit_hz
         self.log_data: List[MessagePacket] = self._read_log()
 
         print(f"Duration of log: {self.get_t_end() - self.get_t_start():.2f} seconds")
@@ -42,6 +46,10 @@ class ConqLog:
 
     def msg_packet_iterator(self, rate_limit_hz: Optional[float] = None):
         """Generator to iterate through messages, optionally rate-limited
+
+        You'll probably want to rate-limit using the `ConqLog` rate-limit option instead of this
+        iterator's rate-limiting. This saves memory since the `ConqLog` discards messages that come
+        at too high of frequency.
 
         NOTE: This rate-limits based on the full message timestamp. NOT the per-image capture time.
         This shouldn't be an issue, though.
@@ -86,6 +94,8 @@ class ConqLog:
         episode_nums = sorted([int(p.stem.split("_")[-1]) for p in pkl_paths])
 
         packets = []
+        t_last = -1e5  # Last timestamp of packet we kept (due to downsampling).
+        t_period = 1. / self.episode_rate_limit_hz
         for episode_num in episode_nums:
             try:
                 episode_path = self.log_path / f"episode_{episode_num}.pkl"
@@ -98,8 +108,14 @@ class ConqLog:
                 continue
 
             for packet_raw in dat:
-                packets.append(
-                    MessagePacket(packet_raw, self.get_available_rgb_sources(),
-                                  self.get_available_depth_sources()))
+                t_packet = packet_raw["time"]
+                t_elapsed = t_packet - t_last
+                if t_elapsed < t_period:
+                    continue
+                else:
+                    packets.append(
+                        MessagePacket(packet_raw, self.get_available_rgb_sources(),
+                                      self.get_available_depth_sources()))
+                    t_last = packet_raw["time"]
 
         return packets

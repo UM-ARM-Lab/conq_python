@@ -33,7 +33,7 @@ def main(pkl_path: Path,
          metadata_path: Path,
          map_path: Optional[Path] = None,
          rate_limit_hz: float = 2):
-    log = ConqLog(pkl_path, metadata_path)
+    log = ConqLog(pkl_path, metadata_path, rate_limit_hz)
 
     rr.init("data_recorder_playback_rerun", spawn=True)
     rr.set_time_seconds(RR_TIMELINE_NAME, log.get_t_start())
@@ -52,7 +52,7 @@ def main(pkl_path: Path,
     ]
     depth_sources = ["frontleft_depth_in_visual_frame", "frontright_depth_in_visual_frame"]
 
-    for packet in log.msg_packet_iterator(rate_limit_hz=rate_limit_hz):
+    for packet in log.msg_packet_iterator():
         # If wishing to access the robot state recorded in this message:
         # state = step['robot_state']
         # snapshot = state.kinematic_state.transforms_snapshot
