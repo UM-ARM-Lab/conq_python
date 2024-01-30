@@ -81,13 +81,19 @@ class ConqLog:
         return met
 
     def _read_log(self) -> Dict[str, Any]:
-        with self.log_path.open('rb') as f:
-            dat = pickle.load(f)
+        """Reads all episode pickle files in the log directory"""
+        pkl_paths = self.log_path.glob("*.pkl")
+        episode_nums = sorted([int(p.stem.split("_")[-1]) for p in pkl_paths])
 
         packets = []
-        for packet_raw in dat:
-            packets.append(
-                MessagePacket(packet_raw, self.get_available_rgb_sources(),
-                              self.get_available_depth_sources()))
+        for episode_num in episode_nums:
+            episode_path = self.log_path / f"episode_{episode_num}.pkl"
+            with episode_path.open('rb') as f:
+                dat = pickle.load(f)
+
+            for packet_raw in dat:
+                packets.append(
+                    MessagePacket(packet_raw, self.get_available_rgb_sources(),
+                                  self.get_available_depth_sources()))
 
         return packets
