@@ -57,9 +57,6 @@ class MapAnchored:
     def _verify_map_path(self):
         if not self.map_directory.exists():
             raise FileNotFoundError(f"Map directory not found at: {self.map_directory}")
-        # graph_dir = self.map_directory / "downloaded_graph"
-        # if not graph_dir.exists():
-        #     raise FileNotFoundError(f"Graph directory not found at: {graph_dir}")
 
     def _get_cloud_in_seed_frame(self) -> np.ndarray:
         """Get the map point cloud in the seed frame
