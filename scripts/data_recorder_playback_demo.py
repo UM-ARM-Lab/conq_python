@@ -29,7 +29,10 @@ def get_default_log_paths():
     return pkl_path, metadata_path
 
 
-def main(pkl_path: Path, metadata_path: Path, map_path: Optional[Path] = None):
+def main(pkl_path: Path,
+         metadata_path: Path,
+         map_path: Optional[Path] = None,
+         rate_limit_hz: float = 2):
     log = ConqLog(pkl_path, metadata_path)
 
     rr.init("data_recorder_playback_rerun", spawn=True)
@@ -49,7 +52,7 @@ def main(pkl_path: Path, metadata_path: Path, map_path: Optional[Path] = None):
     ]
     depth_sources = ["frontleft_depth_in_visual_frame", "frontright_depth_in_visual_frame"]
 
-    for packet in log.msg_packet_iterator(rate_limit_hz=2):
+    for packet in log.msg_packet_iterator(rate_limit_hz=rate_limit_hz):
         # If wishing to access the robot state recorded in this message:
         # state = step['robot_state']
         # snapshot = state.kinematic_state.transforms_snapshot
@@ -99,6 +102,7 @@ if __name__ == "__main__":
                         type=Path,
                         help="Path to GraphNav map directory",
                         default=None)
+    parser.add_argument("--rate-limit-hz", "-r", type=float, default=2)
 
     args = parser.parse_args()
     log_path = args.log_path
@@ -121,4 +125,4 @@ if __name__ == "__main__":
     elif (not is_log_path_specifed) and is_metadata_path_specified:
         raise RuntimeError("Must specify log file if providing metadata file.")
 
-    main(log_path, metadata_path, args.map_path)
+    main(log_path, metadata_path, args.map_path, args.rate_limit_hz)
