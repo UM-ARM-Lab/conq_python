@@ -5,6 +5,7 @@ import rerun as rr
 
 from conq.logging.replay.conq_log_file import ConqLog
 from conq.cameras_utils import image_to_opencv
+from conq.navigation_lib.map.map_anchored import MapAnchored
 
 RR_TIMELINE_NAME = "stable_time"
 NANOSECONDS_TO_SECONDS = 1e-9
@@ -27,13 +28,17 @@ def get_default_log_paths():
 
 
 def main(pkl_path: Path, metadata_path: Path, map_path: Optional[Path] = None):
-    if map_path is not None:
-        raise NotImplementedError()
-
     log = ConqLog(pkl_path, metadata_path)
 
     rr.init("data_recorder_playback_rerun", spawn=True)
     rr.set_time_seconds(RR_TIMELINE_NAME, log.get_t_start())
+
+    # Visualize the map if a map path is provided.
+    if map_path is not None:
+        if not map_path.exists():
+            raise FileNotFoundError(f"Map path '{map_path}' does not exist.")
+        map_viz = MapAnchored(map_path)
+        map_viz.log_rerun()
 
     # Specify the camera sources you want to pull images from.
     rgb_sources = [
