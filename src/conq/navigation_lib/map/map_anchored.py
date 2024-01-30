@@ -34,6 +34,7 @@ class MapAnchored:
     def __init__(self, map_directory: Path):
         self.map_directory: Path = map_directory
         self._verify_map_path()
+        self._map_name: str = "map_anchored"
 
         # TODO: Make (free) factory function that chooses the correct derived class to construct
         # depending on if the map is anchored or not.
@@ -96,6 +97,7 @@ class MapAnchored:
         return np.stack(waypoint_cloud, axis=0)
 
     def _log_edges(self):
+        edge_root = self._map_name + "/edges/"
         edge_num = 0
         for edge in self.current_graph.edges:
             if ((edge.id.from_waypoint in self.current_anchors)
@@ -109,7 +111,7 @@ class MapAnchored:
                 pos_start = seed_tform_from[:3, 3]
                 pos_end = world_tform_to_wp[:3, 3]
                 line = np.stack((pos_start, pos_end), axis=0)
-                name = f"edge_{edge_num}"
+                name = edge_root + str(edge_num)
                 rr.log(name, rr.LineStrips3D(line, colors=EDGE_COLOR))
                 edge_num += 1
 
@@ -129,7 +131,7 @@ class MapAnchored:
     def _log_map_cloud(self, cloud_point_radii_meters: float = 0.02):
         cloud_colors = self._get_pc_color()
         rr.log(
-            "map_point_cloud",
+            self._map_name + "/point_cloud",
             rr.Points3D(self._cloud_in_seed_frame,
                         colors=cloud_colors,
                         radii=cloud_point_radii_meters))
@@ -140,7 +142,7 @@ class MapAnchored:
         num_points = self._waypoint_cloud_in_seed_frame.shape[0]
         waypoint_colors = waypoint_color.repeat(num_points, 0)
         rr.log(
-            "waypoints",
+            self._map_name + "/waypoints",
             rr.Points3D(self._waypoint_cloud_in_seed_frame,
                         colors=waypoint_colors,
                         radii=waypoint_radii_meters))
