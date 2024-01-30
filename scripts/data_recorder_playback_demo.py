@@ -21,9 +21,8 @@ def get_default_log_paths():
     root_path = Path("/media/big_narstie/datasets/conq_hose_manipulation_raw/")
     exp_name = "conq_hose_manipulation_data_1700079751"
     exp_path = root_path / exp_name
-    episode_num = 0
 
-    pkl_path = exp_path / "train" / f"episode_{episode_num}.pkl"
+    pkl_path = exp_path / "train"
     metadata_path = exp_path / "metadata.json"
 
     return pkl_path, metadata_path
@@ -90,8 +89,8 @@ if __name__ == "__main__":
         "--log-path",
         "-l",
         type=Path,
-        help=("Path to the log file you wish to view. Optional, defaults to a log stored on Big "
-              "Narstie for demonstration purposes."))
+        help=("Path to the log you wish to view. Optional, defaults to a log stored on Big Narstie "
+              "for demonstration purposes."))
     parser.add_argument(
         "--metadata-path",
         "-d",
