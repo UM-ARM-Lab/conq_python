@@ -87,9 +87,15 @@ class ConqLog:
 
         packets = []
         for episode_num in episode_nums:
-            episode_path = self.log_path / f"episode_{episode_num}.pkl"
-            with episode_path.open('rb') as f:
-                dat = pickle.load(f)
+            try:
+                episode_path = self.log_path / f"episode_{episode_num}.pkl"
+                with episode_path.open('rb') as f:
+                    dat = pickle.load(f)
+            except Exception as e:
+                print("Couldn't load episode pickle file: ", episode_path)
+                print("Skipping this episode due to following exception:")
+                print(e)
+                continue
 
             for packet_raw in dat:
                 packets.append(
