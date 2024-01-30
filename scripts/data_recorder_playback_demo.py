@@ -1,9 +1,14 @@
+#!/usr/bin/env python3
+from typing import Optional
 from pathlib import Path
 
 import rerun as rr
 
 from conq.logging.replay.conq_log_file import ConqLog
 from conq.cameras_utils import image_to_opencv
+from conq.navigation_lib.map.map_anchored import MapAnchored
+from conq.rerun_utils import rr_tform
+from bosdyn.client.math_helpers import SE3Pose
 
 RR_TIMELINE_NAME = "stable_time"
 NANOSECONDS_TO_SECONDS = 1e-9
@@ -17,19 +22,28 @@ def get_default_log_paths():
     root_path = Path("/media/big_narstie/datasets/conq_hose_manipulation_raw/")
     exp_name = "conq_hose_manipulation_data_1700079751"
     exp_path = root_path / exp_name
-    episode_num = 0
 
-    pkl_path = exp_path / "train" / f"episode_{episode_num}.pkl"
+    pkl_path = exp_path / "train"
     metadata_path = exp_path / "metadata.json"
 
     return pkl_path, metadata_path
 
 
-def main(pkl_path: Path, metadata_path: Path):
-    log = ConqLog(pkl_path, metadata_path)
+def main(pkl_path: Path,
+         metadata_path: Path,
+         map_path: Optional[Path] = None,
+         rate_limit_hz: float = 2):
+    log = ConqLog(pkl_path, metadata_path, rate_limit_hz)
 
     rr.init("data_recorder_playback_rerun", spawn=True)
     rr.set_time_seconds(RR_TIMELINE_NAME, log.get_t_start())
+
+    # Visualize the map if a map path is provided.
+    if map_path is not None:
+        if not map_path.exists():
+            raise FileNotFoundError(f"Map path '{map_path}' does not exist.")
+        map_viz = MapAnchored(map_path)
+        map_viz.log_rerun()
 
     # Specify the camera sources you want to pull images from.
     rgb_sources = [
@@ -38,7 +52,7 @@ def main(pkl_path: Path, metadata_path: Path):
     ]
     depth_sources = ["frontleft_depth_in_visual_frame", "frontright_depth_in_visual_frame"]
 
-    for packet in log.msg_packet_iterator(rate_limit_hz=2):
+    for packet in log.msg_packet_iterator():
         # If wishing to access the robot state recorded in this message:
         # state = step['robot_state']
         # snapshot = state.kinematic_state.transforms_snapshot
@@ -55,6 +69,15 @@ def main(pkl_path: Path, metadata_path: Path):
             img_np = image_to_opencv(res, auto_rotate=True)
             rr.log(source_name, rr.Image(img_np))
 
+        # Log the localization state if available.
+        if packet.localization is not None:
+            timestamp_secs = NANOSECONDS_TO_SECONDS * packet.localization.timestamp.ToNanoseconds()
+            rr.set_time_seconds(RR_TIMELINE_NAME, timestamp_secs)
+
+            pose = SE3Pose.from_proto(packet.localization.seed_tform_body)
+
+            rr_tform("seed_tform_body", pose)
+
     print("Done with rerun playback.")
 
 
@@ -67,13 +90,19 @@ if __name__ == "__main__":
         "--log-path",
         "-l",
         type=Path,
-        help=("Path to the log file you wish to view. Optional, defaults to a log stored on Big "
-              "Narstie for demonstration purposes."))
+        help=("Path to the log you wish to view. Optional, defaults to a log stored on Big Narstie "
+              "for demonstration purposes."))
     parser.add_argument(
         "--metadata-path",
-        "-m",
+        "-d",
         type=Path,
         help="Path to the metadata file corresponding to the given log file. Optional.")
+    parser.add_argument("--map-path",
+                        "-m",
+                        type=Path,
+                        help="Path to GraphNav map directory",
+                        default=None)
+    parser.add_argument("--rate-limit-hz", "-r", type=float, default=2)
 
     args = parser.parse_args()
     log_path = args.log_path
@@ -96,4 +125,4 @@ if __name__ == "__main__":
     elif (not is_log_path_specifed) and is_metadata_path_specified:
         raise RuntimeError("Must specify log file if providing metadata file.")
 
-    main(log_path, metadata_path)
+    main(log_path, metadata_path, args.map_path, args.rate_limit_hz)
