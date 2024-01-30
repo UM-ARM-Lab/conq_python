@@ -6,6 +6,8 @@ import rerun as rr
 from conq.logging.replay.conq_log_file import ConqLog
 from conq.cameras_utils import image_to_opencv
 from conq.navigation_lib.map.map_anchored import MapAnchored
+from conq.rerun_utils import rr_tform
+from bosdyn.client.math_helpers import SE3Pose
 
 RR_TIMELINE_NAME = "stable_time"
 NANOSECONDS_TO_SECONDS = 1e-9
@@ -63,6 +65,15 @@ def main(pkl_path: Path, metadata_path: Path, map_path: Optional[Path] = None):
 
             img_np = image_to_opencv(res, auto_rotate=True)
             rr.log(source_name, rr.Image(img_np))
+
+        # Log the localization state if available.
+        if packet.localization is not None:
+            timestamp_secs = NANOSECONDS_TO_SECONDS * packet.localization.timestamp.ToNanoseconds()
+            rr.set_time_seconds(RR_TIMELINE_NAME, timestamp_secs)
+
+            pose = SE3Pose.from_proto(packet.localization.seed_tform_body)
+
+            rr_tform("seed_tform_body", pose)
 
     print("Done with rerun playback.")
 
