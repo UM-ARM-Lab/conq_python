@@ -9,12 +9,18 @@ import bosdyn.client
 import bosdyn.client.util
 import numpy as np
 import rerun as rr
+from bosdyn.api import manipulation_api_pb2
+from bosdyn.client.frame_helpers import HAND_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, get_se2_a_tform_b, \
+    VISION_FRAME_NAME
 from bosdyn.client.image import ImageClient, pixel_to_camera_space
 from bosdyn.client.lease import LeaseKeepAlive, LeaseClient
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
 from bosdyn.client.ray_cast import RayCastClient
+from bosdyn.client.robot_command import RobotCommandBuilder, block_for_trajectory_cmd
 from bosdyn.client.robot_state import RobotStateClient
+from google.protobuf import wrappers_pb2
 
+from arm_segmentation.predictor import Predictor
 from conq.cameras_utils import pos_in_cam_to_pos_in_hand
 from conq.clients import Clients
 from conq.data_recorder import ConqDataRecorder
@@ -24,7 +30,7 @@ from conq.manipulation import blocking_arm_command, grasp_point_in_image, hand_d
 from conq.manipulation import open_gripper
 from conq.utils import setup_and_stand
 from regrasping_demo.detect_regrasp_point import min_angle_to_x_axis
-from regrasping_demo.get_detections import get_hose_head_grasp_point
+from regrasping_demo.get_detections import get_hose_head_grasp_point, get_object_on_floor
 from regrasping_demo.rotate_about import rotate_around_point_in_hand_frame
 
 
@@ -86,6 +92,45 @@ def retry_grasp_hose(clients: Clients, get_point_f):
             return
 
 
+def drag_hand_to_goal(clients: Clients, predictor: Predictor):
+    """
+    Move the robot to a pose relative to the body while dragging the hose, so the hand arrives at the goal pose
+    Ideally here we would plan a collision free path to the goal, but what should the model of the hose be?
+    We assume that the end not grasped by the robot is fixed in the world, but we don't know where that is.
+    """
+    snapshot = clients.state.get_robot_state().kinematic_state.transforms_snapshot
+    _get_goal = partial(get_object_on_floor, predictor, clients.image, 'mess mat')
+    get_goal_res = _get_goal()
+    hand_in_body = get_se2_a_tform_b(snapshot, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
+    offset = hand_in_body.x * 0.9
+    pixel_xy = get_goal_res.best_vec2.to_proto()
+    res_image = get_goal_res.rgb_res
+    offset_distance = wrappers_pb2.FloatValue(value=offset)
+    walk_to = manipulation_api_pb2.WalkToObjectInImage(pixel_xy=pixel_xy,
+                                                       transforms_snapshot_for_camera=res_image.shot.transforms_snapshot,
+                                                       frame_name_image_sensor=res_image.shot.frame_name_image_sensor,
+                                                       camera_model=res_image.source.pinhole,
+                                                       offset_distance=offset_distance)
+    walk_to_request = manipulation_api_pb2.ManipulationApiRequest(walk_to_object_in_image=walk_to)
+    cmd_response = clients.manipulation.manipulation_api_command(manipulation_api_request=walk_to_request)
+
+    force_buffer = []
+    while True:
+        feedback_request = manipulation_api_pb2.ManipulationApiFeedbackRequest(
+            manipulation_cmd_id=cmd_response.manipulation_cmd_id)
+        response = clients.manipulation.manipulation_api_feedback_command(
+            manipulation_api_feedback_request=feedback_request)
+
+        state_name = manipulation_api_pb2.ManipulationFeedbackState.Name(response.current_state)
+
+        if response.current_state == manipulation_api_pb2.MANIP_STATE_DONE:
+            break
+
+        time.sleep(0.25)
+
+    return True
+
+
 def main():
     np.seterr(all='raise')
     np.set_printoptions(precision=3, suppress=True)
@@ -99,8 +144,8 @@ def main():
 
     # Creates client, robot, and authenticates, and time syncs
     sdk = bosdyn.client.create_standard_sdk('generate_dataset')
-    robot = sdk.create_robot('192.168.80.3')
-    # robot = sdk.create_robot('10.0.0.3')
+    # robot = sdk.create_robot('192.168.80.3')
+    robot = sdk.create_robot('10.0.0.3')
     # robot = sdk.create_robot('10.10.10.135')
     bosdyn.client.util.authenticate(robot)
     robot.time_sync.wait_for_sync()
@@ -117,36 +162,55 @@ def main():
     lease_client.take()
 
     now = int(time.time())
-    root = Path(f"data/regrasping_dataset_{now}")
-    recorder = ConqDataRecorder(root, robot_state_client, image_client)
+    root = Path(f"data/conq_hose_manipulation_data_{now}")
 
     with (LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True)):
         command_client = setup_and_stand(robot)
 
         clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client,
-                          image=image_client, raycast=rc_client, command=command_client, robot=robot,
-                          recorder=recorder)
+                          image=image_client, raycast=rc_client, command=command_client, robot=robot)
+        recorder = ConqDataRecorder(root, clients=clients)
 
         open_gripper(clients)
+        look_at_scene(clients, z=0.4, pitch=np.deg2rad(85))
+        retry_grasp_hose(clients, partial(get_hose_head_grasp_point, predictor, clients.image))
+        hand_delta_z(clients, dz=0.1)
 
-        for mode, num_episodes in [('train', 10), ('val', 5)]:
+        for mode, num_episodes in [('train', 2), ('val', 5)]:
             for episode_idx in range(num_episodes):
                 while True:
+
                     print(f"Starting {episode_idx}")
                     recorder.start_episode(mode)
-                    clients.recorder.add_instruction("grasp hose")
                     try:
-                        retry_grasp_hose(clients, partial(get_hose_head_grasp_point, predictor, image_client))
-                        hand_delta_z(clients, dz=0.25)
-                        open_gripper(clients)
-                        look_at_scene(clients, z=0.4, pitch=np.deg2rad(85))
+                        collect_dragging_episode(clients, predictor)
+                        # collect_grasping_episode(clients, predictor)
+
                         print("Success! Pausing before next episode...")
-                        time.sleep(5)
+                        time.sleep(10)
                         recorder.next_episode()
+
                         break
                     except DetectionError:
-                        input("Re-arrange the hose and press enter to try again")
+                        print("Re-arrange the hose and press enter to try again")
+                        time.sleep(10)
         recorder.stop()
+
+        open_gripper(clients)
+        blocking_arm_command(clients, RobotCommandBuilder.arm_stow_command())
+
+
+def collect_dragging_episode(clients, predictor):
+    clients.recorder.add_instruction("drag the hose to big mess")
+    drag_hand_to_goal(clients, predictor)
+
+
+def collect_grasping_episode(clients, predictor):
+    clients.recorder.add_instruction("grasp hose")
+    retry_grasp_hose(clients, partial(get_hose_head_grasp_point, predictor, clients.image))
+    hand_delta_z(clients, dz=0.25)
+    open_gripper(clients)
+    look_at_scene(clients, z=0.4, pitch=np.deg2rad(85))
 
 
 if __name__ == '__main__':

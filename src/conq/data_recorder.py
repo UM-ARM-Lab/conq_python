@@ -6,22 +6,41 @@ from importlib.metadata import version, PackageNotFoundError
 from multiprocessing import Event
 from pathlib import Path
 from threading import Thread
+from typing import Optional, Callable
 
 import numpy as np
-from bosdyn.api import image_pb2
 from bosdyn.api.robot_state_pb2 import FootState
-from bosdyn.client.image import ImageClient, build_image_request
-from bosdyn.client.robot_state import RobotStateClient
+from bosdyn.client.image import build_image_request
 
-from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES, ALL_FMTS, ALL_SOURCES
+from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES, ALL_SOURCES, source_to_fmt
+from conq.clients import Clients
+from conq.rerun_utils import viz_common_frames
+
 
 
 class ConqDataRecorder:
 
-    def __init__(self, root: Path, robot_state_client: RobotStateClient, image_client: ImageClient):
+    def __init__(self, root: Path, clients: Clients, sources=None,
+                 get_latest_action: Optional[Callable] = None, period: Optional[float] = None):
+        """
+
+        Args:
+            root:
+            robot_state_client:
+            image_client:
+            sources:
+            get_latest_action: callable that returns the action we're currently commanding. For recording teleop demos.
+        """
+        self.period = period
         self.root = root
-        self.robot_state_client = robot_state_client
-        self.image_client = image_client
+        self.clients = clients
+        self.get_latest_action = get_latest_action
+
+        if sources is None:
+            self.sources = ALL_SOURCES
+        else:
+            self.sources = sources
+        self.fmts = [source_to_fmt(src) for src in self.sources]
 
         self.root.mkdir(exist_ok=True, parents=True)
         try:
@@ -30,9 +49,10 @@ class ConqDataRecorder:
             api_version = "unknown"
         self.metadata = {
             'bosdyn.api version': api_version,
-            'date':               datetime.datetime.now().isoformat(),
-            'rgb_sources':        RGB_SOURCES,
-            'depth_sources':      DEPTH_SOURCES,
+            'date': datetime.datetime.now().isoformat(),
+            'rgb_sources': RGB_SOURCES,
+            'depth_sources': DEPTH_SOURCES,
+            'period': self.period,
         }
         self.metadata_path = self.root / 'metadata.json'
         with self.metadata_path.open('w') as f:
@@ -42,15 +62,16 @@ class ConqDataRecorder:
 
     def reset(self):
         self.saver_thread = None
-        self.latest_instruction = None
-        self.latest_instruction_time = None
+        self.latest_instruction = "no instruction"
+        self.latest_instruction_time = time.time()
         self.episode_idx = 0
 
-    def start_episode(self, mode):
+    def start_episode(self, mode, instruction, save_interval: int = 50):
         self.episode_done = Event()
         self.saver_thread = Thread(target=self.save_episode_worker,
-                                   args=(self.robot_state_client, self.episode_done, mode))
+                                   args=(self.clients, self.episode_done, mode, save_interval))
         self.saver_thread.start()
+        self.add_instruction(instruction)
 
     def next_episode(self):
         self.episode_done.set()
@@ -58,15 +79,14 @@ class ConqDataRecorder:
         self.episode_idx += 1
 
     def stop(self):
+        self.episode_done.set()
         self.saver_thread.join()
-        for img_rec in self.img_recorders:
-            img_rec.join()
 
     def add_instruction(self, text: str):
         self.latest_instruction = text
         self.latest_instruction_time = time.time()
 
-    def save_episode_worker(self, robot_state_client, done: Event, mode: str):
+    def save_episode_worker(self, clients, done: Event, mode: str, episode_save_interval):
         mode_path = self.root / mode
         mode_path.mkdir(exist_ok=True, parents=True)
 
@@ -75,34 +95,63 @@ class ConqDataRecorder:
 
         while not done.is_set():
             now = time.time()
-            state = robot_state_client.get_robot_state()
+            state = None
+            localization_state = None
 
-            # from conq.rerun_utils import viz_common_frames
-            # viz_common_frames(state.kinematic_state.transforms_snapshot)
-
+            # Initialize step_data
             step_data = {
-                'time':             now,
-                'robot_state':      state,
-                'instruction':      self.latest_instruction,
+                'time': now,
+                'instruction': self.latest_instruction,
                 'instruction_time': self.latest_instruction_time,
-                'images':           {},
+                'images': {},
             }
 
-            reqs = []
-            for src, fmt in zip(ALL_SOURCES, ALL_FMTS):
-                req = build_image_request(src, pixel_format=fmt)
-                reqs.append(req)
+            # Check that the right cleint being requested is set before setting the step_data
+            if clients.state is not None:
+                state = clients.state.get_robot_state()
+                viz_common_frames(state.kinematic_state.transforms_snapshot)
+                step_data['robot_state'] = state
 
-            ress = self.image_client.get_image(reqs)
+            if clients.graphnav is not None:
+                localization_state = clients.graphnav.get_localization_state()
+                step_data['localization'] = localization_state.localization
+                step_data['is_lost'] = localization_state.lost_detector_state.is_lost
 
-            for res, src in zip(ress, ALL_SOURCES):
-                step_data['images'][src] = res
+            if clients.image is not None:
+                reqs = []
+                for src, fmt in zip(self.sources, self.fmts):
+                    req = build_image_request(src, pixel_format=fmt)
+                    reqs.append(req)
+
+                ress = clients.image.get_image(reqs)
+
+                for res, src in zip(ress, self.sources):
+                    step_data['images'][src] = res
+
+            # Get the action at the end, so we can see what the demonstrator was trying to do most recently.
+            if self.get_latest_action is not None:
+                step_data['action'] = self.get_latest_action(now)
 
             episode.append(step_data)
 
-            # save and wait a bit so other threads can run
-            with episode_path.open('wb') as f:
-                pickle.dump(episode, f)
+            if self.period is not None:
+                # sleep to achieve the desired frequency
+                sleep_dt = self.period - (time.time() - now)
+                if sleep_dt > 0:
+                    time.sleep(sleep_dt)
+
+            # save
+            if len(episode) % episode_save_interval == 0:
+                with episode_path.open('wb') as f:
+                    pickle.dump(episode, f)
+
+        if len(episode) < 15:
+            print(f"WARNING: episode {self.episode_idx} has only {len(episode)} steps!")
+            print("This may mean that the demonstrator mis-clicked and did not actually perform the task.")
+
+        # ensure we save before exiting or moving on to the next episode
+        with episode_path.open('wb') as f:
+            pickle.dump(episode, f)
 
 
 def get_state_vec(state):

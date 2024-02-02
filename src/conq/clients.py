@@ -8,17 +8,16 @@ from bosdyn.client.ray_cast import RayCastClient
 from bosdyn.client.robot import Robot
 from bosdyn.client.robot_command import RobotCommandClient
 from bosdyn.client.robot_state import RobotStateClient
-
-from conq.data_recorder import ConqDataRecorder
+from bosdyn.client.graph_nav import GraphNavClient
 
 
 @dataclass
 class Clients:
-    lease: LeaseClient
-    state: RobotStateClient
-    manipulation: ManipulationApiClient
-    image: ImageClient
-    raycast: RayCastClient
-    command: RobotCommandClient
-    robot: Robot
-    recorder: Optional[ConqDataRecorder] = None
+    lease: Optional[LeaseClient]
+    state: Optional[RobotStateClient]
+    manipulation: Optional[ManipulationApiClient]
+    image: Optional[ImageClient]
+    graphnav: Optional[GraphNavClient]
+    raycast: Optional[RayCastClient]
+    command: Optional[RobotCommandClient]
+    robot: Optional[Robot]
