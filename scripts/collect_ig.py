@@ -150,7 +150,7 @@ def main(argv):
         block_until_arm_arrives(command_client, cmd_id)
 
         # Task 1: Look at scene
-        gaze_pose = (0.75,0.0,0.4, np.pi/2,0.,0)
+        gaze_pose = (0.75, 0.0, 0.4, np.pi/2, 0.0, 0)
         status = move_to(clients, gaze_pose, duration = 2, follow=False)
 
         status = open_gripper(clients)

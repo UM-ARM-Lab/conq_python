@@ -2,29 +2,32 @@
 """Replicate API Token for AgroBots: r8_YXiQPhP3rn6Eh4IAeriv1ZLY7MwCnR30s0rFA
 
 Terminal -> Run below command
-$ export REPLICATE_API_TOKEN=r8_YXiQPhP3rn6Eh4IAeriv1ZLY7MwCnR30s0rFA"""
+$ export REPLICATE_API_TOKEN=r8_YXiQPhP3rn6Eh4IAeriv1ZLY7MwCnR30s0rFA
+
+To run this script:
+$ python3 sam_inference.py --input-image https://your_image_url.jpg
+
+"""
 
 import os
 import time
 from io import BytesIO
-
+import argparse
 import requests
 import cv2
 import numpy as np
 import replicate
 
-
 os.environ['REPLICATE_API_TOKEN'] = 'r8_YXiQPhP3rn6Eh4IAeriv1ZLY7MwCnR30s0rFA'
 
-def run_sam_inference():
+def run_sam_inference(image_url):
     start_time = time.time()
     image_url = replicate.run(
         "pablodawson/segment-anything-automatic:14fbb04535964b3d0c7fad03bb4ed272130f15b956cbedb7b2f20b5b8a2dbaa0",
         input={
-            "image": "https://upload.wikimedia.org/wikipedia/commons/8/8c/Cristiano_Ronaldo_2018.jpg"
+            "image": image_url
         }
     )
-
     end_time = time.time()
     execution_time = end_time - start_time
 
@@ -32,7 +35,6 @@ def run_sam_inference():
     print(image_url)
 
     return image_url, execution_time
-
 
 def view_segmentation_mask(image_url):
     response = requests.get(image_url)
@@ -46,3 +48,11 @@ def view_segmentation_mask(image_url):
 
     return None
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run SAM Inference with Replicate API")
+    parser.add_argument("--input-image", required=True, help="URL of the input image for SAM Inference")
+
+    args = parser.parse_args()
+
+    image_url = args.input_image
+    run_sam_inference(image_url)
