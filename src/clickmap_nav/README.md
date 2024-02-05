@@ -34,6 +34,11 @@ Core Username: spot
 Core Password: <lab password>
 Spot's IP address: 192.168.80.3
 
+It is often convenient to run (with the correct password): 
+```
+export BOSDYN_CLIENT_USERNAME=user && export ROBOT_IP=192.168.80.3 && export BOSDYN_CLIENT_PASSWORD=
+```
+
 ## Running the click-Map Interface 
 From within the clickmap_nav folder, run:
 ```
@@ -41,7 +46,18 @@ python3 -m click_map_interface -a -u <path/to/map/directory> 192.168.80.3
 ```
 -a refers to anchoring. You can leave off the -a if your map doesn't have anchoring or if you're ok with a messier map.
 
--u is the flag to indicate the upload filepath. An example <path/to/map/directory> might look like ~/spot/maps/collabspace3.walk
+-u is the flag to indicate the upload filepath.
+
+A full example might look like: 
+```
+python3 -m click_map_interface -a -u ~/spot/maps/collabspace3.walk 192.168.80.3
+```
+
+Running the tool_retrieval_interface (a descendent of ClickMapInterface) might look like:
+```
+python3 -m tool_retrieval_interface -a -u ~/spot/maps/collabspace3.walk --model-filepath ~/spot/models/garden_implements_model.pth 192.168.80.3
+```
+
 
 Note: If you're already running the estop example on the laptop then you may not need the IP address at the end
 

@@ -56,7 +56,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
 
         #  Forward events
         self.OnKeyPress()
-        return
+        return key, actor
 
     def print_controls(self):
         print("""
@@ -116,9 +116,9 @@ def main(argv):
     style = ClickMapInterface(robot, options.upload_filepath, silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
-    # graph_nav_interface = ClickMapInterface(robot, options.upload_filepath)
+    # TODO: can all this lease client boilerplate be handled by a ArmlabRobot class? loop below seems it could be reused
+    # How do we want to manage all of the clients and ensuring the clients?
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
-
 
     try:
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
