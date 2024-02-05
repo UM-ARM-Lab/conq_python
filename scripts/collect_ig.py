@@ -3,7 +3,10 @@ Add in $ROOT/scripts/
 Create $ROOT/data/RGB directory
 
 To run:
-- python3 scripts/collect_ig.py 192.168.80.3 --to-depth
+- python3 scripts/collect_ig.py 192.168.80.3 --to-depth --gaze-x 0.75 --gaze-y 0.0 --gaze-z 0.4 --gaze-roll 0.0 --gaze-yaw 0.0
+
+default --gaze-pose: 
+0.75, 0.0, 0.4, np.pi/2, 0.0, 0
 """
 
 import argparse
@@ -90,8 +93,9 @@ def verify_estop(robot):
 
 def main(argv):
     # Parse args
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Collect images of Garden tools from Conq's perspective")
     bosdyn.client.util.add_base_arguments(parser)
+    
     parser.add_argument('--to-depth',
                         help='Convert to the depth frame. Default is convert to visual.',
                         action='store_true')
@@ -101,6 +105,16 @@ def main(argv):
                         ])
     parser.add_argument('--auto-rotate', help='rotate right and front images to be upright',
                         action='store_true')
+
+    parser.add_argument('--gaze-x', required=False, type=float, default=0.75, help='X position for gaze pose')
+    parser.add_argument('--gaze-y', required=False, type=float, default=0.0, help='Y position for gaze pose')
+    parser.add_argument('--gaze-z', required=False, type=float, default=0.4, help='Z position for gaze pose')
+    parser.add_argument('--gaze-pitch', required=False, default=np.pi/2, help='Pitch for gaze pose')
+    parser.add_argument('--gaze-roll', required=False, type=float, default=0.0, help='Roll for gaze pose')
+    parser.add_argument('--gaze-yaw', required=False, type=float, default=0.0, help='Yaw for gaze pose')
+
+    # parser.add_argument("--gaze-pose", required=True, help="defines where the Conq's arm camera looks at", action='store_true')
+
     options = parser.parse_args(argv)
 
     if options.to_depth: sources = [options.camera + '_depth', options.camera +'_color_image']
@@ -114,8 +128,7 @@ def main(argv):
 
     assert robot.has_arm(), 'Robot requires an arm to run this example.'
 
-    # Verify the robot is not estopped and that an external application has registered and holds
-    # an estop endpoint.
+    # Verify the robot is not estopped and that an external application has registered and holds an estop endpoint.
     verify_estop(robot)
 
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
@@ -126,6 +139,7 @@ def main(argv):
     command_client = robot.ensure_client(RobotCommandClient.default_service_name)
 
     lease_client.take()
+
 
     with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
         # Now, we are ready to power on the robot. This call will block until the power
@@ -144,17 +158,22 @@ def main(argv):
         blocking_stand(command_client, timeout_sec=10)
         robot.logger.info('Robot standing.')
 
+
         # Deploy the arm
         robot_cmd = RobotCommandBuilder.arm_ready_command()
         cmd_id = command_client.robot_command(robot_cmd)
         block_until_arm_arrives(command_client, cmd_id)
 
+
         # Task 1: Look at scene
-        gaze_pose = (0.75, 0.0, 0.4, np.pi/2, 0.0, 0)
+        gaze_pose = (options.gaze_x, options.gaze_y, options.gaze_z, options.gaze_pitch, options.gaze_roll, options.gaze_yaw)
+        print(gaze_pose)
+        
         status = move_to(clients, gaze_pose, duration = 2, follow=False)
 
         status = open_gripper(clients)
         time.sleep(1)
+
 
         # Live RGB
         start_time = time.time()
