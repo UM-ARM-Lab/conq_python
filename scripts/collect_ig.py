@@ -137,8 +137,7 @@ def main(argv):
         robot.logger.info('Robot powered on.')
 
         clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client,
-                            image=image_client, raycast=rc_client, command=command_client, robot=robot,
-                            recorder=None)
+                            image=image_client, raycast=rc_client, command=command_client, robot=robot, graphnav = None)
 
         
         robot.logger.info('Commanding robot to stand...')
@@ -166,7 +165,7 @@ def main(argv):
 
         while True:
             count+=1
-            rgb_np, _ = get_color_img(image_client, sources[1]) # (0- depth, 1- RGB)
+            rgb_np, _ = get_color_img(image_client, sources[1]) #(0 -> depth, 1 -> RGB)
             rgb_np = np.array(rgb_np, dtype=np.uint8)
 
             img_bgr = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2BGR) 
