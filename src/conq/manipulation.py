@@ -47,12 +47,19 @@ def block_for_manipulation_api_command(clients, cmd_response, period=0.25):
 
     print('Finished.')
 
+
+def open_gripper(clients: Clients):
+    clients.command.robot_command(RobotCommandBuilder.claw_gripper_open_command())
+    time.sleep(1)  # FIXME: how to block on a gripper command?
+
+
 # # FIXME: this is broken
 # def blocking_arm_stow(command_client, timeout_sec=3.0):
 #     stow = RobotCommandBuilder.arm_stow_command()
 #     stow_command_id = command_client.robot_command(stow)
 #     success = block_until_arm_arrives(command_client, stow_command_id, timeout_sec=timeout_sec)
 #     return success
+
 
 # # FIXME: this is broken
 # def blocking_gripper_open_fraction(command_client, fraction=1.0, timeout_sec=3.0):
@@ -74,10 +81,6 @@ def arm_stow(command_client):
     stow_command_id = command_client.robot_command(stow_and_close)
     time.sleep(1)  # FIXME: how to block on a gripper command?
     return stow_command_id
-
-def open_gripper(clients: Clients):
-    clients.command.robot_command(RobotCommandBuilder.claw_gripper_open_command())
-    time.sleep(1)  # FIXME: how to block on a gripper command?
 
 
 HIGH_FORCE_THRESHOLD = 16
@@ -253,6 +256,7 @@ def add_follow_with_body(arm_command):
     arm_and_follow_cmd = RobotCommandBuilder.build_synchro_command(follow_cmd, arm_command)
     return arm_and_follow_cmd
 
+
 # TODO: Move this to a separate file that has to do with the command client
 def move_gripper_to_pose(command_client, state_client, position_xyz, orientation_quat):
     """
@@ -285,7 +289,6 @@ def move_gripper_to_pose(command_client, state_client, position_xyz, orientation
     # Wait until the arm arrives at the goal.
     success = block_until_arm_arrives(command_client, cmd_id, duration_seconds +1.0)
     return success
-
 
 
 def follow_gripper_trajectory(command_client, trajectory_points, timeout_sec=10.0):
@@ -334,6 +337,7 @@ def follow_gripper_trajectory(command_client, trajectory_points, timeout_sec=10.
             return False
         time.sleep(0.1)
 
+
 # TODO: should this be in a separate file?
 def rotate_body_in_place(command_client, roll=0.0, pitch=0.0, yaw=0.4):
     footprint_R_body = EulerZXY(yaw=yaw, roll=roll, pitch=pitch)
@@ -341,6 +345,7 @@ def rotate_body_in_place(command_client, roll=0.0, pitch=0.0, yaw=0.4):
     cmd_id = command_client.robot_command(cmd)
     print(f'Twisted Stand -- Roll: {roll}, pitch: {pitch}, yaw:{yaw}')
     return cmd_id
+
 
 def move_body(command_client, throttle_vx=0.0, throttle_vy=0.0, throttle_omega=0.0, duration_secs=0.6):
         # def _move(self, left_x, left_y, right_x):
