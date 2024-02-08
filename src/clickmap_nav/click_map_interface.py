@@ -73,7 +73,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
 
         #  Forward events
         self.OnKeyPress()
-        return
+        return key, actor
 
     def print_controls(self):
         print("""
@@ -139,6 +139,8 @@ def main(argv):
     vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
 
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
+    # TODO: can all this lease client boilerplate be handled by a ArmlabRobot class? loop below seems it could be reused
+    # How do we want to manage all of the clients and ensuring the clients?
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
     image_client = robot.ensure_client(ImageClient.default_service_name)
     clients = Clients(lease=lease_client, state=None, manipulation=None,
@@ -149,7 +151,7 @@ def main(argv):
     style.start_recording()
 
     # graph_nav_interface = ClickMapInterface(robot, options.upload_filepath)
-    
+
     try:
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
             try:

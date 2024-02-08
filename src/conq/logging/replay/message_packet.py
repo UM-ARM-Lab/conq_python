@@ -1,6 +1,10 @@
-from typing import Dict, Any, Optional, List
+from typing import TYPE_CHECKING, Dict, Any, Optional, List
 
 from conq.logging.exceptions import ImageSourceUnavailableError
+
+if TYPE_CHECKING:
+    from bosdyn.api.robot_state_pb2 import RobotState
+    from bosdyn.api.graph_nav.nav_pb2 import Localization
 
 
 class MessagePacket:
@@ -10,8 +14,12 @@ class MessagePacket:
         self.rgb_sources_available: Optional[List[str]] = rgb_sources_available
         self.depth_sources_available: Optional[List[str]] = depth_sources_available
         self.timestamp: float = packet_raw["time"]
-        self.robot_state = packet_raw["robot_state"]
+        self.robot_state: RobotState = packet_raw["robot_state"]
         self.images: Dict[str, Any] = packet_raw["images"]
+
+        # These are optionally recorded.
+        self.localization: Optional[Localization] = packet_raw.get("localization", None)
+        self.is_lost: Optional[bool] = packet_raw.get("is_lost", None)
 
     def image_iterator(self,
                        rgb_sources: Optional[List[str]] = None,
