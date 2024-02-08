@@ -9,6 +9,7 @@ import sys
 import bosdyn.client.channel
 import bosdyn.client.util
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
+from bosdyn.client.image import ImageClient
 import numpy as np
 import time
 from pathlib import Path
@@ -139,8 +140,9 @@ def main(argv):
 
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
+    image_client = robot.ensure_client(ImageClient.default_service_name)
     clients = Clients(lease=lease_client, state=None, manipulation=None,
-                          image=None, graphnav=None, raycast=None, command=None, robot=robot)
+                          image=image_client, graphnav=None, raycast=None, command=None, robot=robot)
     style = ClickMapInterface(robot, options.upload_filepath, clients, silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
