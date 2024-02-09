@@ -17,3 +17,7 @@ model.pth
 *.pb
 build
 *.egg-info
+data/
+Pipfile
+Pipfile.lock
+.DS_Store
