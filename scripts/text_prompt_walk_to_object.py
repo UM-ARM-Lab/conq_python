@@ -7,7 +7,7 @@
 """
 Tutorial to walk the robot to an object by giving a text prompt, usually in preparation for manipulation.
 
-To run this script:
+Example usage (to got to a ball in the scene):
 - python3 scripts/text_prompt_walk_to_object.py 192.168.80.3 --image-source hand_color_image --text-prompt ball
 """
 
@@ -117,7 +117,7 @@ def walk_to_object(config):
         
         #FIXME: Precautionary measure, to be dealt with later
         time.sleep(2)
-        text_prompt = "ball"
+        text_prompt = "ball" #FIXME: Forgot to remove this in the last test, TBD later
 
         centroid_x, centroid_y = run_test_script(config.text_prompt)
         if centroid_x is not None and centroid_y is not None: print("Centroid coordinates in main:", centroid_x, centroid_y)

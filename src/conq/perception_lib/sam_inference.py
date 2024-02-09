@@ -1,8 +1,7 @@
-
-"""Replicate API Token for AgroBots: r8_YXiQPhP3rn6Eh4IAeriv1ZLY7MwCnR30s0rFA
+"""Replicate API Token for AgroBots: "***ADD API KEY HERE***"
 
 Terminal -> Run below command
-$ export REPLICATE_API_TOKEN=r8_YXiQPhP3rn6Eh4IAeriv1ZLY7MwCnR30s0rFA
+$ export REPLICATE_API_TOKEN="***ADD API TOKEN HERE***"
 
 To run this script:
 $ python3 sam_inference.py --input-image https://your_image_url.jpg
@@ -18,7 +17,7 @@ import cv2
 import numpy as np
 import replicate
 
-os.environ['REPLICATE_API_TOKEN'] = 'r8_YXiQPhP3rn6Eh4IAeriv1ZLY7MwCnR30s0rFA'
+os.environ['REPLICATE_API_TOKEN'] = '***ADD API TOKEN HERE***'
 
 def run_sam_inference(image_url):
     start_time = time.time()
