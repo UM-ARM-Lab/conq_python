@@ -13,6 +13,8 @@ Python:
 """
 
 from roboflow import Roboflow
+
+# Config stuff
 rf = Roboflow(api_key="22iMfgZpDlP0VFyWIc5t")
 
 project = rf.workspace("agrobots-9sm1u").project("garden-implements")
