@@ -1,18 +1,34 @@
 from graph_nav_interface import GraphNavInterface
+from conq.data_recorder import ConqDataRecorder
+from conq.clients import Clients
+from conq.cameras_utils import RGB_SOURCES, ALL_SOURCES
+
 import argparse
 import os
 import sys
 import bosdyn.client.channel
 import bosdyn.client.util
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
+from bosdyn.client.image import ImageClient
 import numpy as np
+import time
+from pathlib import Path
+from threading import Timer
 
 from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
 
 class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle): 
-    def __init__(self, robot, upload_path, silhouette=None, silhouetteActor=None):
+    def __init__(self, robot, upload_path, clients: Clients=None, silhouette=None, silhouetteActor=None):
         GraphNavInterface.__init__(self,robot, upload_path)
         HighlightInteractorStyle.__init__(self, silhouette, silhouetteActor)
+        
+        self.clients = clients
+        self.clients.graphnav = self._graph_nav_client
+        self.clients.state = self._robot_state_client
+        now = int(time.time())
+        root = Path(f"data/click_map_data_{now}")
+        self.recorder = ConqDataRecorder(root, self.clients, sources=ALL_SOURCES)
+        self.recorder_started = False
 
         self._list_graph_waypoint_and_edge_ids()
         self._upload_graph_and_snapshots() # option 5
@@ -51,6 +67,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
             self.print_controls()
         elif key == 'q':
             # TODO: figure out how to do same as 'e' for exit
+            self.recorder.stop() # Stop recording on exit
             self._on_quit()
 
 
@@ -79,6 +96,15 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
             (9) Clear the current graph.
             (q) Exit.
             """)
+        
+    def start_recording(self):
+        if self.recorder_started:
+            self.recorder.next_episode()
+        else:
+            self.recorder_started = True
+
+        Timer(20, self.start_recording).start()
+        self.recorder.start_episode(mode="localization", instruction="no instruction", save_interval=200)
 
 
 
@@ -113,17 +139,24 @@ def main(argv):
     vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
 
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
-    style = ClickMapInterface(robot, options.upload_filepath, silhouette, silhouetteActor)
-    vtk_engine.set_interactor_style(style)
-
     # TODO: can all this lease client boilerplate be handled by a ArmlabRobot class? loop below seems it could be reused
     # How do we want to manage all of the clients and ensuring the clients?
     lease_client = robot.ensure_client(LeaseClient.default_service_name)
+    image_client = robot.ensure_client(ImageClient.default_service_name)
+    clients = Clients(lease=lease_client, state=None, manipulation=None,
+                          image=image_client, graphnav=None, raycast=None, command=None, robot=robot)
+    style = ClickMapInterface(robot, options.upload_filepath, clients, silhouette, silhouetteActor)
+    vtk_engine.set_interactor_style(style)
+
+    style.start_recording()
+
+    # graph_nav_interface = ClickMapInterface(robot, options.upload_filepath)
 
     try:
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
             try:
                 vtk_engine.start()
+                style.recorder.stop()
                 return True
             except Exception as exc:  # pylint: disable=broad-except
                 print(exc)

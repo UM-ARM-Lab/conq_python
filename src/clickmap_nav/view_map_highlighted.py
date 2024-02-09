@@ -1,5 +1,5 @@
 # !/usr/bin/env python
-
+import vtk
 from vtkmodules.vtkCommonColor import vtkNamedColors
 from vtkmodules.vtkFiltersHybrid import vtkPolyDataSilhouette
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTerrain, vtkInteractorStyleTrackballCamera
@@ -15,7 +15,7 @@ import argparse
 import os
 import sys
 import numpy as np
-import vtk
+
 
 from bosdyn.api.graph_nav import map_pb2
 from bosdyn.client.frame_helpers import *
