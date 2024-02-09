@@ -1,29 +1,32 @@
-"""Replicate API Token for AgroBots: ***ADD API KEY HERE***
+"""Replicate API Token for AgroBots: "***ADD API KEY HERE***"
 
 Terminal -> Run below command
-$ export REPLICATE_API_TOKEN=***ADD API KEY HERE***"""
+$ export REPLICATE_API_TOKEN="***ADD API TOKEN HERE***"
+
+To run this script:
+$ python3 sam_inference.py --input-image https://your_image_url.jpg
+
+"""
 
 import os
 import time
 from io import BytesIO
-
+import argparse
 import requests
 import cv2
 import numpy as np
 import replicate
 
-# TODO: Remove this API key; use bash src
-os.environ['REPLICATE_API_TOKEN'] = '***ADD API KEY HERE***'
+os.environ['REPLICATE_API_TOKEN'] = '***ADD API TOKEN HERE***'
 
-def run_sam_inference():
+def run_sam_inference(image_url):
     start_time = time.time()
     image_url = replicate.run(
         "pablodawson/segment-anything-automatic:14fbb04535964b3d0c7fad03bb4ed272130f15b956cbedb7b2f20b5b8a2dbaa0",
         input={
-            "image": "***ADD .jpeg IMAGE LINK HERE***" # Link to image here
+            "image": image_url
         }
     )
-
     end_time = time.time()
     execution_time = end_time - start_time
 
@@ -31,7 +34,6 @@ def run_sam_inference():
     print(image_url)
 
     return image_url, execution_time
-
 
 def view_segmentation_mask(image_url):
     response = requests.get(image_url)
@@ -44,3 +46,12 @@ def view_segmentation_mask(image_url):
     cv2.destroyAllWindows()
 
     return None
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run SAM Inference with Replicate API")
+    parser.add_argument("--input-image", required=True, help="URL of the input image for SAM Inference")
+
+    args = parser.parse_args()
+
+    image_url = args.input_image
+    run_sam_inference(image_url)
