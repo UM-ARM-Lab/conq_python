@@ -18,3 +18,5 @@ model.pth
 build
 *.egg-info
 data/
+Pipfile
+Pipfile.lock
