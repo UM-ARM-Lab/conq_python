@@ -27,7 +27,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         self.clients.state = self._robot_state_client
         now = int(time.time())
         root = Path(f"data/click_map_data_{now}")
-        self.recorder = ConqDataRecorder(root, self.clients, sources=ALL_SOURCES)
+        self.recorder = ConqDataRecorder(root, self.clients, sources=ALL_SOURCES, map_directory_path=upload_path)
         self.recorder_started = False
 
         self._list_graph_waypoint_and_edge_ids()

@@ -1,6 +1,7 @@
 import datetime
 import json
 import pickle
+import shutil
 import time
 from importlib.metadata import version, PackageNotFoundError
 from multiprocessing import Event
@@ -21,7 +22,7 @@ from conq.rerun_utils import viz_common_frames
 class ConqDataRecorder:
 
     def __init__(self, root: Path, clients: Clients, sources=None,
-                 get_latest_action: Optional[Callable] = None, period: Optional[float] = None):
+                 get_latest_action: Optional[Callable] = None, period: Optional[float] = None, map_directory_path: Optional[str] = None):
         """
 
         Args:
@@ -54,6 +55,11 @@ class ConqDataRecorder:
             'depth_sources': DEPTH_SOURCES,
             'period': self.period,
         }
+
+        if map_directory_path is not None:
+            map_path = Path(map_directory_path)
+            self.copy_map_files(map_path)
+
         self.metadata_path = self.root / 'metadata.json'
         with self.metadata_path.open('w') as f:
             json.dump(self.metadata, f, indent=2)
@@ -152,6 +158,20 @@ class ConqDataRecorder:
         # ensure we save before exiting or moving on to the next episode
         with episode_path.open('wb') as f:
             pickle.dump(episode, f)
+    
+    def copy_map_files(self, map_path: Path):
+        if map_path.exists():
+            name = str(map_path).split('/')[-1]
+            print(f"MAP PATH: {map_path}")
+            if map_path.is_dir():
+                shutil.copytree(map_path, f"{self.root}/{name}")
+                self.metadata['map_path'] = f"{self.root}/{name}"
+            else:
+                shutil.copyfile(map_path, f"{self.root}/{name}")
+                self.metadata['map_path'] = f"{self.root}/{name}"
+        else:
+            print(f"WARNING from data_recorder.py: map path {map_path} does not exist! Not adding path to metadata.")
+
 
 
 def get_state_vec(state):
