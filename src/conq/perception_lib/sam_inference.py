@@ -1,8 +1,7 @@
-
-"""Replicate API Token for AgroBots: r8_YXiQPhP3rn6Eh4IAeriv1ZLY7MwCnR30s0rFA
+"""Replicate API Token for AgroBots: ***ADD API KEY HERE***
 
 Terminal -> Run below command
-$ export REPLICATE_API_TOKEN=r8_YXiQPhP3rn6Eh4IAeriv1ZLY7MwCnR30s0rFA"""
+$ export REPLICATE_API_TOKEN=***ADD API KEY HERE***"""
 
 import os
 import time
@@ -13,15 +12,15 @@ import cv2
 import numpy as np
 import replicate
 
-
-os.environ['REPLICATE_API_TOKEN'] = 'r8_YXiQPhP3rn6Eh4IAeriv1ZLY7MwCnR30s0rFA'
+# TODO: Remove this API key; use bash src
+os.environ['REPLICATE_API_TOKEN'] = '***ADD API KEY HERE***'
 
 def run_sam_inference():
     start_time = time.time()
     image_url = replicate.run(
         "pablodawson/segment-anything-automatic:14fbb04535964b3d0c7fad03bb4ed272130f15b956cbedb7b2f20b5b8a2dbaa0",
         input={
-            "image": "https://upload.wikimedia.org/wikipedia/commons/8/8c/Cristiano_Ronaldo_2018.jpg"
+            "image": "***ADD .jpeg IMAGE LINK HERE***" # Link to image here
         }
     )
 
@@ -45,4 +44,3 @@ def view_segmentation_mask(image_url):
     cv2.destroyAllWindows()
 
     return None
-
