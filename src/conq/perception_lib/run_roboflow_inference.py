@@ -1,7 +1,9 @@
+"""Running inference directly via Roboflow"""
+
 from roboflow import Roboflow
 
 # Config stuff
-rf = Roboflow(api_key="22iMfgZpDlP0VFyWIc5t")
+rf = Roboflow(api_key="***ADD API KEY HERE***")
 
 def run_roboflow_model_inference():
     project = rf.workspace().project("garden-implements")
