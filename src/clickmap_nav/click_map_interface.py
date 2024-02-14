@@ -30,6 +30,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         root = Path(f"data/click_map_data_{now}")
         self.recorder = ConqDataRecorder(root, self.clients, sources=ALL_SOURCES)
         self.recorder_started = False
+        self.initialized_waypoint = None
 
         self._list_graph_waypoint_and_edge_ids()
         self._upload_graph_and_snapshots() # option 5
@@ -51,6 +52,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         elif key == '4':
             if actor:
                 print(f"initializing localization to waypoint {actor.waypoint_id}")
+                self.initialized_waypoint = actor.waypoint_id
                 self._set_initial_localization_waypoint([actor.waypoint_id])
                 self.print_controls()
         elif key == '5':
@@ -104,7 +106,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
             (8) List the waypoint ids and edge ids of the map on the robot.
             (9) Clear the current graph.
             (n) Navigate in loop of current waypoints
-            (s) Return to origin/seed pose
+            (s) Return to origin/seed pose that robot was initally localized to
             (q) Exit.
             """)
         
@@ -121,7 +123,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         self._navigate_route([waypoint[0] for waypoint in self.waypoint_to_timestamp])
 
     def return_to_seed(self):
-        self._navigate_to(self.waypoint_to_timestamp[0][0])
+        self._navigate_to([self.initialized_waypoint])
 
 
 
@@ -165,9 +167,7 @@ def main(argv):
     style = ClickMapInterface(robot, options.upload_filepath, clients, silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
-    # style.start_recording()
-
-    # graph_nav_interface = ClickMapInterface(robot, options.upload_filepath)
+    style.start_recording()
 
     try:
         with LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
