@@ -21,22 +21,20 @@ class ToolDetectorInterface(ClickMapInterface):
         #     self.predictor = Predictor(model_path)
 
     def onKeyPressEvent(self, obj, event):
-        pass
-        # key, actor =  super().onKeyPressEvent(obj, event)
+        key, actor = super().onKeyPressEvent(obj, event)
 
-        # if key == 'n':
-        #     # Navigate in loop
-        # elif key == 'r':
-        #     # Robot returns to seed/origin point
+        if key == "n":
+            # Navigate in loop
+            self.navigate_in_loop()
+        elif key == "r":
+            # Robot returns to seed/origin point
+            self.return_to_seed()
 
     def navigate_in_loop(self):
-        pass
+        self._navigate_route(self.graph.waypoints)
 
     def return_to_seed(self):
-        pass
-
-    def stop_robot(self):
-        pass
+        self._navigate_to([self.graph.waypoints[0]])
 
     def print_controls(self):
         print(
