@@ -36,6 +36,11 @@ class ToolDetectorInterface(ClickMapInterface):
     def return_to_seed(self):
         self._navigate_to([self.graph.waypoints[0]])
 
+    def find_object(self):
+        """TODO: look for object in current frame and if we see it, add as world object"""
+        # Look at find_object in tool_retrieval_interface
+        pass
+
     def print_controls(self):
         print(
             """
