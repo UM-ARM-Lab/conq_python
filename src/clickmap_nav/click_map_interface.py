@@ -1,4 +1,4 @@
-from graph_nav_interface import GraphNavInterface
+from clickmap_nav.graph_nav_interface import GraphNavInterface
 from conq.data_recorder import ConqDataRecorder
 from conq.clients import Clients
 from conq.cameras_utils import RGB_SOURCES, ALL_SOURCES
@@ -15,7 +15,8 @@ import time
 from pathlib import Path
 from threading import Timer
 
-from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
+from clickmap_nav.view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
+from clickmap_nav.graph_nav_util import find_waypoint_to_timestamp
 
 class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle): 
     def __init__(self, robot, upload_path, clients: Clients=None, silhouette=None, silhouetteActor=None):
@@ -33,6 +34,8 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         self._list_graph_waypoint_and_edge_ids()
         self._upload_graph_and_snapshots() # option 5
         self.print_controls()
+
+        self.waypoint_to_timestamp, _ , _ = find_waypoint_to_timestamp(self._current_graph)
 
     
     def onKeyPressEvent(self, obj, event):
@@ -69,6 +72,12 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
             # TODO: figure out how to do same as 'e' for exit
             self.recorder.stop() # Stop recording on exit
             self._on_quit()
+        elif key == "n":
+            # Navigate in loop
+            self.navigate_in_loop()
+        elif key == "s":
+            # Robot returns to seed/origin point
+            self.return_to_seed()
 
 
         #  Forward events
@@ -94,6 +103,8 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
             (6) Navigate to. The destination waypoint id is the second argument.
             (8) List the waypoint ids and edge ids of the map on the robot.
             (9) Clear the current graph.
+            (n) Navigate in loop of current waypoints
+            (s) Return to origin/seed pose
             (q) Exit.
             """)
         
@@ -105,6 +116,12 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
 
         Timer(20, self.start_recording).start()
         self.recorder.start_episode(mode="localization", instruction="no instruction", save_interval=200)
+
+    def navigate_in_loop(self):
+        self._navigate_route([waypoint[0] for waypoint in self.waypoint_to_timestamp])
+
+    def return_to_seed(self):
+        self._navigate_to(self.waypoint_to_timestamp[0][0])
 
 
 
@@ -148,7 +165,7 @@ def main(argv):
     style = ClickMapInterface(robot, options.upload_filepath, clients, silhouette, silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
-    style.start_recording()
+    # style.start_recording()
 
     # graph_nav_interface = ClickMapInterface(robot, options.upload_filepath)
 

@@ -6,8 +6,8 @@ import bosdyn.client.util
 import numpy as np
 from arm_segmentation.predictor import Predictor
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
-from click_map_interface import ClickMapInterface
-from view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
+from clickmap_nav.click_map_interface import ClickMapInterface
+from clickmap_nav.view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 
 
 # TODO: Make class that will loop around in a circle of waypoints

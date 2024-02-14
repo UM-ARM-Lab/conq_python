@@ -25,6 +25,45 @@ def pretty_print_waypoints(waypoint_id, waypoint_name, short_code_to_count, loca
         f'{waypoint_symbol} Waypoint name: {waypoint_name} id: {waypoint_id} short code: {short_code}'
     )
 
+def find_waypoint_to_timestamp(graph):
+    name_to_id = dict()
+    short_code_to_count = {}
+    waypoint_to_timestamp = []
+
+    for waypoint in graph.waypoints:
+        # Determine the timestamp that this waypoint was created at.
+        timestamp = -1.0
+        try:
+            timestamp = waypoint.annotations.creation_time.seconds + waypoint.annotations.creation_time.nanos / 1e9
+        except:
+            # Must be operating on an older graph nav map, since the creation_time is not
+            # available within the waypoint annotations message.
+            pass
+        waypoint_to_timestamp.append((waypoint.id, timestamp, waypoint.annotations.name))
+
+        # Determine how many waypoints have the same short code.
+        short_code = id_to_short_code(waypoint.id)
+        if short_code not in short_code_to_count:
+            short_code_to_count[short_code] = 0
+        short_code_to_count[short_code] += 1
+
+        # Add the annotation name/id into the current dictionary.
+        waypoint_name = waypoint.annotations.name
+        if waypoint_name:
+            if waypoint_name in name_to_id:
+                # Waypoint name is used for multiple different waypoints, so set the waypoint id
+                # in this dictionary to None to avoid confusion between two different waypoints.
+                name_to_id[waypoint_name] = None
+            else:
+                # First time we have seen this waypoint annotation name. Add it into the dictionary
+                # with the respective waypoint unique id.
+                name_to_id[waypoint_name] = waypoint.id
+
+    # Sort the set of waypoints by their creation timestamp. If the creation timestamp is unavailable,
+    # fallback to sorting by annotation name.
+    waypoint_to_timestamp = sorted(waypoint_to_timestamp, key=lambda x: (x[1], x[2]))
+
+    return waypoint_to_timestamp, short_code_to_count, name_to_id
 
 def find_unique_waypoint_id(short_code, graph, name_to_id):
     """Convert either a 2 letter short code or an annotation name into the associated unique id."""
@@ -61,43 +100,9 @@ def find_unique_waypoint_id(short_code, graph, name_to_id):
 
 def update_waypoints_and_edges(graph, localization_id, do_print=True):
     """Update and print waypoint ids and edge ids."""
-    name_to_id = dict()
     edges = dict()
-
-    short_code_to_count = {}
-    waypoint_to_timestamp = []
-    for waypoint in graph.waypoints:
-        # Determine the timestamp that this waypoint was created at.
-        timestamp = -1.0
-        try:
-            timestamp = waypoint.annotations.creation_time.seconds + waypoint.annotations.creation_time.nanos / 1e9
-        except:
-            # Must be operating on an older graph nav map, since the creation_time is not
-            # available within the waypoint annotations message.
-            pass
-        waypoint_to_timestamp.append((waypoint.id, timestamp, waypoint.annotations.name))
-
-        # Determine how many waypoints have the same short code.
-        short_code = id_to_short_code(waypoint.id)
-        if short_code not in short_code_to_count:
-            short_code_to_count[short_code] = 0
-        short_code_to_count[short_code] += 1
-
-        # Add the annotation name/id into the current dictionary.
-        waypoint_name = waypoint.annotations.name
-        if waypoint_name:
-            if waypoint_name in name_to_id:
-                # Waypoint name is used for multiple different waypoints, so set the waypoint id
-                # in this dictionary to None to avoid confusion between two different waypoints.
-                name_to_id[waypoint_name] = None
-            else:
-                # First time we have seen this waypoint annotation name. Add it into the dictionary
-                # with the respective waypoint unique id.
-                name_to_id[waypoint_name] = waypoint.id
-
-    # Sort the set of waypoints by their creation timestamp. If the creation timestamp is unavailable,
-    # fallback to sorting by annotation name.
-    waypoint_to_timestamp = sorted(waypoint_to_timestamp, key=lambda x: (x[1], x[2]))
+    
+    waypoint_to_timestamp, short_code_to_count, name_to_id = find_waypoint_to_timestamp(graph)
 
     # Print out the waypoints name, id, and short code in an ordered sorted by the timestamp from
     # when the waypoint was created.
