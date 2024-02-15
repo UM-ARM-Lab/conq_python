@@ -3,20 +3,19 @@ import json
 import pickle
 import shutil
 import time
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 from multiprocessing import Event
 from pathlib import Path
 from threading import Thread
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 import numpy as np
 from bosdyn.api.robot_state_pb2 import FootState
 from bosdyn.client.image import build_image_request
 
-from conq.cameras_utils import RGB_SOURCES, DEPTH_SOURCES, ALL_SOURCES, source_to_fmt
+from conq.cameras_utils import ALL_SOURCES, DEPTH_SOURCES, RGB_SOURCES, source_to_fmt
 from conq.clients import Clients
 from conq.rerun_utils import viz_common_frames
-
 
 
 class ConqDataRecorder:
@@ -161,14 +160,13 @@ class ConqDataRecorder:
     
     def copy_map_files(self, map_path: Path):
         if map_path.exists():
-            name = str(map_path).split('/')[-1]
             print(f"MAP PATH: {map_path}")
+            dst = self.root / map_path.name
             if map_path.is_dir():
-                shutil.copytree(map_path, f"{self.root}/{name}")
-                self.metadata['map_path'] = f"{self.root}/{name}"
+                shutil.copytree(map_path, dst)
             else:
-                shutil.copyfile(map_path, f"{self.root}/{name}")
-                self.metadata['map_path'] = f"{self.root}/{name}"
+                shutil.copyfile(map_path, dst)
+            self.metadata['map_path'] = dst.as_posix()
         else:
             print(f"WARNING from data_recorder.py: map path {map_path} does not exist! Not adding path to metadata.")
 
