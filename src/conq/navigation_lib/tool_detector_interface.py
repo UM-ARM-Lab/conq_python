@@ -210,7 +210,6 @@ class ToolDetectorInterface(ClickMapInterface):
             (9) Clear the current graph.
             (q) Exit.
             (n) Navigate in loop of current waypoints
-            (s) Stop the robot at current pose
             (r) Return to origin/seed pose
         """
         )
