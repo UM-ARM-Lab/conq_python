@@ -10,7 +10,8 @@ from bosdyn.api import world_object_pb2 as wo
 from bosdyn.client.frame_helpers import get_a_tform_b
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 from bosdyn.client.world_object import WorldObjectClient, make_add_world_object_req
-
+from bosdyn.client.image import ImageClient
+from bosdyn.client.manipulation_api_client import ManipulationApiClient
 from clickmap_nav.click_map_interface import ClickMapInterface
 from clickmap_nav.view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 from conq.cameras_utils import annotate_frame, display_image, get_color_img
@@ -25,7 +26,8 @@ class ToolDetectorInterface(ClickMapInterface):
         self.predictor = None
         if model_path is not None:
             self.predictor = Predictor(model_path)
-
+        self.image_client = robot.ensure_client(ImageClient.default_service_name)
+        self.manipulation_client = robot.ensure_client(ManipulationApiClient.default_service_name)
         self.world_object_client = robot.ensure_client(
             WorldObjectClient.default_service_name
         )
@@ -47,11 +49,17 @@ class ToolDetectorInterface(ClickMapInterface):
             # Robot returns to seed/origin point
             self.return_to_seed()
 
+        print("Key press!")
+        self.print_controls()
+
     def navigate_in_loop(self):
         # self._navigate_route(self.graph.waypoints)
-
+        print("Navigating in loop!")
+        self.toggle_power(should_power_on=True)
+        localization_state = self._get_localization_state()
+        initial_waypoint_id = localization_state.localization.waypoint_id
         for waypoint in self.graph.waypoints:
-            self._navigate_to(waypoint)
+            self._navigate_to([waypoint])
             self.find_object()
 
     def return_to_seed(self):
