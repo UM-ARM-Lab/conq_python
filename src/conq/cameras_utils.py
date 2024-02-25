@@ -85,6 +85,17 @@ def get_depth_img(image_client, camera_src):
     depth_np = image_to_opencv(depth_res)
     return depth_np, depth_res
 
+def get_camera_intrinsics(image_proto):
+    """
+    Get camera instrinsics
+    """
+    focal_x = image_proto.source.pinhole.intrinsics.focal_length.x
+    principal_x = image_proto.source.pinhole.intrinsics.principal_point.x
+
+    focal_y = image_proto.source.pinhole.intrinsics.focal_length.y
+    principal_y = image_proto.source.pinhole.intrinsics.principal_point.y
+
+    return [focal_x,focal_y, principal_x, principal_y]
 
 def rotate_image_coordinates(pts, width, height, angle):
     """
