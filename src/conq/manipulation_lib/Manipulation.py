@@ -33,77 +33,53 @@ def grasped_bool(clients: Clients):
     #FIXME: Replace with rob_state.client.get_rob_state().manipulation_state.is_gripper_holding_item
     is_grasping = get_is_grasping(clients)
     return is_grasping
-
-def move_to_blocking(clients: Clients, pose, duration = 1, follow=False):
+    
+def move_gripper(clients: Clients, pose, blocking = True, frame_name = GRAV_ALIGNED_BODY_FRAME_NAME, duration = 1, follow=False):
     """
-    Move the arm to a pose relative to the body
+    Arm Move command to a pose relative to the frame name
 
     Args:
         clients: Clients
-        x: x position in meters in front of the body center
-        y: y position in meters to the left of the body center
-        z: z position in meters above the body center
-        roll: roll in radians
-        pitch: pitch in radians
-        yaw: yaw in radians
-        duration: duration in seconds
+        pose       :
+                    x: position in meters in front of the body center
+                    y: position in meters to the left of the body center
+                    z: position in meters above the body center
+                    qw, qx,qy,qz : Orientation in quaternion
+        blocking   :
+                    True: Synchronous(blocked) 
+                    False: Asynchronous(unblocked) 
+                    default -> True
+        frame_name : Command pose frame
+                    default -> GRAV_ALIGNED_BODY_FRAME_NAME
 
-    Adapted from conq.manipulation:hand_pose_cmd
+        duration   : duration in seconds
+        follow     : Calculates reachability based on Inverse kinematics
+                    default -> False
+
     """
     
     try:
         print("Arm command received")
-        x,y,z,pitch,roll,yaw = pose
-        arm_cmd = hand_pose_cmd(clients, x,y,z,roll,pitch,yaw,duration)
-        follow = reachability(clients, pose)
-        if follow: #TODO: determmined by reachability
-            arm_cmd = add_follow_with_body(arm_cmd)
-        blocking_arm_command(clients, arm_cmd)
-        print("Arm command done")
-        return True
-    except Exception as e:
-        print(e)
-        return False
-    
-    
-def move_to_unblocking(clients: Clients, pose, frame_name = GRAV_ALIGNED_BODY_FRAME_NAME, duration = 0.5, follow=False):
-    """
-    Move the arm to a pose relative to the body
-
-    Args:
-        clients: Clients
-        x: x position in meters in front of the body center
-        y: y position in meters to the left of the body center
-        z: z position in meters above the body center
-        qw: 
-        qx: 
-        qy: 
-        qz:
-
-        duration: duration in seconds
-        frequency: rate of issuing command (useful for visual servoing)
-
-    Adapted from conq.manipulation:hand_pose_cmd
-    """
-    
-    try:
-        #print("Arm command received")
         x,y,z,qw,qx,qy,qz = pose
-        
         arm_command = RobotCommandBuilder.arm_pose_command(
             x, y, z, qw, qx,qy, qz, frame_name, duration,False)
         
-        cmd_id = clients.command.robot_command_async(command = arm_command, end_time_secs=duration, timesync_endpoint=duration+0.25, lease=None)
+        if blocking:
+            cmd_id = clients.command.robot_command(command=arm_command,end_time_secs=duration, timesync_endpoint=duration+0.25,lease=None)
+            status = block_until_arm_arrives(clients.command,cmd_id)
+        else:
+            cmd_id = clients.command.robot_command_async(command = arm_command, end_time_secs=duration, timesync_endpoint=duration+0.25, lease=None)
+            # TODO: Get feedback
+            status = True
         
-        # TODO: Need to get feedback
         # TODO: Check for reachability
-
-        #print("Arm command done")
-        return True
+        # if follow: 
+        #     #TODO: determmined by reachability
+        #     arm_cmd = add_follow_with_body(arm_cmd)
+        return status
     except Exception as e:
         print(e)
         return False
-    
     
 def open_gripper(clients: Clients):
     try:

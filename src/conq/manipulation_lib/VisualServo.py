@@ -5,7 +5,8 @@ import time
 import threading
 import cv2
 
-from conq.manipulation_lib.Manipulation import build_arm_target_from_vision, move_to_unblocking, open_gripper, close_gripper, move_to_blocking, get_camera_intrinsics,get_gpe_in_cam
+from conq.manipulation_lib.Manipulation import move_to_unblocking, open_gripper, close_gripper, move_to_blocking, get_camera_intrinsics,get_gpe_in_cam
+from conq.manipulation_lib.utils import build_arm_target_from_vision
 
 class VisualServoingController(threading.Thread):
     def __init__(self, gains, control_rate, pose_acquirer, clients):

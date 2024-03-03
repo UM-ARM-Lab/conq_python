@@ -4,7 +4,10 @@ import time
 import numpy as np
 
 from conq.cameras_utils import get_color_img
-import apriltag
+import apriltag # FIXME: Temporary until integrated with 6-DOF object pose estimator 
+
+# BOSDYN
+from bosdyn.client.math_helpers import Quat, quat_to_eulerZYX
 
 class VisualPoseAcquirer(threading.Thread):
     def __init__(self, image_client, sources, camera_params):
@@ -30,7 +33,7 @@ class VisualPoseAcquirer(threading.Thread):
         video_filename = 'output_video.avi'  # Specify the output video filename
         fps = 20.0  # Frames per second
         frame_size = (640, 480)  # Frame size as (width, height)
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')  # Specify the codec
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')  # codec
 
         # Initialize the VideoWriter object
         out = cv2.VideoWriter(video_filename, fourcc, fps, frame_size)
@@ -73,7 +76,7 @@ class VisualPoseAcquirer(threading.Thread):
         out.release()
         cv2.destroyAllWindows()
     
-    #TODO: Method for point cloud
+    #TODO: Method for point cloud -> Child class
     
 
 def get_Image(image_client, sources):
@@ -92,20 +95,34 @@ def get_object_pose(img_bgr, rgb_response, camera_params):
                 
     detection = result[0]
     
-    #print("Object center: \n", detection.center)
+    #print("Object pose: \n", object_pose)
     #print("Object in camera frame: \n",object_pose[:-1,-1])
 
     # TODO / FIXME: Use transformation instead of shortcut for pose
     # Transformation from Camera Pose to Hand Pose
     object_in_hand = np.copy(object_pose)
-    object_in_hand[0,-1]  = object_pose[2,-1] # X = Z
-    object_in_hand[1,-1]  = -object_pose[0,-1] # Y = -X
-    object_in_hand[2,-1]  = -object_pose[1,-1] # Z = -Y
+    hand_T_camera = np.array([[0,0,1,0],
+                              [-1,0,0,0],
+                              [0,-1,0,0],
+                              [0,0,0,1]])
+    
+    object_in_hand = np.matmul(hand_T_camera,object_pose)
+    print("Object in hand: \n", object_in_hand)
+
+    quat = Quat.from_matrix(object_in_hand[:-1,:-1])
+    print("Rotation in quaternion: ", quat)
+
+    yaw_hand, pitch_hand,roll_hand = quat_to_eulerZYX(quat)
+
+    # object_in_hand[0,-1]  = object_pose[2,-1] # X_hand = Z_camera
+    # object_in_hand[1,-1]  = -object_pose[0,-1] # Y_hand = -X_camera
+    # object_in_hand[2,-1]  = -object_pose[1,-1] # Z_hand = -Y_camera
     
     #print("Object in hand frame: \n",object_in_hand[:-1,-1])
     x_hand,y_hand,z_hand = object_in_hand[0,-1],object_in_hand[1,-1],object_in_hand[2,-1]
-    roll_hand,pitch_hand,yaw_hand = 0,0,0
+    #roll_hand,pitch_hand,yaw_hand = 0,0,0
     visual_pose = (x_hand,y_hand,z_hand,roll_hand,pitch_hand,yaw_hand)
+    #visual_pose = (x_hand,y_hand,z_hand,quat.w,quat.x,quat.y,quat.z)
 
     ## Overlays
     object_center = (int(detection.center[0]),int(detection.center[1]))   # Assuming this gives the center as [x, y]

@@ -30,7 +30,7 @@ from bosdyn.client.frame_helpers import VISION_FRAME_NAME, HAND_FRAME_NAME,GRAV_
 from conq.clients import Clients
 
 # CONQ: Manipulation modules
-from conq.manipulation_lib.Manipulation import move_to_unblocking, open_gripper, move_to_blocking, close_gripper
+from conq.manipulation_lib.Manipulation import move_gripper, open_gripper, close_gripper
 from conq.manipulation_lib.VisualServo import VisualServoingController
 from conq.manipulation_lib.Perception3D import VisualPoseAcquirer
 
@@ -74,8 +74,7 @@ if __name__ == "__main__":
         robot.logger.info('Robot powered on.')
 
         clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client,
-                            image=image_client, raycast=rc_client, command=command_client, robot=robot,
-                            recorder=None)
+                            image=image_client, raycast=rc_client, command=command_client, robot=robot, graphnav=None)
 
         
         robot.logger.info('Commanding robot to stand...')
@@ -89,7 +88,7 @@ if __name__ == "__main__":
     
         # Task 1: Look at scene
         gaze_pose = (0.75,0.0,0.4, 1.,0.,0.,0)
-        status = move_to_unblocking(clients, gaze_pose, frame_name = GRAV_ALIGNED_BODY_FRAME_NAME, duration = 0.1)
+        status = move_gripper(clients, gaze_pose, blocking = False, duration = 0.1)
 
         status = open_gripper(clients)
         time.sleep(1)
@@ -120,7 +119,7 @@ if __name__ == "__main__":
                     print("Object not in frame: ", current_object_pose)
                 else:
                     arm_command_pose = build_arm_target_from_vision(clients,current_object_pose)
-                    status = move_to_unblocking(clients, arm_command_pose, frame_name = GRAV_ALIGNED_BODY_FRAME_NAME, duration = 0.1)
+                    status = move_gripper(clients, arm_command_pose, blocking = False, duration = 0.1)
 
                 # Update if controller
     

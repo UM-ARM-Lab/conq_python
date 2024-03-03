@@ -14,6 +14,7 @@ from conq.clients import Clients
 
 def build_arm_target_from_vision(clients, visual_pose):
     x_hand,y_hand,z_hand,roll_hand, pitch_hand, yaw_hand = visual_pose
+    roll_hand, pitch_hand, yaw_hand = 0,0,0 # FIXME: Make this generalized
     # 2. TRANSFORM from Hand pose to Grav_aligned_body pose
     # TODO: Convert euler to rot
     transforms = clients.state.get_robot_state().kinematic_state.transforms_snapshot
