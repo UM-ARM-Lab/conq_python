@@ -9,6 +9,7 @@ from bosdyn.client.robot import Robot
 from bosdyn.client.robot_command import RobotCommandClient
 from bosdyn.client.robot_state import RobotStateClient
 from bosdyn.client.graph_nav import GraphNavClient
+from bosdyn.client.world_object import WorldObjectClient
 
 
 @dataclass
@@ -21,3 +22,4 @@ class Clients:
     raycast: Optional[RayCastClient]=None
     command: Optional[RobotCommandClient]=None
     robot: Optional[Robot]=None
+    world_object: Optional[WorldObjectClient]=None

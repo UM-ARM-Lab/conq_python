@@ -15,6 +15,7 @@ from bosdyn.client.manipulation_api_client import ManipulationApiClient
 from clickmap_nav.click_map_interface import ClickMapInterface
 from clickmap_nav.view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 from conq.cameras_utils import annotate_frame, display_image, get_color_img
+from conq.clients import Clients
 
 
 # TODO: Make class that will loop around in a circle of waypoints
@@ -22,7 +23,13 @@ class ToolDetectorInterface(ClickMapInterface):
     def __init__(
         self, robot, upload_path, model_path=None, silhouette=None, silhouetteActor=None
     ):
-        super().__init__(robot, upload_path, silhouette, silhouetteActor)
+        self.image_client = robot.ensure_client(ImageClient.default_service_name)
+        self.manipulation_client = robot.ensure_client(ManipulationApiClient.default_service_name)
+        self.world_object_client = robot.ensure_client(
+            WorldObjectClient.default_service_name
+        )
+        self.clients = Clients(image=self.image_client, manipulation=self.manipulation_client, world_object=self.world_object_client)
+        super().__init__(robot=robot, upload_path=upload_path, clients=self.clients, silhouette=silhouette, silhouetteActor=silhouetteActor)
         self.predictor = None
         if model_path is not None:
             self.predictor = Predictor(model_path)
