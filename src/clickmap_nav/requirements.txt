@@ -1,4 +1,4 @@
-bosdyn-client >= 3.1
+bosdyn-client==4.0.0
 
 numpy
 vtk

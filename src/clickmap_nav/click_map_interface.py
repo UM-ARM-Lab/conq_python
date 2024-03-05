@@ -20,7 +20,7 @@ from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface, Highlig
 class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle): 
     def __init__(self, robot, upload_path, clients: Clients=None, silhouette=None, silhouetteActor=None):
         GraphNavInterface.__init__(self,robot, upload_path)
-        HighlightInteractorStyle.__init__(self, silhouette, silhouetteActor)
+        HighlightInteractorStyle.__init__(self, silhouette=silhouette, silhouetteActor=silhouetteActor)
         
         self.clients = clients
         self.clients.graphnav = self._graph_nav_client
