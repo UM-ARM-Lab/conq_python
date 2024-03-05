@@ -13,11 +13,11 @@ from bosdyn.client.graph_nav import GraphNavClient
 
 @dataclass
 class Clients:
-    lease: Optional[LeaseClient]
-    state: Optional[RobotStateClient]
-    manipulation: Optional[ManipulationApiClient]
-    image: Optional[ImageClient]
-    graphnav: Optional[GraphNavClient]
-    raycast: Optional[RayCastClient]
-    command: Optional[RobotCommandClient]
-    robot: Optional[Robot]
+    lease: Optional[LeaseClient]=None
+    state: Optional[RobotStateClient]=None
+    manipulation: Optional[ManipulationApiClient]=None
+    image: Optional[ImageClient]=None
+    graphnav: Optional[GraphNavClient]=None
+    raycast: Optional[RayCastClient]=None
+    command: Optional[RobotCommandClient]=None
+    robot: Optional[Robot]=None

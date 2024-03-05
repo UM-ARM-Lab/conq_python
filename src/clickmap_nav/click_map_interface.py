@@ -21,7 +21,7 @@ from clickmap_nav.graph_nav_util import find_waypoint_to_timestamp
 class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle): 
     def __init__(self, robot, upload_path, clients: Clients=None, silhouette=None, silhouetteActor=None):
         GraphNavInterface.__init__(self,robot, upload_path)
-        HighlightInteractorStyle.__init__(self, silhouette, silhouetteActor)
+        HighlightInteractorStyle.__init__(self, silhouette=silhouette, silhouetteActor=silhouetteActor)
         
         self.clients = clients
         self.clients.graphnav = self._graph_nav_client
