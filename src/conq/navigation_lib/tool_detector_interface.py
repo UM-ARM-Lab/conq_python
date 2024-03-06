@@ -65,12 +65,12 @@ class ToolDetectorInterface(ClickMapInterface):
         self.toggle_power(should_power_on=True)
         localization_state = self._get_localization_state()
         initial_waypoint_id = localization_state.localization.waypoint_id
-        for waypoint in self.graph.waypoints:
-            self._navigate_to([waypoint])
+        for waypoint in self.waypoint_to_timestamp:
+            self._navigate_to([waypoint[0]])
             self.find_object()
 
     def return_to_seed(self):
-        self._navigate_to([self.graph.waypoints[0]])
+        self._navigate_to([self.waypoint_to_timestamp[0]])
 
     def find_object(self, min_confidence_thresh=0.65):
         """
@@ -123,11 +123,12 @@ class ToolDetectorInterface(ClickMapInterface):
         best_pixel_xy = None
         best_rgb_response = None
         detected_object_class = None
-        for pixel_xy, confidence, rgb_response in pixels_and_confidences:
+        for pixel_xy, confidence, rgb_response, predicted_class, camera_source in pixels_and_confidences:
             if confidence > max_confidence:
                 max_confidence = confidence
                 best_pixel_xy = pixel_xy
                 best_rgb_response = rgb_response
+                detected_object_class = predicted_class
 
         # TODO best_rgb_response.frame_name_image_sensor
         if best_pixel_xy is None or best_rgb_response is None:
@@ -162,7 +163,8 @@ class ToolDetectorInterface(ClickMapInterface):
         )
 
         if vision_tform_body is not None:
-            pixels_in_body = vision_tform_body @ np.array(
+            import pdb; pdb.set_trace()
+            pixels_in_body = vision_tform_body.to_matrix() @ np.array(
                 [pixel_xy[0], pixel_xy[1], 0, 1]
             )
 
