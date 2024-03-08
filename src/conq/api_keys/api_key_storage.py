@@ -59,5 +59,5 @@ class ApiKeyStorage(ABC):
     def _determine_username(self, username: Optional[str] = None):
         """Sets the username for the API key"""
         if username is None:
-            username = subprocess.check_output(["whoami"])
+            username = subprocess.check_output(["whoami"]).decode("utf-8").strip()
         return username
