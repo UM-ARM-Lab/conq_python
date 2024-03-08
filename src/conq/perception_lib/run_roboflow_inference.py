@@ -2,8 +2,11 @@
 
 from roboflow import Roboflow
 
+from conq.api_keys import ROBOFLOW_API_KEY
+
 # Config stuff
-rf = Roboflow(api_key="***ADD API KEY HERE***")
+rf = Roboflow(api_key=ROBOFLOW_API_KEY.get())
+
 
 def run_roboflow_model_inference():
     project = rf.workspace().project("garden-implements")
@@ -13,4 +16,3 @@ def run_roboflow_model_inference():
     # print(model.predict("URL_OF_YOUR_IMAGE").json())
 
     model.predict("your_image.jpg").save("prediction.jpg")
-
