@@ -35,6 +35,7 @@ class ConqDataRecorder:
         self.root = root
         self.clients = clients
         self.get_latest_action = get_latest_action
+        self.episode_idx = 0
 
         if sources is None:
             self.sources = ALL_SOURCES
