@@ -18,14 +18,16 @@ from conq.manipulation import grasp_point_in_image_basic, \
                                 arm_stow, gripper_open_fraction, \
                                 rotate_body_in_place, move_body, \
                                 is_grasping
+from conq.clients import Clients
 # TODO: Implement a state machine to deal with edge cases in a structured way
 
 class ToolRetrievalInferface(ClickMapInterface):
     def __init__(self, robot, upload_path, model_path, silhouette=None, silhouetteActor=None):
-        super().__init__(robot, upload_path, silhouette, silhouetteActor)
-        self.predictor = Predictor(model_path)
         self.image_client = robot.ensure_client(ImageClient.default_service_name)
         self.manipulation_client = robot.ensure_client(ManipulationApiClient.default_service_name)
+        self.clients = Clients(image=self.image_client, manipulation=self.manipulation_client)
+        super().__init__(robot, upload_path, clients=self.clients, silhouette=silhouette, silhouetteActor=silhouetteActor)
+        self.predictor = Predictor(model_path)
         # Cameras through which to look for objects
         self.cameras = [
             'back_fisheye_image',
@@ -284,7 +286,7 @@ def main(argv):
     vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
 
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
-    style = ToolRetrievalInferface(robot, options.upload_filepath, options.model_filepath, silhouette, silhouetteActor)
+    style = ToolRetrievalInferface(robot=robot, upload_path=options.upload_filepath, model_path=options.model_filepath, silhouette=silhouette, silhouetteActor=silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
     lease_client = robot.ensure_client(LeaseClient.default_service_name)

@@ -20,14 +20,14 @@ from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface, Highlig
 class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle): 
     def __init__(self, robot, upload_path, clients: Clients=None, silhouette=None, silhouetteActor=None):
         GraphNavInterface.__init__(self,robot, upload_path)
-        HighlightInteractorStyle.__init__(self, silhouette, silhouetteActor)
+        HighlightInteractorStyle.__init__(self, silhouette=silhouette, silhouetteActor=silhouetteActor)
         
         self.clients = clients
         self.clients.graphnav = self._graph_nav_client
         self.clients.state = self._robot_state_client
         now = int(time.time())
         root = Path(f"data/click_map_data_{now}")
-        self.recorder = ConqDataRecorder(root, self.clients, sources=ALL_SOURCES)
+        self.recorder = ConqDataRecorder(root, self.clients, sources=ALL_SOURCES, map_directory_path=upload_path)
         self.recorder_started = False
 
         self._list_graph_waypoint_and_edge_ids()
