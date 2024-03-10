@@ -168,7 +168,7 @@ class ToolDetectorInterface(ClickMapInterface):
                 [pixel_xy[0], pixel_xy[1], 0, 1]
             )
 
-            # For now, draw a sphere at the image coordinates
+            # For now, draw a sphere of the pixel coords in body frame
             x = pixels_in_body[0]
             y = pixels_in_body[1]
             z = pixels_in_body[2]
@@ -184,6 +184,9 @@ class ToolDetectorInterface(ClickMapInterface):
 
             # Get the world object ID set by the service.
             sphere_id = resp.mutated_object_id
+
+            # Add world object
+            
 
             # List all world objects in the scene after the mutation was applied. Find the sphere in the list
             # and see the transforms added into the frame tree snapshot by Spot in addition to the custom frame.
@@ -230,6 +233,10 @@ class ToolDetectorInterface(ClickMapInterface):
             (r) Return to origin/seed pose
         """
         )
+    
+    def add_test_world_object(self):
+        # TODO: add world object
+        test_wo = wo.WorldObject(name="test_world_object")
 
 
 def main(argv):
