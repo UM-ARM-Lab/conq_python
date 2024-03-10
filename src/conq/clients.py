@@ -9,7 +9,7 @@ from bosdyn.client.robot import Robot
 from bosdyn.client.robot_command import RobotCommandClient
 from bosdyn.client.robot_state import RobotStateClient
 from bosdyn.client.graph_nav import GraphNavClient
-
+from bosdyn.client.inverse_kinematics import InverseKinematicsClient
 
 @dataclass
 class Clients:
@@ -21,3 +21,4 @@ class Clients:
     raycast: Optional[RayCastClient]
     command: Optional[RobotCommandClient]
     robot: Optional[Robot]
+    ik: Optional[InverseKinematicsClient]

@@ -7,6 +7,8 @@ import rerun as rr
 # BOSDYN: API
 import bosdyn
 from bosdyn.api import arm_command_pb2, estop_pb2, robot_command_pb2, synchronized_command_pb2
+from bosdyn.api.spot.inverse_kinematics_pb2 import (InverseKinematicsRequest,
+                                                    InverseKinematicsResponse)
 from google.protobuf import wrappers_pb2
 from bosdyn.util import duration_to_seconds
 
@@ -16,6 +18,7 @@ from bosdyn.client.ray_cast import RayCastClient
 from bosdyn.client.robot_command import RobotCommandBuilder
 from bosdyn.client.robot_command import (RobotCommandBuilder, RobotCommandClient,
                                          block_until_arm_arrives, blocking_stand)
+
 # CONQ: Clients
 from conq.clients import Clients
 # CONQ: Wrappers
@@ -27,6 +30,9 @@ from conq.utils import setup_and_stand
 
 # CONQ: Manipulation 
 from conq.manipulation_lib.utils import make_robot_command, hand_pose_cmd_to_frame
+
+# CONQ: Perception
+from conq.manipulation_lib.Perception3D import VisualPoseAcquirer, PointCloudDataUnavailableError
 
 def grasped_bool(clients: Clients):
     #FIXME: Needs force based instead of position based
@@ -55,6 +61,9 @@ def move_gripper(clients: Clients, pose, blocking = True, frame_name = GRAV_ALIG
         duration   : duration in seconds
         follow     : Calculates reachability based on Inverse kinematics
                     default -> False
+
+    FUTURE:
+    - Body assist 
 
     """
     
@@ -131,6 +140,59 @@ def move_joint_trajectory(clients: Clients,joint_targets, max_vel=2.5, max_acc=1
 
         return cmd_id
 
+def reachability(client: Clients, pose_frames, frame_name = GRAV_ALIGNED_BODY_FRAME_NAME):
+    """
+    Check reachibility of for the given pose when robot is in fixed standing pose
+    Useful to decide when the robot cannot reach, hence allow robot to move closer
+    True: Reachable
+    False: Unreachable
+    """
+    body_T_task, wr1_T_tool,task_T_desired_tool =  pose_frames 
+
+    ik_request = InverseKinematicsRequest(
+                root_frame_name=frame_name,
+                scene_tform_task=body_T_task.to_proto(),
+                wrist_mounted_tool=InverseKinematicsRequest.WristMountedTool(
+                    wrist_tform_tool=wr1_T_tool.to_proto()),
+                tool_pose_task=InverseKinematicsRequest.ToolPoseTask(
+                    task_tform_desired_tool=task_T_desired_tool.to_proto()),
+            )
+    
+    ik_response = client.ik.inverse_kinematics(ik_request)
+    reachable_ik = ik_response.status == InverseKinematicsResponse.STATUS_OK
+    
+    return reachable_ik
+
+class GraspDetector:
+    """
+    ### args
+
+    ### Usage
+    
+    grasp_instance = Grasp(point_cloud_instance)
+
+    try:
+        grasp_parameters = grasp_instance.get_grasp_pose() \\
+        grasp_instance.execute_grasp(grasp_parameters)
+    except PointCloudDataUnavailableError as e:
+        print(e)
+    
+
+    """
+    def __init__(self, point_cloud_instance):
+        self.point_cloud_instance = point_cloud_instance
+
+    def get_grasp_pose(self):
+        if self.point_cloud_instance.xyz is None:
+            # Ensure that there's valid point cloud data available
+            raise PointCloudDataUnavailableError("Point cloud data not available for grasp calculation.")
+
+        camera_params = self.point_cloud_instance.camera_params
+        pass
+
+    def set_grasp_config(self):
+        pass
+
 # TODO: Move to utils
 def print_feedback(feedback_resp, logger):
     """ Helper function to query for ArmJointMove feedback, and print it to the console.
@@ -156,16 +218,6 @@ def follow_cart_traj(clients: Clients, pose, duration):
     """
     # TODO: Add constraints in future with configs
     pass
-
-def reachability(client: Clients, pose):
-    """
-    Check reachibility of for the given pose when robot is in fixed standing pose
-    Useful to decide when the robot cannot reach, hence allow robot to move closer
-    True: Reachable
-    False: Unreachable
-    """
-    # TODO: Implement reachability following sdk examples: inverse kinematics
-    return True
 
 def get_camera_intrinsics(image_proto):
     """

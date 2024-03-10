@@ -75,7 +75,7 @@ def main(argv):
     options = parser.parse_args(argv)
 
     if options.to_depth:
-        sources = [options.camera + '_depth', options.camera +'_color_image']
+        sources = [options.camera + '_depth', options.camera +'_color_image_in_depth_frame']
     else:
         sources = [options.camera + 'frontleft_depth_in_visual_frame', options.camera + '_fisheye_image']
 

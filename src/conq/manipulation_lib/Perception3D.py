@@ -2,12 +2,16 @@ import cv2
 import threading
 import time
 import numpy as np
+import open3d as o3d
 
-from conq.cameras_utils import get_color_img
+# CONQ: Perception-> Object Track/Pose Estimator
 import apriltag # FIXME: Temporary until integrated with 6-DOF object pose estimator 
 
 # BOSDYN
 from bosdyn.client.math_helpers import Quat, quat_to_eulerZYX
+from bosdyn.client.image import ImageClient, depth_image_to_pointcloud, _depth_image_data_to_numpy
+from conq.cameras_utils import get_color_img, get_depth_img, pos_in_cam_to_pos_in_hand, image_to_opencv, RGB_SOURCES, DEPTH_SOURCES
+from bosdyn.client.frame_helpers import VISION_FRAME_NAME
 
 class VisualPoseAcquirer(threading.Thread):
     def __init__(self, image_client, sources, camera_params):
@@ -19,13 +23,11 @@ class VisualPoseAcquirer(threading.Thread):
         self.lock = threading.Lock()
         self.visual_pose = tuple(np.zeros(6))
         self.delta_time = 0.0
-
+        self.latest_image = np.zeros(shape=(480,640,3))
+        self.latest_image_response = None
+        
     def stop(self):
         self.running = False
-
-    def get_latest_pose(self):
-        with self.lock:
-            return np.copy(self.visual_pose), np.copy(self.delta_time)
 
     def run(self):
         cv2.namedWindow("RGB", cv2.WINDOW_NORMAL)
@@ -50,7 +52,8 @@ class VisualPoseAcquirer(threading.Thread):
                 with self.lock:
                     self.visual_pose = visual_pose
                     self.delta_time = delta_time
-                    self.rob_current_pose = None
+                    self.latest_image = img_bgr
+                    self.latest_image_response = rgb_response
 
             except IndexError as i_e:
                 print("Target object not in frame")
@@ -75,10 +78,80 @@ class VisualPoseAcquirer(threading.Thread):
             #time.sleep(0.01)  # Adjust as needed based on your acquisition rate
         out.release()
         cv2.destroyAllWindows()
-    
-    #TODO: Method for point cloud -> Child class
-    
 
+    def get_latest_pose(self):
+        with self.lock:
+            return np.copy(self.visual_pose), np.copy(self.delta_time)
+        
+    def get_latest_image(self):
+        with self.lock:
+            return np.copy(self.latest_image)
+    
+    def get_latest_image_response(self):
+        with self.lock:
+            return np.copy(self.latest_image_response)
+    
+class PointCloud(VisualPoseAcquirer):
+    def __init__(self, image_client, sources, camera_params):
+        super().__init__(image_client, sources, camera_params)
+        self.xyz = None
+
+    def get_point_cloud(self,min_dist=0,max_dist=10):
+        if self.latest_image_response is None:
+            raise ImageResponseUnavailableError("No image response available for point cloud generation.")
+        with self.lock:
+            self.xyz = depth_image_to_pointcloud(image_response=self.get_latest_image_response()[0], min_dist = min_dist, max_dist = max_dist)
+            # TODO: Perform transformations from sensor frame to HAND FRAME / BODY ALIGNED FRAME
+            # TODO: Process pointcloud
+            return self.xyz
+    
+    def get_pcd(self):
+        if self.xyz is None:
+            raise PointCloudDataUnavailableError("Point cloud data not available.")
+        with self.lock:
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(self.xyz)
+            return pcd
+        
+    def process(self,xyz):
+        """Process raw pointcloud """
+        pass
+        
+    def save_pcd(self, pcd_file_path):
+        """Saves the current point cloud data to a PCD file."""
+        if self.xyz is None:
+            raise PointCloudDataUnavailableError("Point cloud data not available for saving.")
+        with self.lock:
+            with open(pcd_file_path, 'w') as pcd_file:
+                # Write the PCD header
+                pcd_file.write("VERSION .7\n")
+                pcd_file.write("FIELDS x y z\n")
+                pcd_file.write(f"SIZE 4 4 4\n")
+                pcd_file.write(f"TYPE F F F\n")
+                pcd_file.write(f"COUNT 1 1 1\n")
+                pcd_file.write(f"WIDTH {len(self.xyz)}\n")
+                pcd_file.write("HEIGHT 1\n")
+                pcd_file.write("VIEWPOINT 0 0 0 1 0 0 0\n")
+                pcd_file.write(f"POINTS {len(self.xyz)}\n")
+                pcd_file.write("DATA ascii\n")
+                # Write the point data
+                for point in self.xyz:
+                    pcd_file.write(f"{point[0]} {point[1]} {point[2]}\n")
+
+    def run(self):
+        # super().run() # Required if need continuous point cloud acquisition
+        pass
+
+class ImageResponseUnavailableError(Exception):
+    """Exception raised when the image response is not available for point cloud generation."""
+    pass
+
+class PointCloudDataUnavailableError(Exception):
+    """Exception raised when point cloud data is not available or not yet generated."""
+    pass
+
+
+# TODO: Move to utils
 def get_Image(image_client, sources):
     rgb_np, rgb_response = get_color_img(image_client, sources)
     rgb_np = np.array(rgb_np, dtype=np.uint8)
