@@ -36,7 +36,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         self._upload_graph_and_snapshots() # option 5
         self.print_controls()
 
-        self.waypoint_to_timestamp, _ , _ = find_waypoint_to_timestamp(self._current_graph)
+        self.waypoint_to_timestamp, _ , self.name_to_id = find_waypoint_to_timestamp(self._current_graph)
 
     
     def onKeyPressEvent(self, obj, event):
