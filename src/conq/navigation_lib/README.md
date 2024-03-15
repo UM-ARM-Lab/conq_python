@@ -11,8 +11,11 @@ A `.env` file must be set in the [`nvaigation_lib`](../navigation_lib/) director
 OPENAI_API_KEY=<KEY>
 API_VERSION=YYYY-MM-DD
 openai_api_base=https://api.umgpt.umich.edu/azure-openai-api
-OPENAI_organization=
+OPENAI_organization=<BILLING_SHORTCODE>
 model=gpt-35-turbo
 ```
 
-Some helpful documentation on the different fields in the `.env` file can be found on the [Azure OpenAI Services page](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference?WT.mc_id=AZ-MVP-5004796#rest-api-versioning).
+## Some helpful AzureOpenAI documentation:
+- [Azure OpenAI Services page](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference?WT.mc_id=AZ-MVP-5004796#rest-api-versioning) goes over the different fields in the `.env` file.
+- [Quick start guide from Azure](https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart?tabs=bash%2Cpython-new&pivots=programming-language-python) for using the OpenAI Python API.
+- [Sending chat completions](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/chatgpt?tabs=python-new&pivots=programming-language-chat-completions)
