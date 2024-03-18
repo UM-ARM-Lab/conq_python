@@ -29,7 +29,7 @@ class OpenAINavExample:
         )
 
         # Locations in our environment
-        self.locations = ["tool shed", "green house", "farm house"]
+        self.locations = ["tool_shed", "green_house", "farm_house"]
 
         # System context to give to the LLM before asking question
         self.system_context = "Assistant is a large language model trained by OpenAI."
