@@ -1,5 +1,6 @@
 import ast
 import os
+from typing import List
 
 from dotenv import load_dotenv
 from openai import AzureOpenAI
@@ -9,7 +10,7 @@ ONE_MINUTE = 60  # Constant for seconds in a minute
 
 
 class OpenAINavClient:
-    def __init__(self):
+    def __init__(self, locations: List[str]):
         # Sets the current working directory to be the same as the file.
         os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -29,13 +30,14 @@ class OpenAINavClient:
         )
 
         # Locations in our environment
-        self.locations = ["tool shed", "green house", "farm house"]
+        self.locations = locations
 
         # System context to give to the LLM before asking question
         self.system_context = "Assistant is a large language model trained by OpenAI."
 
     @limits(calls=3, period=ONE_MINUTE)
     def find_probable_location_for_object(self, object: str):
+        # TODO: Test how this does with the locations query with underscores
         # Build the query string
         query = "I observe the following structures while exploring a small-scale farm:"
 

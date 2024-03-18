@@ -23,8 +23,6 @@ class ToolDetectorInterface(ClickMapInterface):
     def __init__(
         self, robot, upload_path, model_path=None, silhouette=None, silhouetteActor=None
     ):
-        # Create Azure client
-        self.open_ai_nav_client = OpenAINavClient()
         self.image_client = robot.ensure_client(ImageClient.default_service_name)
         self.manipulation_client = robot.ensure_client(
             ManipulationApiClient.default_service_name
@@ -44,6 +42,13 @@ class ToolDetectorInterface(ClickMapInterface):
             silhouette=silhouette,
             silhouetteActor=silhouetteActor,
         )
+
+        # Get locations to feed to open_ai_nav_client
+        self.waypoint_locations = list(self.name_to_id.keys())
+
+        # Create Azure client
+        self.open_ai_nav_client = OpenAINavClient(locations=self.waypoint_locations)
+
         self.predictor = None
         if model_path is not None:
             self.predictor = Predictor(model_path)
@@ -92,8 +97,10 @@ class ToolDetectorInterface(ClickMapInterface):
 
     def navigate_to_clippers(self):
         """Navigating based on likely hood of where to find the clippers."""
-        # Call function to get probability of where something is
-        likely_locations = self.find_likely_locations_for_object(object="clippers")
+        # Call chatgpt to get likely locations for object
+        likely_locations = self.open_ai_nav_client.find_probable_location_for_object(
+            "clippers"
+        )
         best_location = ""
         best_location_probability = 0.0
 
@@ -104,10 +111,6 @@ class ToolDetectorInterface(ClickMapInterface):
 
         # Find and navigate to the location
         self._navigate_to([self.name_to_id[best_location]])
-
-    def find_likely_locations_for_object(self, object: str):
-        """Function will call an LLM in the future to get probabilities of where something likely is."""
-        return {"shed": 0.75}
 
     def find_object(self, min_confidence_thresh=0.65):
         """
