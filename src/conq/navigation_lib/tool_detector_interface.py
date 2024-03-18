@@ -5,45 +5,24 @@ import sys
 import bosdyn.client.util
 import numpy as np
 from arm_segmentation.predictor import Predictor
-from bosdyn.api import geometry_pb2 as geom
 from bosdyn.api import world_object_pb2 as wo
 from bosdyn.client.frame_helpers import get_a_tform_b
 from bosdyn.client.image import ImageClient
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
-from bosdyn.util import now_timestamp
-from bosdyn.client.world_object import WorldObjectClient, make_add_world_object_req
-from dotenv import load_dotenv
-from openai import AzureOpenAI
+from bosdyn.client.world_object import WorldObjectClient
 
 from clickmap_nav.click_map_interface import ClickMapInterface
 from clickmap_nav.view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 from conq.cameras_utils import annotate_frame, display_image, get_color_img
 from conq.clients import Clients
+from conq.navigation_lib.openai.openai_nav_client import OpenAINavClient
 
 
-# TODO: Make class that will loop around in a circle of waypoints
 class ToolDetectorInterface(ClickMapInterface):
     def __init__(
         self, robot, upload_path, model_path=None, silhouette=None, silhouetteActor=None
     ):
-        # Sets the current working directory to be the same as the file.
-        os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-        try:
-            if load_dotenv(".env") is False:
-                raise TypeError
-        except TypeError:
-            print("Unable to load .env file.")
-            quit()
-
-        # Create Azure client
-        self.llm_client = AzureOpenAI(
-            api_key=os.environ["OPENAI_API_KEY"],
-            api_version=os.environ["API_VERSION"],
-            azure_endpoint=os.environ["openai_api_base"],
-            organization=os.environ["OPENAI_organization"],
-        )
         self.image_client = robot.ensure_client(ImageClient.default_service_name)
         self.manipulation_client = robot.ensure_client(
             ManipulationApiClient.default_service_name
@@ -63,6 +42,13 @@ class ToolDetectorInterface(ClickMapInterface):
             silhouette=silhouette,
             silhouetteActor=silhouetteActor,
         )
+
+        # Get locations to feed to open_ai_nav_client
+        self.waypoint_locations = list(self.name_to_id.keys())
+
+        # Create Azure client
+        self.open_ai_nav_client = OpenAINavClient(locations=self.waypoint_locations)
+
         self.predictor = None
         if model_path is not None:
             self.predictor = Predictor(model_path)
@@ -111,8 +97,10 @@ class ToolDetectorInterface(ClickMapInterface):
 
     def navigate_to_clippers(self):
         """Navigating based on likely hood of where to find the clippers."""
-        # Call function to get probability of where something is
-        likely_locations = self.find_likely_locations_for_object(object="clippers")
+        # Call chatgpt to get likely locations for object
+        likely_locations = self.open_ai_nav_client.find_probable_location_for_object(
+            "clippers"
+        )
         best_location = ""
         best_location_probability = 0.0
 
@@ -120,13 +108,9 @@ class ToolDetectorInterface(ClickMapInterface):
             if probability > best_location_probability:
                 best_location_probability = probability
                 best_location = location
-        
+
         # Find and navigate to the location
         self._navigate_to([self.name_to_id[best_location]])
-
-    def find_likely_locations_for_object(self, object: str):
-        """Function will call an LLM in the future to get probabilities of where something likely is."""
-        return {"shed": 0.75}
 
     def find_object(self, min_confidence_thresh=0.65):
         """
@@ -225,9 +209,6 @@ class ToolDetectorInterface(ClickMapInterface):
         )
 
         if vision_tform_body is not None:
-            import pdb
-
-            pdb.set_trace()
             pixels_in_body = vision_tform_body.to_matrix() @ np.array(
                 [pixel_xy[0], pixel_xy[1], 0, 1]
             )
