@@ -5,44 +5,26 @@ import sys
 import bosdyn.client.util
 import numpy as np
 from arm_segmentation.predictor import Predictor
-from bosdyn.api import geometry_pb2 as geom
 from bosdyn.api import world_object_pb2 as wo
 from bosdyn.client.frame_helpers import get_a_tform_b
 from bosdyn.client.image import ImageClient
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
-from bosdyn.client.world_object import WorldObjectClient, make_add_world_object_req
-from dotenv import load_dotenv
-from openai import AzureOpenAI
+from bosdyn.client.world_object import WorldObjectClient
 
 from clickmap_nav.click_map_interface import ClickMapInterface
 from clickmap_nav.view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 from conq.cameras_utils import annotate_frame, display_image, get_color_img
 from conq.clients import Clients
+from conq.navigation_lib.openai.openai_nav_client import OpenAINavClient
 
 
-# TODO: Make class that will loop around in a circle of waypoints
 class ToolDetectorInterface(ClickMapInterface):
     def __init__(
         self, robot, upload_path, model_path=None, silhouette=None, silhouetteActor=None
     ):
-        # Sets the current working directory to be the same as the file.
-        os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-        try:
-            if load_dotenv(".env") is False:
-                raise TypeError
-        except TypeError:
-            print("Unable to load .env file.")
-            quit()
-
         # Create Azure client
-        self.llm_client = AzureOpenAI(
-            api_key=os.environ["OPENAI_API_KEY"],
-            api_version=os.environ["API_VERSION"],
-            azure_endpoint=os.environ["openai_api_base"],
-            organization=os.environ["OPENAI_organization"],
-        )
+        self.open_ai_nav_client = OpenAINavClient()
         self.image_client = robot.ensure_client(ImageClient.default_service_name)
         self.manipulation_client = robot.ensure_client(
             ManipulationApiClient.default_service_name
@@ -203,9 +185,6 @@ class ToolDetectorInterface(ClickMapInterface):
         )
 
         if vision_tform_body is not None:
-            import pdb
-
-            pdb.set_trace()
             pixels_in_body = vision_tform_body.to_matrix() @ np.array(
                 [pixel_xy[0], pixel_xy[1], 0, 1]
             )
