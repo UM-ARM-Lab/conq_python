@@ -8,11 +8,14 @@ from arm_segmentation.predictor import Predictor
 from bosdyn.api import geometry_pb2 as geom
 from bosdyn.api import world_object_pb2 as wo
 from bosdyn.client.frame_helpers import get_a_tform_b
-from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
-from bosdyn.client.world_object import WorldObjectClient, make_add_world_object_req
 from bosdyn.client.image import ImageClient
+from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
 from bosdyn.util import now_timestamp
+from bosdyn.client.world_object import WorldObjectClient, make_add_world_object_req
+from dotenv import load_dotenv
+from openai import AzureOpenAI
+
 from clickmap_nav.click_map_interface import ClickMapInterface
 from clickmap_nav.view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 from conq.cameras_utils import annotate_frame, display_image, get_color_img
@@ -24,18 +27,49 @@ class ToolDetectorInterface(ClickMapInterface):
     def __init__(
         self, robot, upload_path, model_path=None, silhouette=None, silhouetteActor=None
     ):
+        # Sets the current working directory to be the same as the file.
+        os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+        try:
+            if load_dotenv(".env") is False:
+                raise TypeError
+        except TypeError:
+            print("Unable to load .env file.")
+            quit()
+
+        # Create Azure client
+        self.llm_client = AzureOpenAI(
+            api_key=os.environ["OPENAI_API_KEY"],
+            api_version=os.environ["API_VERSION"],
+            azure_endpoint=os.environ["openai_api_base"],
+            organization=os.environ["OPENAI_organization"],
+        )
         self.image_client = robot.ensure_client(ImageClient.default_service_name)
-        self.manipulation_client = robot.ensure_client(ManipulationApiClient.default_service_name)
+        self.manipulation_client = robot.ensure_client(
+            ManipulationApiClient.default_service_name
+        )
         self.world_object_client = robot.ensure_client(
             WorldObjectClient.default_service_name
         )
-        self.clients = Clients(image=self.image_client, manipulation=self.manipulation_client, world_object=self.world_object_client)
-        super().__init__(robot=robot, upload_path=upload_path, clients=self.clients, silhouette=silhouette, silhouetteActor=silhouetteActor)
+        self.clients = Clients(
+            image=self.image_client,
+            manipulation=self.manipulation_client,
+            world_object=self.world_object_client,
+        )
+        super().__init__(
+            robot=robot,
+            upload_path=upload_path,
+            clients=self.clients,
+            silhouette=silhouette,
+            silhouetteActor=silhouetteActor,
+        )
         self.predictor = None
         if model_path is not None:
             self.predictor = Predictor(model_path)
         self.image_client = robot.ensure_client(ImageClient.default_service_name)
-        self.manipulation_client = robot.ensure_client(ManipulationApiClient.default_service_name)
+        self.manipulation_client = robot.ensure_client(
+            ManipulationApiClient.default_service_name
+        )
         self.world_object_client = robot.ensure_client(
             WorldObjectClient.default_service_name
         )
@@ -145,7 +179,13 @@ class ToolDetectorInterface(ClickMapInterface):
         best_pixel_xy = None
         best_rgb_response = None
         detected_object_class = None
-        for pixel_xy, confidence, rgb_response, predicted_class, camera_source in pixels_and_confidences:
+        for (
+            pixel_xy,
+            confidence,
+            rgb_response,
+            predicted_class,
+            camera_source,
+        ) in pixels_and_confidences:
             if confidence > max_confidence:
                 max_confidence = confidence
                 best_pixel_xy = pixel_xy
@@ -185,7 +225,9 @@ class ToolDetectorInterface(ClickMapInterface):
         )
 
         if vision_tform_body is not None:
-            import pdb; pdb.set_trace()
+            import pdb
+
+            pdb.set_trace()
             pixels_in_body = vision_tform_body.to_matrix() @ np.array(
                 [pixel_xy[0], pixel_xy[1], 0, 1]
             )
@@ -208,7 +250,6 @@ class ToolDetectorInterface(ClickMapInterface):
             sphere_id = resp.mutated_object_id
 
             # Add world object
-            
 
             # List all world objects in the scene after the mutation was applied. Find the sphere in the list
             # and see the transforms added into the frame tree snapshot by Spot in addition to the custom frame.
@@ -256,12 +297,10 @@ class ToolDetectorInterface(ClickMapInterface):
             (j) navigate to the clippers
         """
         )
-    
-    # def add_test_world_object(self):
-    #     # TODO: add world object
-    #     timestamp = now_timestamp()
-    #     img_coord = wo.ImageProperties(camera_source='back')
-    #     test_wo = wo.WorldObject(name="test_world_object", aquisition_time=timestamp)
+
+    def add_test_world_object(self):
+        # TODO: add world object
+        test_wo = wo.WorldObject(name="test_world_object")
 
 
 def main(argv):
