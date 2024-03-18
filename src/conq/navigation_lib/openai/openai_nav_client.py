@@ -6,6 +6,11 @@ from dotenv import load_dotenv
 from openai import AzureOpenAI
 from ratelimit import limits
 
+from conq.api_keys import UMGPT_API_KEY
+
+# Change this based on which API you are using
+os.environ['UMGPT_API_KEY'] = UMGPT_API_KEY.get()
+
 ONE_MINUTE = 60  # Constant for seconds in a minute
 
 
@@ -23,7 +28,7 @@ class OpenAINavClient:
 
         # Create Azure client
         self.llm_client = AzureOpenAI(
-            api_key=os.environ["OPENAI_API_KEY"],
+            api_key=os.environ["UMGPT_API_KEY"],
             api_version=os.environ["API_VERSION"],
             azure_endpoint=os.environ["openai_api_base"],
             organization=os.environ["OPENAI_organization"],
