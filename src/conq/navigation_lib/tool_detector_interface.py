@@ -71,6 +71,8 @@ class ToolDetectorInterface(ClickMapInterface):
         elif key == "r":
             # Robot returns to seed/origin point
             self.return_to_seed()
+        elif key == "j":
+            self.navigate_to_clippers()
 
         print("Key press!")
         self.print_controls()
@@ -87,6 +89,25 @@ class ToolDetectorInterface(ClickMapInterface):
 
     def return_to_seed(self):
         self._navigate_to([self.waypoint_to_timestamp[0]])
+
+    def navigate_to_clippers(self):
+        """Navigating based on likely hood of where to find the clippers."""
+        # Call function to get probability of where something is
+        likely_locations = self.find_likely_locations_for_object(object="clippers")
+        best_location = ""
+        best_location_probability = 0.0
+
+        for location, probability in likely_locations.items():
+            if probability > best_location_probability:
+                best_location_probability = probability
+                best_location = location
+
+        # Find and navigate to the location
+        self._navigate_to([self.name_to_id[best_location]])
+
+    def find_likely_locations_for_object(self, object: str):
+        """Function will call an LLM in the future to get probabilities of where something likely is."""
+        return {"shed": 0.75}
 
     def find_object(self, min_confidence_thresh=0.65):
         """
@@ -251,6 +272,7 @@ class ToolDetectorInterface(ClickMapInterface):
             (q) Exit.
             (n) Navigate in loop of current waypoints
             (r) Return to origin/seed pose
+            (j) navigate to the clippers
         """
         )
 
