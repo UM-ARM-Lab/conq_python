@@ -15,3 +15,5 @@ torch
 PyQt5==5.15.10
 vtk==9.3.0
 ratelimit==2.2.1
+openai==1.6.1
+keyring==24.3.1

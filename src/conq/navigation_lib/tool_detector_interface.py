@@ -86,8 +86,7 @@ class ToolDetectorInterface(ClickMapInterface):
         # self._navigate_route(self.graph.waypoints)
         print("Navigating in loop!")
         self.toggle_power(should_power_on=True)
-        localization_state = self._get_localization_state()
-        initial_waypoint_id = localization_state.localization.waypoint_id
+
         for waypoint in self.waypoint_to_timestamp:
             self._navigate_to([waypoint[0]])
             self.find_object()
@@ -189,20 +188,6 @@ class ToolDetectorInterface(ClickMapInterface):
         return best_pixel_xy, best_rgb_response
 
     def add_world_object_to_map(self, pixel_xy, image_response):
-        # Given a pixel where the object is and using transforms, compute where the
-        # object is relative to the robot and then add as a world objet.
-        # img_coord = wo.ImageProperties(
-        #     camera_source=camera,
-        #     image_source=image_response.source,
-        #     image_capture=image_response.shot,
-        # )
-        # wo_obj = wo.WorldObject(
-        #     id=2,
-        #     name=,
-        #     acquisition_time=image_response.shot.acquisition_time,
-        #     image_properties=img_coord,
-        # )
-
         # Find transform for vision to body
         vision_tform_body = get_a_tform_b(
             image_response.shot.transforms_snapshot, "vision", "body"
@@ -278,10 +263,6 @@ class ToolDetectorInterface(ClickMapInterface):
             (j) navigate to the clippers
         """
         )
-
-    def add_test_world_object(self):
-        # TODO: add world object
-        test_wo = wo.WorldObject(name="test_world_object")
 
 
 def main(argv):

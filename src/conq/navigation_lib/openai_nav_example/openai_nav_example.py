@@ -4,7 +4,7 @@ from conq.navigation_lib.openai.openai_nav_client import OpenAINavClient
 
 
 def main():
-    openai_example = OpenAINavClient()
+    openai_example = OpenAINavClient(locations=["tool_shed", "green_house", "farm_house", "garage"])
 
     while True:
         user_input = input("Please input which tool to find (q to quit):")

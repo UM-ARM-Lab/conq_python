@@ -6,6 +6,11 @@ from dotenv import load_dotenv
 from openai import AzureOpenAI, OpenAI
 from ratelimit import limits
 
+from conq.api_keys import OPENAI_API_KEY
+
+# Change this based on which API you are using
+os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY.get()
+
 ONE_MINUTE = 60  # Constant for seconds in a minute
 
 
