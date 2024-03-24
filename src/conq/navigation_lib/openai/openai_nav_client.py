@@ -3,7 +3,7 @@ import os
 from typing import List
 
 from dotenv import load_dotenv
-from openai import AzureOpenAI
+from openai import AzureOpenAI, OpenAI
 from ratelimit import limits
 
 ONE_MINUTE = 60  # Constant for seconds in a minute
@@ -22,11 +22,15 @@ class OpenAINavClient:
             quit()
 
         # Create Azure client
-        self.llm_client = AzureOpenAI(
-            api_key=os.environ["OPENAI_API_KEY"],
-            api_version=os.environ["API_VERSION"],
-            azure_endpoint=os.environ["openai_api_base"],
+        # self.llm_client = AzureOpenAI(
+        #     api_key=os.environ["OPENAI_API_KEY"],
+        #     api_version=os.environ["API_VERSION"],
+        #     azure_endpoint=os.environ["openai_api_base"],
+        #     organization=os.environ["OPENAI_organization"],
+        # )
+        self.llm_client = OpenAI(
             organization=os.environ["OPENAI_organization"],
+            api_key=os.environ["OPENAI_API_KEY"],
         )
 
         # Locations in our environment
