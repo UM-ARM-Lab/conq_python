@@ -64,6 +64,36 @@ class OpenAINavClient:
             ],
             temperature=0,
         )
-        probabilities_out = ast.literal_eval(response.choices[0].message.content)
+
+        try:
+            probabilities_out = ast.literal_eval(response.choices[0].message.content)
+        except:
+            # Try to send the bad output back through chatGPT
+            num_tries = 0
+            for i in range(3):
+                num_tries += 1
+                query = f"This output is not in a plain text string representing a dictionary, please make it formatted correctly: {response.choices[0].message.content}"
+                response = self.llm_client.chat.completions.create(
+                    model=os.environ["model"],
+                    messages=[
+                        {"role": "system", "content": self.system_context},
+                        {"role": "user", "content": query},
+                    ],
+                    temperature=0,
+                )
+
+                # Now try formatting
+                try:
+                    probabilities_out = ast.literal_eval(
+                        response.choices[0].message.content
+                    )
+                except:
+                    probabilities_out = None
+                    continue
+
+            if num_tries == 3:
+                print(
+                    "Unable to get a properly formatted string from ChatGPT, probabilities_out is set to None"
+                )
 
         return probabilities_out
