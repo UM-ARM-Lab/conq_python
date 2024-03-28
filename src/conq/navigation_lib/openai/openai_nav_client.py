@@ -34,7 +34,6 @@ class OpenAINavClient:
         #     organization=os.environ["OPENAI_organization"],
         # )
         self.llm_client = OpenAI(
-            organization=os.environ["OPENAI_organization"],
             api_key=os.environ["OPENAI_API_KEY"],
         )
 
@@ -57,11 +56,11 @@ class OpenAINavClient:
 
         # Make the query
         response = self.llm_client.chat.completions.create(
-            model=os.environ["model"],
             messages=[
                 {"role": "system", "content": self.system_context},
                 {"role": "user", "content": query},
             ],
+            model=os.environ["model"],
             temperature=0,
         )
 
