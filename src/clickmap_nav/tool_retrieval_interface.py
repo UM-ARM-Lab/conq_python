@@ -19,6 +19,7 @@ from conq.manipulation import grasp_point_in_image_basic, \
                                 rotate_body_in_place, move_body, \
                                 is_grasping
 from conq.clients import Clients
+from conq.navigation_lib.openai_nav.openai_nav_client import OpenAINavClient
 # TODO: Implement a state machine to deal with edge cases in a structured way
 
 class ToolRetrievalInferface(ClickMapInterface):
@@ -37,6 +38,12 @@ class ToolRetrievalInferface(ClickMapInterface):
             'right_fisheye_image',
         ] # See conq/cameras_utils.py RGB_SOURCES
 
+        # Get locations to feed to open_ai_nav_client
+        self.waypoint_locations = list(self.name_to_id.keys())
+
+        # Create Azure client
+        self.open_ai_nav_client = OpenAINavClient(locations=self.waypoint_locations)
+
 
     def onKeyPressEvent(self, obj, event):
         key, actor =  super().onKeyPressEvent(obj, event)
@@ -53,8 +60,15 @@ class ToolRetrievalInferface(ClickMapInterface):
         if object_class is not None:
             # Go to a waypoint and pick up the tool, then come back
             if actor:
+                # Try to query chatgpt for the waypoint id
+                print(f"Finding probable location for {object_class}...")
+                likely_locations = self.open_ai_nav_client.find_probable_location_for_object(object_class)
+                # Likely location names sorted by probability
+                locations_sorted = [item[0] for item in sorted(likely_locations.items(), key=lambda x: x[1], reverse=True)]
+                
+                print(f"Navigating to {locations_sorted[0]} to find the {object_class}...")
                 print(f"Looking for {object_class}...")
-                fetch_success = self.fetch_object(object_class, actor.waypoint_id)
+                fetch_success = self.fetch_object(object_class, locations_sorted[0])
                 print(f"Fetch success: {fetch_success}")
             else:
                 print("No waypoint selected")

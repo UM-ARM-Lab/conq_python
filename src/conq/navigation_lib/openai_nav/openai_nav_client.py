@@ -52,8 +52,9 @@ class OpenAINavClient:
         for index in range(len(self.locations)):
             query += f"\n{index + 1}. {self.locations[index]}"
 
-        query += f"\n\nPlease rank the structure based on how likely I am to find a {object} in them. Please provide the response in a plain text string representing a dictionary and only include the location with whitespace connected with _ as the keys and probabilities as the values"
-
+        query += f"\n\nPlease rank the structure based on how likely I am to find a {object} in them. Please provide the response in a plain text string representing a python dictionary and only include the location with whitespace connected with _ as the keys and probabilities as the values"
+        import pdb
+        pdb.set_trace()
         # Make the query
         response = self.llm_client.chat.completions.create(
             messages=[
