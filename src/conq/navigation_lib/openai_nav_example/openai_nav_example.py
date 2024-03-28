@@ -1,6 +1,6 @@
 from ratelimit import RateLimitException
 
-from conq.navigation_lib.openai.openai_nav_client import OpenAINavClient
+from conq.navigation_lib.openai_nav.openai_nav_client import OpenAINavClient
 
 
 def main():
