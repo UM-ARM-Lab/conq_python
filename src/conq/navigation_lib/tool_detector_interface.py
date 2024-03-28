@@ -16,7 +16,7 @@ from clickmap_nav.click_map_interface import ClickMapInterface
 from clickmap_nav.view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 from conq.cameras_utils import annotate_frame, display_image, get_color_img
 from conq.clients import Clients
-from conq.navigation_lib.openai.openai_nav_client import OpenAINavClient
+from conq.navigation_lib.openai_nav.openai_nav_client import OpenAINavClient
 
 
 class ToolDetectorInterface(ClickMapInterface):

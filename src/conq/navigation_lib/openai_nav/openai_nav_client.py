@@ -3,7 +3,7 @@ import os
 from typing import List
 
 from dotenv import load_dotenv
-from openai import AzureOpenAI, OpenAI
+from openai import OpenAI
 from ratelimit import limits
 
 from conq.api_keys import OPENAI_API_KEY
