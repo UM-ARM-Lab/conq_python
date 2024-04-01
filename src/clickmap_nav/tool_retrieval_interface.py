@@ -1,25 +1,35 @@
-from click_map_interface import ClickMapInterface
-from arm_segmentation.predictor import Predictor
 import argparse
 import os
 import sys
+
 import bosdyn.client.channel
 import bosdyn.client.util
-from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
-from bosdyn.client.image import ImageClient
-from bosdyn.client.manipulation_api_client import ManipulationApiClient
 import numpy as np
+from arm_segmentation.predictor import Predictor
+from bosdyn.client.image import ImageClient
+from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
+from bosdyn.client.manipulation_api_client import ManipulationApiClient
+from click_map_interface import ClickMapInterface
+from view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 
-from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface
-from conq.cameras_utils import get_color_img , display_image, annotate_frame#, get_depth_img
-from conq.manipulation import grasp_point_in_image_basic, \
-                                move_gripper_to_pose, \
-                                follow_gripper_trajectory, \
-                                arm_stow, gripper_open_fraction, \
-                                rotate_body_in_place, move_body, \
-                                is_grasping
+from conq.cameras_utils import (  # , get_depth_img
+    annotate_frame,
+    display_image,
+    get_color_img,
+)
 from conq.clients import Clients
+from conq.manipulation import (
+    arm_stow,
+    follow_gripper_trajectory,
+    grasp_point_in_image_basic,
+    gripper_open_fraction,
+    is_grasping,
+    move_body,
+    move_gripper_to_pose,
+    rotate_body_in_place,
+)
 from conq.navigation_lib.openai_nav.openai_nav_client import OpenAINavClient
+
 # TODO: Implement a state machine to deal with edge cases in a structured way
 
 class ToolRetrievalInferface(ClickMapInterface):
@@ -66,10 +76,18 @@ class ToolRetrievalInferface(ClickMapInterface):
                 # Likely location names sorted by probability
                 locations_sorted = [item[0] for item in sorted(likely_locations.items(), key=lambda x: x[1], reverse=True)]
                 
-                print(f"Navigating to {locations_sorted[0]} to find the {object_class}...")
-                print(f"Looking for {object_class}...")
-                fetch_success = self.fetch_object(object_class, locations_sorted[0])
-                print(f"Fetch success: {fetch_success}")
+                # Loop through all locations
+                for location in locations_sorted:
+                    print(f"Navigating to {location} to find the {object_class}...")
+                    print(f"Looking for {object_class}...")
+                    fetch_success = self.fetch_object(object_class, location)
+
+                    # If the fetch is a success, break. If not, go to the next location
+                    if fetch_success:
+                        print(f"Fetch successful!")
+                        break
+                    else:
+                        print(f"Fetch not successful: {fetch_success}")
             else:
                 print("No waypoint selected")
             self.print_controls()
