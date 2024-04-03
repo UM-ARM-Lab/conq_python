@@ -48,7 +48,7 @@ class OpenAINavClient:
             "the keys and probabilities as the values"
         ])
         query = "\n".join(query_list)
-        
+
         # Make the query
         response = self.llm_client.chat.completions.create(
             messages=[
@@ -56,7 +56,7 @@ class OpenAINavClient:
                 {"role": "user", "content": query},
             ],
             model=os.environ["model"],
-            temperature=0,
+            temperature=0, # temperature set to 0 to avoid overly verbose responses
         )
 
         try:
@@ -73,7 +73,7 @@ class OpenAINavClient:
                         {"role": "system", "content": self.system_context},
                         {"role": "user", "content": query},
                     ],
-                    temperature=0,
+                    temperature=0, # temperature set to 0 to avoid overly verbose responses
                 )
 
                 # Now try formatting
