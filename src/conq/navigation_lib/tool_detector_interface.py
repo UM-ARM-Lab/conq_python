@@ -1,3 +1,7 @@
+""" 
+NOTE: This file was used to develop the LLM based navigation for conq. This is kept as a possible resource
+and basic demo of the LLM guided navigation.
+"""
 import argparse
 import os
 import sys
