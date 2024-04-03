@@ -39,12 +39,16 @@ class OpenAINavClient:
     @limits(calls=3, period=ONE_MINUTE)
     def find_probable_location_for_object(self, object: str):
         # Build the query string
-        query = "I observe the following structures while exploring a small-scale farm:"
-
-        for index in range(len(self.locations)):
-            query += f"\n{index + 1}. {self.locations[index]}"
-
-        query += f"\n\nPlease rank the structure based on how likely I am to find a {object} in them. Please provide the response in a plain text string representing a python dictionary, {{\"name\": probability}} and only include the location with whitespace connected with _ as the keys and probabilities as the values"
+        query_list = ["I observe the following structures while exploring a small-scale farm:"]
+        query_list.extend([f"{index + 1}. {location}" for index, location in enumerate(self.locations)])
+        query_list.extend([
+            f"\nPlease rank the structure based on how likely I am to find a {object} in them. Please "
+            "provide the response in a plain text string representing a python dictionary, "
+            f"{{\"name\": probability}} and only include the location with whitespace connected with _ as "
+            "the keys and probabilities as the values"
+        ])
+        query = "\n".join(query_list)
+        
         # Make the query
         response = self.llm_client.chat.completions.create(
             messages=[
