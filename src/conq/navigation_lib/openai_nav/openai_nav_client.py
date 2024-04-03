@@ -26,13 +26,6 @@ class OpenAINavClient:
             print("Unable to load .env file.")
             quit()
 
-        # Create Azure client
-        # self.llm_client = AzureOpenAI(
-        #     api_key=os.environ["OPENAI_API_KEY"],
-        #     api_version=os.environ["API_VERSION"],
-        #     azure_endpoint=os.environ["openai_api_base"],
-        #     organization=os.environ["OPENAI_organization"],
-        # )
         self.llm_client = OpenAI(
             api_key=os.environ["OPENAI_API_KEY"],
         )
@@ -69,7 +62,7 @@ class OpenAINavClient:
             num_tries = 0
             for i in range(3):
                 num_tries += 1
-                query = f"This output is not in a plain text string representing a dictionary, please make it formatted correctly: {response.choices[0].message.content}"
+                query = f"This output is not in a plain text string representing a python dictionary, please make it formatted like {{\"name\": probability}}: {response.choices[0].message.content}"
                 response = self.llm_client.chat.completions.create(
                     model=os.environ["model"],
                     messages=[
