@@ -26,21 +26,23 @@ def pretty_print_waypoints(waypoint_id, waypoint_name, short_code_to_count, loca
     )
 
 def find_waypoint_to_timestamp(graph):
+    """Performs analysis on a GraphNav map graph to return waypoints in timestamp order, dictionary of short codes to 
+    number of waypoints represented by the shortcode, and a dictionary of common/human readable waypoint names to
+    waypoint id.
+
+    Args:
+        graph: graph of waypoints from a GraphNav map
+
+    Returns:
+        waypoint_to_timestamp (list[tuple]): array of tuples with waypoint id, timestamp, and annotation name
+        short_code_to_count (dict): dictionary from waypoint short code field to number of waypoints with that short code
+        name_to_id (dict): dictionary of human-readble waypoint name to waypoint id
+    """
     name_to_id = dict()
     short_code_to_count = {}
-    waypoint_to_timestamp = []
+    waypoint_to_timestamp = sort_waypoints_chrono(graph)
 
     for waypoint in graph.waypoints:
-        # Determine the timestamp that this waypoint was created at.
-        timestamp = -1.0
-        try:
-            timestamp = waypoint.annotations.creation_time.seconds + waypoint.annotations.creation_time.nanos / 1e9
-        except:
-            # Must be operating on an older graph nav map, since the creation_time is not
-            # available within the waypoint annotations message.
-            pass
-        waypoint_to_timestamp.append((waypoint.id, timestamp, waypoint.annotations.name))
-
         # Determine how many waypoints have the same short code.
         short_code = id_to_short_code(waypoint.id)
         if short_code not in short_code_to_count:
@@ -58,10 +60,6 @@ def find_waypoint_to_timestamp(graph):
                 # First time we have seen this waypoint annotation name. Add it into the dictionary
                 # with the respective waypoint unique id.
                 name_to_id[waypoint_name] = waypoint.id
-
-    # Sort the set of waypoints by their creation timestamp. If the creation timestamp is unavailable,
-    # fallback to sorting by annotation name.
-    waypoint_to_timestamp = sorted(waypoint_to_timestamp, key=lambda x: (x[1], x[2]))
 
     return waypoint_to_timestamp, short_code_to_count, name_to_id
 
