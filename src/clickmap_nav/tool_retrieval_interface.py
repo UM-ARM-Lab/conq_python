@@ -49,10 +49,10 @@ class ToolRetrievalInferface(ClickMapInterface):
         ] # See conq/cameras_utils.py RGB_SOURCES
 
         # Get locations to feed to open_ai_nav_client
-        self.waypoint_locations = [name for name in self.name_to_id.keys() if 'waypoint' not in name]
+        self.waypoint_names = [name for name in self.name_to_id.keys() if 'waypoint' not in name]
 
         # Create Azure client
-        self.open_ai_nav_client = OpenAINavClient(locations=self.waypoint_locations)
+        self.open_ai_nav_client = OpenAINavClient(locations=self.waypoint_names)
 
 
     def onKeyPressEvent(self, obj, event):
