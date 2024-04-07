@@ -46,6 +46,7 @@ class ToolRetrievalInferface(ClickMapInterface):
             'frontright_fisheye_image',
             'left_fisheye_image',
             'right_fisheye_image',
+            'hand_color_image',
         ] # See conq/cameras_utils.py RGB_SOURCES
 
         # Get locations to feed to open_ai_nav_client
@@ -106,8 +107,14 @@ class ToolRetrievalInferface(ClickMapInterface):
         print(f"navigating to: {waypoint_id}")
         navigation_success = self._navigate_to([waypoint_id])
 
+        # Waypoints for the arm to follow for searching for the object
+        x_pos = 0.2
+        y_positions = [0.6, 0.4, 0.2, 0.0, -0.2, -0.4, -0.6]
+        z_pos = 0.4
+        orientation = [1., 0., 0., 0.]
+
         n_tries = 0
-        n_tries_max = 3
+        n_tries_max = len(y_positions) + 1
         if navigation_success:
             while n_tries < n_tries_max:
                 n_tries += 1
@@ -115,8 +122,15 @@ class ToolRetrievalInferface(ClickMapInterface):
                 # Rotate if previous search didn't work
                 # TODO: Tune rotation and only rotate after the first one
                 if n_tries > 1:
-                    move_body(self._robot_command_client, throttle_vx=0.0, throttle_vy=0.0, throttle_omega=1.0, duration_secs=2.0)
+                    # move_body(self._robot_command_client, throttle_vx=0.0, throttle_vy=0.0, throttle_omega=1.0, duration_secs=2.0)
                     # what I really want is to set the orientation directly wrt current orientation
+
+                    # Move the gripper to a pose to take an image to get a better view of the object
+                    move_gripper_to_pose(self._robot_command_client, self._robot_state_client, [x_pos, y_positions[n_tries - 1], z_pos], orientation)
+                    success = gripper_open_fraction(self._robot_command_client, fraction=1.0)
+
+                    if not success:
+                        print("Gripper not opened successfully!")
 
                 print(f"Looking for {object_class}...")
                 pixel_xy, rgb_response = self.find_object(object_class) # may have to reorient the robot / run multiple times
