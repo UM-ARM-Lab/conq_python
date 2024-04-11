@@ -10,6 +10,8 @@ from bosdyn.client.robot import Robot
 from bosdyn.client.robot_command import RobotCommandClient
 from bosdyn.client.robot_state import RobotStateClient
 from bosdyn.client.world_object import WorldObjectClient
+from bosdyn.client.recording import GraphNavRecordingServiceClient
+from bosdyn.client.map_processing import MapProcessingServiceClient
 
 
 @dataclass
@@ -23,3 +25,5 @@ class Clients:
     command: Optional[RobotCommandClient]=None
     robot: Optional[Robot]=None
     world_object: Optional[WorldObjectClient]=None
+    recording: Optional[GraphNavRecordingServiceClient]=None
+    map_processing: Optional[MapProcessingServiceClient]=None
