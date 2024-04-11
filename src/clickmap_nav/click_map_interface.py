@@ -75,7 +75,6 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
             '9': self._auto_close_loops_prompt,
             'a': self._optimize_anchoring
         }
-
     
     def onKeyPressEvent(self, obj, event):
         key = self.GetInteractor().GetKeySym()
@@ -483,6 +482,22 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
                 cmd_func(str.split(inputs)[1:])
             except Exception as e:
                 print(e)
+
+    # Making another function that is a routine for editing the map. We will really only decide
+        # to edit once we know there is some waypoint we want to add.
+    def edit_map(self):
+        # First start the recorder
+
+        # Waypoints are added by just walking around. Make sure to create a copy of the
+        # graph before navigating.
+
+        # TODO: add some vision routine to detect certain objects.
+
+        # Stop recording and reupload the new graph to the robot
+
+        # Make sure to localize the robot
+        
+        pass
 
 
 
