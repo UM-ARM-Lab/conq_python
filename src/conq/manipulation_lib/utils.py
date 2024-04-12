@@ -9,8 +9,10 @@ from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, GRAV_A
 from bosdyn.client.robot_command import RobotCommandBuilder
 from bosdyn.client.estop import EstopClient
 from bosdyn.api import arm_command_pb2, estop_pb2, robot_command_pb2, synchronized_command_pb2
-
+from bosdyn.client.robot_command import RobotCommandBuilder, block_until_arm_arrives, blocking_stand
 from conq.clients import Clients
+from bosdyn.api import image_pb2
+from bosdyn.client.image import _depth_image_data_to_numpy, _depth_image_get_valid_indices
 
 def build_arm_target_from_vision(clients, visual_pose):
     x_hand,y_hand,z_hand,roll_hand, pitch_hand, yaw_hand = visual_pose
@@ -59,3 +61,81 @@ def verify_estop(robot):
                         ' estop SDK example, to configure E-Stop.'
         robot.logger.error(error_message)
         raise Exception(error_message)
+
+def unstow_arm(robot, command_client):
+    stand_command = RobotCommandBuilder.synchro_stand_command() # params
+    unstow = RobotCommandBuilder.arm_ready_command(build_on_command=stand_command)
+    unstow_command_id = command_client.robot_command(unstow)
+    robot.logger.info('Unstow command issued.')
+    block_until_arm_arrives(command_client, unstow_command_id, 3.0)
+
+
+def stow_arm(robot, command_client):
+    stow_cmd = RobotCommandBuilder.arm_stow_command()
+    stow_command_id = command_client.robot_command(stow_cmd)
+    robot.logger.info('Stow command issued.')
+    block_until_arm_arrives(command_client, stow_command_id, 3.0)
+
+def stand(robot, command_client):
+    robot.logger.info('Commanding robot to stand...')
+    blocking_stand(command_client, timeout_sec=10)
+    robot.logger.info('Robot standing.')
+
+#### PERCEPTION UTILS ####
+
+def depth2pcl(image_response, seg_mask = None, min_dist=0, max_dist=1000):
+     """
+     Convert depth image to point cloud.
+     Modified from bosdyn.clients.image
+     """
+     if image_response.source.image_type != image_pb2.ImageSource.IMAGE_TYPE_DEPTH:
+         raise ValueError('requires an image_type of IMAGE_TYPE_DEPTH')
+     if image_response.source.pixel_format != image_pb2.Image.PIXEL_FORMAT_DEPTH_U16:
+         raise ValueError('IMAGE_TYPE_DEPTH with an unsupported format, required PIXEL_FORMAT_DEPTH_U16')
+     if not image_response.source.HasField('pinhole'):
+         raise ValueError('Requires a pinhole camera model')
+     
+     source_rows = image_response.source.rows
+     source_cols = image_response.source.cols
+     fx = image_response.source.pinhole.intrinsics.focal_length.x
+     fy = image_response.source.pinhole.intrinsics.focal_length.y
+     cx = image_response.source.pinhole.intrinsics.principal_point.x
+     cy = image_response.source.pinhole.intrinsics.principal_point.y
+     depth_scale = image_response.source.depth_scale
+
+     # Convert the proto representation into a numpy array
+     depth_array = _depth_image_data_to_numpy(image_response)
+
+     # SEGMENT if seg_mask is not None:
+     if seg_mask is not None:
+         depth_array[~seg_mask] = 0  # Set non-segmented regions to zero
+
+     # Determine which indices have valid data in the user requested range
+     valid_inds = _depth_image_get_valid_indices(depth_array, np.rint(min_dist*depth_scale),
+                                                 np.rint(max_dist * depth_scale))
+     
+     # Compute the valid data
+     rows, cols = np.mgrid[0:source_rows, 0:source_cols]
+     depth_array = depth_array[valid_inds]
+     rows = rows[valid_inds]
+     cols = cols[valid_inds]
+
+     # Convert the valid distance data to (x,y,z) values expressed in the sensor frame
+     z = depth_array / depth_scale
+     x = np.multiply(z, (cols - cx)) / fx
+     y = np.multiply(z, (rows - cy)) / fy
+     return np.vstack((x,y,z)).T
+
+def pcl_transform(pcl_xyz, image_response, source,target_frame):
+    pcl_xyz1 = np.hstack((pcl_xyz,np.ones((pcl_xyz.shape[0],1))))
+    # TRANSFORM FROM sensor frame to GRAV_ALIGNED frame
+    BODY_T_VISION = get_a_tform_b(
+        image_response.shot.transforms_snapshot, target_frame, source).to_matrix() # 4x4
+
+    body_pcl_hand_sensor = np.dot(BODY_T_VISION,pcl_xyz1.T).T # Nx4
+    # Remove ones
+    body_pcl_hand_sensor = body_pcl_hand_sensor[:,:-1] #/body_pcl_hand_sensor[:,-1][:,np.newaxis]
+
+    return body_pcl_hand_sensor
+
+

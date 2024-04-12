@@ -71,12 +71,15 @@ RUN wget -O opencv.zip https://github.com/opencv/opencv/archive/4.2.0.zip \
     && rm opencv_contrib.zip
 
 # Clone and build the GPD repo
-RUN git clone https://github.com/avazahedi/gpd \
-    && cd gpd \
-    && mkdir build && cd build \
-    && cmake .. \
-    && make -j$(nproc) \
-    && make install
+# RUN git clone https://github.com/avazahedi/gpd \
+    # && cd gpd \
+    # && mkdir build && cd build \
+    # && cmake .. \
+    # && make -j$(nproc) \
+    # && make install
+    
+# Create the directory for mounting the GPD repository
+RUN mkdir /gpd
 
 # Reset the DEBIAN_FRONTEND variable
 ENV DEBIAN_FRONTEND=dialog
