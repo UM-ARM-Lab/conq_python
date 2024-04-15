@@ -1,27 +1,38 @@
-from clickmap_nav.graph_nav_interface import GraphNavInterface
-from conq.data_recorder import ConqDataRecorder
-from conq.clients import Clients
-from conq.cameras_utils import RGB_SOURCES, ALL_SOURCES
-
 import argparse
 import os
 import sys
-import bosdyn.client.channel
-import bosdyn.client.util
-from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
-from bosdyn.client.image import ImageClient
-import numpy as np
 import time
 from pathlib import Path
 from threading import Timer
 
-from clickmap_nav.view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface, HighlightInteractorStyle
-from clickmap_nav.graph_nav_util import find_waypoint_to_timestamp, update_waypoints_and_edges, find_unique_waypoint_id, sort_waypoints_chrono
-from bosdyn.client.recording import GraphNavRecordingServiceClient
-from bosdyn.client.map_processing import MapProcessingServiceClient
-from google.protobuf import wrappers_pb2 as wrappers
+import bosdyn.client.channel
+import bosdyn.client.util
+import numpy as np
 from bosdyn.api.graph_nav import map_pb2, map_processing_pb2, recording_pb2
+from bosdyn.client.image import ImageClient
+from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
+from bosdyn.client.map_processing import MapProcessingServiceClient
 from bosdyn.client.math_helpers import Quat, SE3Pose
+from bosdyn.client.recording import GraphNavRecordingServiceClient
+from google.protobuf import wrappers_pb2 as wrappers
+
+from clickmap_nav.graph_nav_interface import GraphNavInterface
+from clickmap_nav.graph_nav_util import (
+    find_unique_waypoint_id,
+    find_waypoint_to_timestamp,
+    sort_waypoints_chrono,
+    update_waypoints_and_edges,
+)
+from clickmap_nav.view_map_highlighted import (
+    BosdynVTKInterface,
+    HighlightInteractorStyle,
+    SpotMap,
+    VTKEngine,
+)
+from conq.cameras_utils import ALL_SOURCES, RGB_SOURCES
+from conq.clients import Clients
+from conq.data_recorder import ConqDataRecorder
+
 
 class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle): 
     def __init__(self, robot, upload_path, clients: Clients=None, silhouette=None, silhouetteActor=None):
@@ -487,6 +498,7 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         # to edit once we know there is some waypoint we want to add.
     def edit_map(self):
         # First start the recorder
+        self._start_recording()
 
         # Waypoints are added by just walking around. Make sure to create a copy of the
         # graph before navigating.
