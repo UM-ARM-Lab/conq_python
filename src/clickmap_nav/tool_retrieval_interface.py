@@ -67,7 +67,7 @@ class ToolRetrievalInferface(ClickMapInterface):
             object_class = 'clippers'
         elif key == 'k':
             object_class = 'shovel'
-        elif key == 'n':
+        elif key == 't':
             self.find_semantic_information()
 
         if object_class is not None:
@@ -345,7 +345,7 @@ class ToolRetrievalInferface(ClickMapInterface):
             (h) Fetch the trowel
             (j) Fetch the clippers
             (k) Fetch the shovel
-            (n) Navigatie and find tools in a loop
+            (t) Navigatie and find tools in a loop
             """)
 
 

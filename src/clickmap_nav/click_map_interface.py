@@ -71,21 +71,6 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
         self.print_controls()
 
         self.waypoint_to_timestamp, _ , self.name_to_id = find_waypoint_to_timestamp(self._current_graph)
-
-        # Commands for map recording/editing
-        self._command_dictionary = {
-            '0': self._clear_map,
-            '1': self._start_recording,
-            '2': self._stop_recording,
-            '3': self._get_recording_status,
-            '4': self._create_default_waypoint,
-            '5': self._download_full_graph,
-            '6': self._list_graph_waypoint_and_edge_ids,
-            '7': self._create_new_edge,
-            '8': self._create_loop,
-            '9': self._auto_close_loops_prompt,
-            'a': self._optimize_anchoring
-        }
     
     def onKeyPressEvent(self, obj, event):
         key = self.GetInteractor().GetKeySym()
@@ -457,42 +442,6 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
 
         from_T_to = from_tf.mult(to_tf.inverse())
         return from_T_to.to_proto()
-
-    def run(self):
-        """Main loop for the command line interface."""
-        while True:
-            print("""
-            Options:
-            (0) Clear map.
-            (1) Start recording a map.
-            (2) Stop recording a map.
-            (3) Get the recording service's status.
-            (4) Create a default waypoint in the current robot's location.
-            (5) Download the map after recording.
-            (6) List the waypoint ids and edge ids of the map on the robot.
-            (7) Create new edge between existing waypoints using odometry.
-            (8) Create new edge from last waypoint to first waypoint using odometry.
-            (9) Automatically find and close loops.
-            (a) Optimize the map's anchoring.
-            (q) Exit.
-            """)
-            try:
-                inputs = input('>')
-            except NameError:
-                pass
-            req_type = str.split(inputs)[0]
-
-            if req_type == 'q':
-                break
-
-            if req_type not in self._command_dictionary:
-                print('Request not in the known command dictionary.')
-                continue
-            try:
-                cmd_func = self._command_dictionary[req_type]
-                cmd_func(str.split(inputs)[1:])
-            except Exception as e:
-                print(e)
 
 
 
