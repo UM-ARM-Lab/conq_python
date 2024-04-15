@@ -494,23 +494,6 @@ class ClickMapInterface(GraphNavInterface, HighlightInteractorStyle):
             except Exception as e:
                 print(e)
 
-    # Making another function that is a routine for editing the map. We will really only decide
-        # to edit once we know there is some waypoint we want to add.
-    def edit_map(self):
-        # First start the recorder
-        self._start_recording()
-
-        # Waypoints are added by just walking around. Make sure to create a copy of the
-        # graph before navigating.
-
-        # TODO: add some vision routine to detect certain objects.
-
-        # Stop recording and reupload the new graph to the robot
-
-        # Make sure to localize the robot
-        
-        pass
-
 
 
 def main(argv):

@@ -4,6 +4,7 @@ import sys
 
 import bosdyn.client.channel
 import bosdyn.client.util
+from bosdyn.api.graph_nav import recording_pb2
 import numpy as np
 from arm_segmentation.predictor import Predictor
 from bosdyn.client.image import ImageClient
@@ -66,6 +67,8 @@ class ToolRetrievalInferface(ClickMapInterface):
             object_class = 'clippers'
         elif key == 'k':
             object_class = 'shovel'
+        elif key == 'n':
+            self.find_semantic_information()
 
         if object_class is not None:
             # Go to a waypoint and pick up the tool, then come back
@@ -258,6 +261,66 @@ class ToolRetrievalInferface(ClickMapInterface):
         #     return False
         return success
     
+    # Making another function that is a routine for editing the map. We will really only decide
+        # to edit once we know there is some waypoint we want to add.
+    def find_semantic_information(self, min_confidence_thresh=0.65):
+        # Start the recorder
+        self._start_recording()
+
+        # Walk in a loop and then add waypoints if something is seen
+        self._navigate_route([waypoint[0] for waypoint in self.waypoint_to_timestamp])
+        for waypoint in self.waypoint_to_timestamp:
+            # Navigate
+            self._navigate_to(waypoint[0])
+
+            # Look for something semantic
+            for camera in self.cameras:
+                rgb_np, rgb_response = get_color_img(self.image_client, camera)
+                rgb_np = np.array(rgb_np, dtype=np.uint8)
+                # depth_np, depth_res = get_depth_img(self.image_client, 'hand_depth_in_hand_color_frame')
+                predictions = self.predictor.predict(rgb_np)
+
+                # Sorting and providing a default value for 'confidence' if the key is missing while removing anything with too low of a confidence
+                sorted_predicitons = sorted([prediction for prediction in predictions if prediction.get('confidence', 0) >= min_confidence_thresh],
+                                            key=lambda x: x.get('confidence', 0),
+                                            reverse=True)
+                
+                # If we see something semantic, add custom waypoint for it for strongest confidence class
+                detected_object = None
+                predicted_class = None
+                rgb_response = None
+                confidence = None
+                if len(sorted_predicitons) > 0:
+                    confidence = sorted_predicitons[0]["confidence"]
+                    predicted_class = sorted_predicitons[0]["class"]
+                    confidence_array = sorted_predicitons[0]["mask"]
+                    binary_mask = (confidence_array >= confidence).astype(np.uint8)
+                    color = (255,0,0) # class_name_to_color[class_name]
+                    label = f"{confidence} {predicted_class}"
+                    center_x, center_y = annotate_frame(rgb_np, binary_mask, mask_label=label, color=color)
+                    detected_object = ((center_x, center_y), confidence, rgb_response)
+
+                display_image(rgb_np, window_name=camera, seconds_to_show=1)
+                if detected_object is None:
+                    print(f"No object found in frame")
+                else:
+                    print(f"Found {predicted_class} at {detected_object[0]} in {rgb_response.source.name} with confidence {confidence}")
+                    # Make the custom waypoint
+                    # TODO: Add in a feature to have the waypoint name change if there was already a waypoiont of the same name added.
+                    resp = self._recording_client.create_waypoint(waypoint_name=predicted_class)
+                    if resp.status == recording_pb2.CreateWaypointResponse.STATUS_OK:
+                        print(f"Successfully added waypoint for {predicted_class} object")
+                    else:
+                        print(f"FAILED adding {predicted_class} waypoint to map")
+
+        # Stop recording and reupload the new graph to the robot
+        self._stop_recording()
+        self._auto_close_loops(True, True)
+        self._optimize_anchoring()
+        self._download_full_graph()
+
+        # TODO: Test if you need reupload the graph
+    
     def print_controls(self):
         print("""
             Controls:
@@ -282,6 +345,7 @@ class ToolRetrievalInferface(ClickMapInterface):
             (h) Fetch the trowel
             (j) Fetch the clippers
             (k) Fetch the shovel
+            (n) Navigatie and find tools in a loop
             """)
 
 
