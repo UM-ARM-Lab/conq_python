@@ -1,0 +1,7 @@
+{
+    "user_prompt": "You are given a picture of various tools. Your task is to group these tools and assign a one to two-word label that captures what they are specifically used for. Please provide the label for each group of tools.",
+    "image_inputs": [
+        "https://www.fromhousetohome.com/garden/wp-content/uploads/sites/2/2022/05/garden-tool-storage-ideas-3.jpg",
+        "https://www.fromhousetohome.com/garden/wp-content/uploads/sites/2/2022/05/garden-tool-storage-ideas-3.jpg"
+    ]
+}
