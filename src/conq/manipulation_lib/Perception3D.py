@@ -185,7 +185,7 @@ class PointCloud:
         self.vision = vision
         self.sources = vision.sources
 
-    def get_raw_point_cloud(self,min_dist=0,max_dist=10, target_frame = "body"):
+    def get_raw_point_cloud(self,min_dist=0,max_dist=100, target_frame = "body"):
         
         image_response = self.vision.get_latest_response()[0]
         if image_response is None:
@@ -195,8 +195,9 @@ class PointCloud:
         else:
             
             sensor_pcl = depth_image_to_pointcloud(image_response=image_response, min_dist = min_dist, max_dist = max_dist)
+            print(np.shape(sensor_pcl))
             # Transform pcl to target_frame
-            target_pcl_sensor = pcl_transform(sensor_pcl, image_response, source = self.sources[0], target_frame = target_frame)
+            target_pcl_sensor = pcl_transform(sensor_pcl, image_response, source = self.sources[1], target_frame = target_frame)
             self.xyz = target_pcl_sensor
             return target_pcl_sensor
         
@@ -213,7 +214,7 @@ class PointCloud:
         depth_response = self.vision.get_latest_response()[0]
         # DEBUGGING: Segmented depth image
         segmented_depth = self.vision.segment_image(depth_image, seg_mask)
-
+        print(np.shape(segmented_depth))
         sensor_pcl = depth2pcl(depth_response, seg_mask, min_dist, max_dist)
         # Transform pcl to target_frame
         target_pcl_sensor = pcl_transform(sensor_pcl, depth_response, source = self.sources[0], target_frame = target_frame)

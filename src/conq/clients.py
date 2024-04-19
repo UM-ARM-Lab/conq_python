@@ -21,3 +21,4 @@ class Clients:
     raycast: Optional[RayCastClient]
     command: Optional[RobotCommandClient]
     robot: Optional[Robot]
+    #ik: Optional[InverseKinematicsClient]
