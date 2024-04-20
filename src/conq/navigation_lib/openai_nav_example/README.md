@@ -10,7 +10,7 @@ python3 openai_nav_example.py
 
 ### **NOTE:** This example is a work in progress and serves primarily as an example/playground for the ChatGPT vision service.
 
-This script allows users to test out providing prompts to ChatGPT to use it to describe what is in an image. Currently, links to two images of various garden tools are passed to ChatGPT with the user prompt in [`example_input.json`](./example_input.json). To use different images, add or remove links under the `image_inputs` key. More information on using images with ChatGPT can be found on the [OpenAI Documentation](https://platform.openai.com/docs/guides/vision) page.
+This script allows users to test out providing prompts to ChatGPT to use it to describe what is in an image. Currently, links to two images of various garden tools are passed to ChatGPT with the user prompt in [`example_input.json`](./example_input.json). To try different prompts, either enter a prompt into the input or set the `user_prompt` in the JSON file. To use different images, add or remove links under the `image_inputs` key. More information on using images with ChatGPT can be found on the [OpenAI Documentation](https://platform.openai.com/docs/guides/vision) page.
 
 To run the script, run:
 ```bash
