@@ -9,6 +9,7 @@ from arm_segmentation.predictor import Predictor
 from bosdyn.client.image import ImageClient
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
+from conq.navigation_lib.semantic_map_information.semantic_information import SemanticInformation
 from click_map_interface import ClickMapInterface
 from view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 
@@ -53,6 +54,9 @@ class ToolRetrievalInferface(ClickMapInterface):
 
         # Create Azure client
         self.open_ai_nav_client = OpenAINavClient(locations=self.waypoint_names)
+
+        # Semantic information about the map
+        self.semantic_information = SemanticInformation()
 
 
     def onKeyPressEvent(self, obj, event):
@@ -257,6 +261,28 @@ class ToolRetrievalInferface(ClickMapInterface):
         #     print("Failed to stow object")
         #     return False
         return success
+    
+    def find_semantic_information(self, min_confidence_thresh=0.65):
+        # Navigate in a loop to find objects
+        for waypoint in self.waypoint_to_timestamp:
+            self._navigate_to(waypoint[0])
+
+            # Look for something semantic in the image
+            for camera in self.cameras:
+                rgb_np, rgb_response = get_color_img(self.image_client, camera)
+                rgb_np = np.array(rgb_np, dtype=np.uint8)
+                predictions = self.predictor.predict(rgb_np)
+                
+                # If the predicitons is not empty, then pass the image to ChatGPT to gather information about the object
+                if predictions is not None and len(predictions) > 0:
+                    # TODO: Get the object position in the camera by following similar logic to find_semantic_information
+                    # TODO: Use the transform function to get the object position in the world frame
+                    curr_object_label = self.open_ai_nav_client.generate_label_for_image(image=rgb_np)
+                    self.semantic_information.create_waypoint(curr_object_label, waypoint[1])
+
+        # If we see an object while running, add it to the semantic information
+
+        return
     
     def print_controls(self):
         print("""
