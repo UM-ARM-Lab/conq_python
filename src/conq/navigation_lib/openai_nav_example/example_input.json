@@ -1,7 +1,8 @@
 {
-    "user_prompt": "You are given a picture of various tools. Your task is to group these tools and assign a one to two-word label that captures what they are specifically used for. Please provide the label for each group of tools.",
+    "user_prompt": "Please describe the primary function of the following group of tools in a concise manner using no more than five words and avoid general terms like \"essential\" or \"gardening\".",
     "image_inputs": [
         "https://www.fromhousetohome.com/garden/wp-content/uploads/sites/2/2022/05/garden-tool-storage-ideas-3.jpg",
-        "https://www.fromhousetohome.com/garden/wp-content/uploads/sites/2/2022/05/garden-tool-storage-ideas-3.jpg"
+        "https://www.marthastewart.com/thmb/0ysf_-1O-u1IDLg9QpLtsTCsZsU=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/gardening-tools-getty-0621-2000-1e1dec199e8148299f1294b9fe6971ab.jpg",
+        "https://ucanr.edu/blogs/dirt/blogfiles/101636_original.jpg"
     ]
 }

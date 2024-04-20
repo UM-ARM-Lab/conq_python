@@ -95,7 +95,7 @@ class OpenAINavClient:
     @limits(calls=3, period=ONE_MINUTE)
     def generate_label_for_image(self, prompt="Using only one to two words to answer with no reasoning, please classify what you see in this image into a specific label that is intuitive for humans trying to understand what the tools here are used for relative to gardening and farming", image_url="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT354l_oPc87wCqcXwlLKCRPLfZUP-Cs3Wbzw&usqp=CAU"):
         response = self.llm_client.chat.completions.create(
-            model="gpt-4-turbo",
+            model=os.environ["model"],
             messages=[
                 {
                 "role": "user",
@@ -113,4 +113,4 @@ class OpenAINavClient:
             temperature=0,
         )
     
-        print(f"The picture is described as: {response.choices[0].message.content}")
+        print(response.choices[0].message.content)

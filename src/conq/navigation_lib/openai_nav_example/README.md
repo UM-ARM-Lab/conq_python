@@ -14,7 +14,7 @@ This script allows users to test out providing prompts to ChatGPT to use it to d
 
 To run the script, run:
 ```bash
-python3 --json-filepath example_input.json openai_vision_example.py
+python3 openai_vision_example.py --json-filepath example_input.json
 ```
 
 ### Prompts
