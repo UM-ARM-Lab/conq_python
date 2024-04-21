@@ -187,7 +187,7 @@ class ToolDetectorInterface(ClickMapInterface):
                 f"Found {detected_object_class} at {best_pixel_xy} in {best_rgb_response.source.name} with confidence {max_confidence}"
             )
             print("Adding object to world objects...")
-            self.add_world_object_to_map(pixel_xy, rgb_response)
+            self.add_world_object_to_map(pixel_xy, best_rgb_response)
 
         return best_pixel_xy, best_rgb_response
 
