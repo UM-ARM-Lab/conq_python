@@ -22,4 +22,4 @@ Pipfile
 Pipfile.lock
 .DS_Store
 *.env
-settings.json
+.vscode
