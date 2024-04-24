@@ -1,19 +1,20 @@
 import subprocess
 import re
-
+import time
 """
 sudo docker run -it --rm -e DISPLAY -v /home/conq/Spot590/conq_python/src/conq/manipulation_lib/gpd:/gpd -v /tmp/.X11-unix:/tmp/.X11-unix conq_gpd:stanley
 """
 
 def get_grasp_candidates(file="live"):
-
+    print("Starting Docker container...")
     docker_run_command = [
         "docker", "run", "-it", "--rm",
         "-e", "DISPLAY",
         "-v", "/home/conq/Spot590/conq_python/src/conq/manipulation_lib/gpd:/gpd",
         "-v", "/tmp/.X11-unix:/tmp/.X11-unix",
         "conq_gpd:stanley",
-        "/bin/bash", "-c", f"cd gpd/build && ./detect_grasps ../cfg/eigen_params.cfg ../data/PCD/{file}.pcd"
+        "/bin/bash", "-c", f"cd gpd/build && ./detect_grasps ../cfg/eigen_params.cfg ../data/PCD/{file}.pcd",
+        "exit"
     ]
 
     # Run the Docker command and capture output
@@ -22,7 +23,7 @@ def get_grasp_candidates(file="live"):
 
     # Combine stdout and stderr into a single string
     output_text = stdout.decode() + stderr.decode()
-
+    #print(output_text)
     # expression pattern to extract grasp information
     pattern = r'Grasp #(\d+): Score = (-?\d+\.\d+).*?Position: \[(.*?)\].*?Orientation \(Quaternion\): \[w: (-?\d+\.\d+), x: (-?\d+\.\d+), y: (-?\d+\.\d+), z: (-?\d+\.\d+)\]'
 
@@ -65,9 +66,12 @@ def dict_to_tuple(orientation_dict):
     return (orientation_dict["w"], orientation_dict["x"], orientation_dict["y"], orientation_dict["z"])
 
 def main():
-    file= "test_filtered" # TODO: Replace with "live" when the pointcloud is filtered and not empty
+    file= "live" # TODO: Replace with "live" when the pointcloud is filtered and not empty
+    start_time = time.time()
     grasp_pose = get_best_grasp_pose(file)
+    end_time = time.time()
     print(grasp_pose)
+    print("Time: ", round((end_time - start_time),2))
     
 
 if __name__ == '__main__':

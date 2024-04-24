@@ -127,7 +127,6 @@ def main(argv):
         # Task 1: Look at scene
         gaze_pose = (0.75,0.0,0.1, 0.7071,0.,0.7071,0)
         status = move_gripper(clients, gaze_pose, blocking=False, duration = 0.5)
-
         status = open_gripper(clients)
         time.sleep(1)
         

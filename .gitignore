@@ -1,6 +1,7 @@
 *.idea
 *.jpg
 *.png
+*.gif
 *.swp
 *.pyc
 __pycache__

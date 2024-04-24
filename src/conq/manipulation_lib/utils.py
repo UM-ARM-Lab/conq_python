@@ -13,6 +13,8 @@ from bosdyn.client.robot_command import RobotCommandBuilder, block_until_arm_arr
 from conq.clients import Clients
 from bosdyn.api import image_pb2
 from bosdyn.client.image import _depth_image_data_to_numpy, _depth_image_get_valid_indices
+import cv2
+from scipy.spatial.transform import Rotation as R
 
 def build_arm_target_from_vision(clients, visual_pose):
     x_hand,y_hand,z_hand,roll_hand, pitch_hand, yaw_hand = visual_pose
@@ -90,8 +92,8 @@ def depth2pcl(image_response, seg_mask = None, min_dist=0, max_dist=1000):
      """
      if image_response.source.image_type != image_pb2.ImageSource.IMAGE_TYPE_DEPTH:
          raise ValueError('requires an image_type of IMAGE_TYPE_DEPTH')
-     if image_response.source.pixel_format != image_pb2.Image.PIXEL_FORMAT_DEPTH_U16:
-         raise ValueError('IMAGE_TYPE_DEPTH with an unsupported format, required PIXEL_FORMAT_DEPTH_U16')
+    #  if image_response.source.pixel_format != image_pb2.Image.PIXEL_FORMAT_DEPTH_U16:
+    #      raise ValueError('IMAGE_TYPE_DEPTH with an unsupported format, required PIXEL_FORMAT_DEPTH_U16')
      if not image_response.source.HasField('pinhole'):
          raise ValueError('Requires a pinhole camera model')
      
@@ -104,7 +106,7 @@ def depth2pcl(image_response, seg_mask = None, min_dist=0, max_dist=1000):
      depth_scale = image_response.source.depth_scale
 
      # Convert the proto representation into a numpy array
-     depth_array = _depth_image_data_to_numpy(image_response)
+     depth_array = np.copy(_depth_image_data_to_numpy(image_response)) # Assignment destination is read-only
 
      # SEGMENT if seg_mask is not None:
      if seg_mask is not None:
@@ -113,7 +115,7 @@ def depth2pcl(image_response, seg_mask = None, min_dist=0, max_dist=1000):
      # Determine which indices have valid data in the user requested range
      valid_inds = _depth_image_get_valid_indices(depth_array, np.rint(min_dist*depth_scale),
                                                  np.rint(max_dist * depth_scale))
-     
+
      # Compute the valid data
      rows, cols = np.mgrid[0:source_rows, 0:source_cols]
      depth_array = depth_array[valid_inds]
@@ -129,13 +131,92 @@ def depth2pcl(image_response, seg_mask = None, min_dist=0, max_dist=1000):
 def pcl_transform(pcl_xyz, image_response, source,target_frame):
     pcl_xyz1 = np.hstack((pcl_xyz,np.ones((pcl_xyz.shape[0],1))))
     # TRANSFORM FROM sensor frame to GRAV_ALIGNED frame
-    BODY_T_VISION = get_a_tform_b(
-        image_response.shot.transforms_snapshot, target_frame, source).to_matrix() # 4x4
-
-    body_pcl_hand_sensor = np.dot(BODY_T_VISION,pcl_xyz1.T).T # Nx4
+    BODY_T_VISION = get_a_tform_b(image_response.shot.transforms_snapshot, target_frame, "hand_color_image_sensor") # 4x4
+    body_pcl_hand_sensor = np.dot(BODY_T_VISION.to_matrix(),pcl_xyz1.T).T # Nx4
     # Remove ones
     body_pcl_hand_sensor = body_pcl_hand_sensor[:,:-1] #/body_pcl_hand_sensor[:,-1][:,np.newaxis]
 
     return body_pcl_hand_sensor
 
+def rotate_quaternion(pose,angle_degrees, axis=(0,1,0)):
+    pose = list(pose)
+    angle_radians = np.radians(angle_degrees)
+    rotation = R.from_rotvec(angle_radians*np.array(axis))
+    quat_matrix = R.from_quat([pose[3], pose[4], pose[5], pose[6]]).as_matrix()
+    rotate_quat_matrix = rotation.apply(quat_matrix)
+    rotated_quaternion = R.from_matrix(rotate_quat_matrix).as_quat()
+    return tuple([pose[0],pose[1],pose[2],rotated_quaternion[0],rotated_quaternion[1],rotated_quaternion[2],rotated_quaternion[3]])
 
+
+def get_segmask(shape=(480,640), center=(240,320), min_radius = 20, max_radius = 100):
+    y,x = np.ogrid[:shape[0], :shape[1]]
+    radius = np.random.randint(min_radius, max_radius+1, size=shape)
+    dist = np.sqrt((x-center[1])**2 + (y-center[0])**2)
+    segmask = dist <= radius
+    return segmask
+
+RGB_PATH = "src/conq/manipulation_lib/gpd/data/RGB/"
+MASK_PATH = "src/conq/manipulation_lib/gpd/data/MASK/"
+
+def get_segmask_manual(image_path, save_path = MASK_PATH):
+    # Global variables
+    drawing = False  # True if mouse is pressed
+    ix, iy = -1, -1  # Starting position of the drawing
+
+    # Mouse callback function
+    def draw_circle(event, x, y, flags, param):
+        nonlocal ix, iy, drawing
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            drawing = True
+            ix, iy = x, y
+
+        elif event == cv2.EVENT_MOUSEMOVE:
+            if drawing:
+                cv2.circle(seg_mask, (x, y), 10, (255), -1)
+
+        elif event == cv2.EVENT_LBUTTONUP:
+            drawing = False
+            cv2.circle(seg_mask, (x, y), 10, (255), -1)
+
+    # Load an image
+    image = cv2.imread(image_path)
+    if image is None:
+        print("Error: Could not load image.")
+        return None
+
+    # Create a black segmentation mask
+    seg_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
+
+    # Create a window and set mouse callback
+    cv2.namedWindow('image')
+    cv2.setMouseCallback('image', draw_circle)
+
+    while True:
+        # Display the image and segmentation mask
+        combined_image = cv2.addWeighted(image, 0.6, cv2.cvtColor(seg_mask, cv2.COLOR_GRAY2BGR), 0.4, 0)
+        cv2.imshow('image', combined_image)
+
+        # Wait for key press
+        key = cv2.waitKey(1) & 0xFF
+
+        # If 'r' is pressed, reset the segmentation mask
+        if key == ord('r'):
+            seg_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
+
+        # If 's' is pressed, save the segmentation mask and exit
+        elif key == ord('s'):
+            cv2.imwrite(save_path+"live_mask.jpg", seg_mask)
+            break
+
+        # If 'q' is pressed, exit without saving the segmentation mask
+        elif key == ord('q'):
+            return None
+
+    # Cleanup
+    cv2.destroyAllWindows()
+
+    # Convert segmentation mask to True/False array
+    segmask = seg_mask.astype(bool)
+
+    return segmask
