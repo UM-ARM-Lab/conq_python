@@ -5,9 +5,11 @@ import numpy as np
 from bosdyn import geometry
 from bosdyn.api import geometry_pb2
 from bosdyn.client import math_helpers
+from bosdyn.client.math_helpers import Quat, quat_to_eulerZYX
 from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME
 from bosdyn.client.robot_command import RobotCommandBuilder
 from bosdyn.client.estop import EstopClient
+from conq.cameras_utils import get_color_img, get_depth_img, pos_in_cam_to_pos_in_hand, image_to_opencv, RGB_SOURCES, DEPTH_SOURCES, rotate_image
 from bosdyn.api import arm_command_pb2, estop_pb2, robot_command_pb2, synchronized_command_pb2
 from bosdyn.client.robot_command import RobotCommandBuilder, block_until_arm_arrives, blocking_stand
 from conq.clients import Clients
@@ -220,3 +222,93 @@ def get_segmask_manual(image_path, save_path = MASK_PATH):
     segmask = seg_mask.astype(bool)
 
     return segmask
+
+## Image and AprilTag testing codes:
+# TODO: Move to utils
+def get_Image(image_client, sources):
+    rgb_np, rgb_response = get_color_img(image_client, sources)
+    rgb_np = np.array(rgb_np, dtype=np.uint8)
+
+    img_bgr = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2BGR) 
+    return img_bgr, rgb_response
+    
+def get_object_pose(img_bgr, rgb_response, camera_params):
+            
+    result, overlay = apriltag_image(img_bgr, camera_params, tag_size=0.0635) # Replace with object_pose estimator
+
+    ### ______________________###
+    object_pose = result[1]
+                
+    detection = result[0]
+    
+    #print("Object pose: \n", object_pose)
+    #print("Object in camera frame: \n",object_pose[:-1,-1])
+
+    # TODO / FIXME: Use transformation instead of shortcut for pose
+    # Transformation from Camera Pose to Hand Pose
+    object_in_hand = np.copy(object_pose)
+    hand_T_camera = np.array([[0,0,1,0],
+                              [-1,0,0,0],
+                              [0,-1,0,0],
+                              [0,0,0,1]])
+    
+    object_in_hand = np.matmul(hand_T_camera,object_pose)
+    print("Object in hand: \n", object_in_hand)
+
+    quat = Quat.from_matrix(object_in_hand[:-1,:-1])
+    print("Rotation in quaternion: ", quat)
+
+    yaw_hand, pitch_hand,roll_hand = quat_to_eulerZYX(quat)
+
+    # object_in_hand[0,-1]  = object_pose[2,-1] # X_hand = Z_camera
+    # object_in_hand[1,-1]  = -object_pose[0,-1] # Y_hand = -X_camera
+    # object_in_hand[2,-1]  = -object_pose[1,-1] # Z_hand = -Y_camera
+    
+    #print("Object in hand frame: \n",object_in_hand[:-1,-1])
+    x_hand,y_hand,z_hand = object_in_hand[0,-1],object_in_hand[1,-1],object_in_hand[2,-1]
+    #roll_hand,pitch_hand,yaw_hand = 0,0,0
+    visual_pose = (x_hand,y_hand,z_hand,roll_hand,pitch_hand,yaw_hand)
+    #visual_pose = (x_hand,y_hand,z_hand,quat.w,quat.x,quat.y,quat.z)
+
+    ## Overlays
+    object_center = (int(detection.center[0]),int(detection.center[1]))   # Assuming this gives the center as [x, y]
+
+    # Draw circular marker at object center
+    cv2.circle(overlay, object_center, 5, (0, 255, 0), -1)
+
+    # Image center
+    image_center = [int(overlay.shape[1] // 2), int(overlay.shape[0] // 2)]
+    cv2.circle(overlay, tuple(image_center), 5, (255, 0, 0), -1)
+
+    # Draw arrow from image center to object center
+    cv2.arrowedLine(overlay, tuple(image_center), tuple(object_center), (0, 0, 255), 2)
+
+    return result, rgb_response, overlay, visual_pose, object_center
+
+def apriltag_image(img, camera_params, tag_size):
+
+    '''
+    Detect AprilTags from static images.
+
+    Args:   input_images: cv image
+            camera_params [list[float]]: [fx,fy,cx,cy]
+    '''
+
+
+    '''
+    Set up a reasonable search path for the apriltag DLL.
+    Either install the DLL in the appropriate system-wide
+    location, or specify your own search paths as needed.
+    '''
+
+    detector = apriltag.Detector(options=None, searchpath=apriltag._get_dll_path())
+
+    result, overlay = apriltag.detect_tags(img,
+                                            detector,
+                                            camera_params,
+                                            tag_size,
+                                            vizualization=3,
+                                            verbose=None,
+                                            annotation=True
+                                            )
+    return result, overlay

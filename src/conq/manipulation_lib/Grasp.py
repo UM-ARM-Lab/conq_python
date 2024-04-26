@@ -2,7 +2,7 @@ import subprocess
 import re
 import time
 """
-sudo docker run -it --rm -e DISPLAY -v /home/conq/Spot590/conq_python/src/conq/manipulation_lib/gpd:/gpd -v /tmp/.X11-unix:/tmp/.X11-unix conq_gpd:stanley
+docker run -it --rm -e DISPLAY -v /home/conq/Spot590/conq_python/src/conq/manipulation_lib/gpd:/gpd -v /tmp/.X11-unix:/tmp/.X11-unix conq_gpd:stanley
 """
 
 def get_grasp_candidates(file="live"):

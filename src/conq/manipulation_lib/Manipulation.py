@@ -217,14 +217,6 @@ def get_current_gripper_pose(clients: Clients, target_frame_name = BODY_FRAME_NA
     qw, qx, qy, qz = BODY_T_HAND.rot.w, BODY_T_HAND.rot.x, BODY_T_HAND.rot.y, BODY_T_HAND.rot.z
     return BODY_T_HAND, (x, y, z, qw, qx, qy, qz)
 
-def get_current_joint_angles(clients: Clients):
-    """
-    Get current arm joint angles
-    """
-    transforms = clients.state.get_robot_state().kinematic_state.transforms_snapshot
-    # Transformation of hand w.r.t grav_aligned
-    pass 
-
 # TODO: Move to utils
 def print_feedback(feedback_resp, logger):
     """ Helper function to query for ArmJointMove feedback, and print it to the console.
@@ -243,13 +235,6 @@ def print_feedback(feedback_resp, logger):
                   f'el1 = {pos.el1.value:.3f}, wr0 = {pos.wr0.value:.3f}, wr1 = {pos.wr1.value:.3f}'
         logger.info(f'    {idx}: {pos_str}')
     return duration_to_seconds(joint_move_feedback.time_to_goal)
-    
-def follow_cart_traj(clients: Clients, pose, duration):
-    """
-    Input -> pose (list of tuples)
-    """
-    # TODO: Add constraints in future with configs
-    pass
 
 def get_camera_intrinsics(image_proto):
     """
