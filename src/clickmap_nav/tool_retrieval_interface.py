@@ -33,6 +33,13 @@ from conq.manipulation import (
     move_gripper_to_pose,
     rotate_body_in_place,
 )
+
+# CONQ MANIPULATION LIBS:
+from conq.manipulation_lib.Manipulation import perform_grasp
+
+# CONQ MANIPULATION-PERCEPTION LIBS:
+from conq.manipulation_lib.Perception3D import PointCloud, Vision
+from conq.manipulation_lib.utils import get_segmask_manual
 from conq.navigation_lib.openai_nav.openai_nav_client import OpenAINavClient
 from conq.navigation_lib.semantic_map_information.semantic_information import (
     SemanticInformation,
@@ -165,6 +172,12 @@ class ToolRetrievalInferface(ClickMapInterface):
                     # what I really want is to set the orientation directly wrt current orientation
 
                 print(f"Looking for {object_class}...")
+
+                # IMAGE ACQUISTION
+                sources = ['hand_depth_in_hand_color_frame', 'hand_color_image']
+                vision = Vision(self.image_client, sources)
+                pointcloud = PointCloud(vision)
+                # Replaced with the above code
                 pixel_xy, rgb_response = self.find_object(
                     object_class
                 )  # may have to reorient the robot / run multiple times
@@ -173,7 +186,23 @@ class ToolRetrievalInferface(ClickMapInterface):
                     print(
                         f"Picking up {object_class} at {pixel_xy} in {rgb_response.source.name}"
                     )
-                    grasp_and_lift_success = self.pick_up_object(pixel_xy, rgb_response)
+                    
+                    # Point cloud segmentation
+                    rgb = vision.get_latest_RGB() # Segment this image
+                    depth = vision.get_latest_Depth()
+                    
+                    xyz = pointcloud.get_raw_point_cloud()
+
+                    # Lang-SAM mask
+                    seg_mask = get_segmask_manual()
+
+                    # Segment pointcloud
+                    pointcloud.segment_xyz(seg_mask)
+                    pointcloud.save_pcd()
+
+                    # Grasp detection module
+                    grasp_and_lift_success = perform_grasp(clients=self.clients)
+                    grasp_and_lift_success = self.pick_up_object(pixel_xy, rgb_response) # Replaced with above code
 
                     if grasp_and_lift_success:
                         drop_position = [-0.25, 0.0, 0.5]  # over the bucket

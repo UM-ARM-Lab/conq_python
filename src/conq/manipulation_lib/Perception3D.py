@@ -1,18 +1,34 @@
-import cv2
 import threading
 import time
-import numpy as np
-import open3d as o3d
-from typing import Union, Tuple, Optional
+from typing import Optional, Tuple, Union
 
 # CONQ: Perception-> Object Track/Pose Estimator
-import apriltag # FIXME: Temporary until integrated with 6-DOF object pose estimator 
+import apriltag  # FIXME: Temporary until integrated with 6-DOF object pose estimator
+import cv2
+import numpy as np
+import open3d as o3d
+from bosdyn.api.image_pb2 import _IMAGERESPONSE, ImageResponse
+from bosdyn.client.frame_helpers import VISION_FRAME_NAME, get_a_tform_b
 
 # BOSDYN
-from bosdyn.client.image import ImageClient, depth_image_to_pointcloud, _depth_image_data_to_numpy
-from bosdyn.client.frame_helpers import VISION_FRAME_NAME, get_a_tform_b
-from bosdyn.api.image_pb2 import ImageResponse, _IMAGERESPONSE
-from conq.manipulation_lib.utils import depth2pcl, pcl_transform, get_Image, get_object_pose
+from bosdyn.client.image import (
+    ImageClient,
+    _depth_image_data_to_numpy,
+    depth_image_to_pointcloud,
+)
+
+from conq.manipulation_lib.utils import (
+    depth2pcl,
+    get_Image,
+    get_object_pose,
+    pcl_transform,
+)
+
+PCD_PATH = "src/conq/manipulation_lib/gpd/data/PCD/"
+NPY_PATH = "src/conq/manipulation_lib/gpd/data/NPY/"
+RGB_PATH = "src/conq/manipulation_lib/gpd/data/RGB/"
+DEPTH_PATH = "src/conq/manipulation_lib/gpd/data/DEPTH/"
+MASK_PATH = "src/conq/manipulation_lib/gpd/data/MASK/"
 
 class VisualPoseAcquirer(threading.Thread):
     def __init__(self, image_client, sources, camera_params):
@@ -136,7 +152,7 @@ class Vision:
         self.latest_response = self.image_client.get_image_from_sources(self.sources)
         return self.latest_response
 
-    def get_latest_RGB(self,path=None, save=False, file_name = "live"):
+    def get_latest_RGB(self,path=RGB_PATH, save=True, file_name = "live"):
         img_bgr, _ = get_Image(self.image_client, self.sources[1])
         self.latest_image = img_bgr
         if save:
@@ -147,7 +163,7 @@ class Vision:
 
         return img_bgr
     
-    def get_latest_Depth(self,path=None,save=False, file_name="live"):
+    def get_latest_Depth(self,path=DEPTH_PATH,save=True, file_name="live"):
         depth_frame = _depth_image_data_to_numpy(image_response=self.get_latest_response()[0]) # Need this for aligning RGB and Depth
         print("Shape of Depth frame: ", np.shape(depth_frame))
         if save:
@@ -231,7 +247,7 @@ class PointCloud:
             pcd.points = o3d.utility.Vector3dVector(self.xyz)
             return pcd
         
-    def save_pcd(self, path, file_name="live"):
+    def save_pcd(self, path = PCD_PATH, file_name="live"):
         """Saves the current point cloud data to a PCD file."""
         start_time = time.time()
         if self.xyz is None:
@@ -255,7 +271,7 @@ class PointCloud:
             end_time = time.time()
             print(f"File written in {pcd_file_path} in {round((end_time - start_time),2)} s")
 
-    def save_npy(self,path, file_name="live"):
+    def save_npy(self,path = NPY_PATH, file_name="live"):
         """Saves the pointcloud as a Nx3 numpy array"""
         start_time = time.time()
         np.save(f'{path}{file_name}.npy', self.xyz)
