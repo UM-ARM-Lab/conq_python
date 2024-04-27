@@ -8,10 +8,8 @@ docker run -it --rm -e DISPLAY -v /home/conq/Spot590/conq_python/src/conq/manipu
 def get_grasp_candidates(file="live"):
     print("Starting Docker container...")
     docker_run_command = [
-        "docker", "run", "-it", "--rm",
-        "-e", "DISPLAY",
-        "-v", "/home/conq/Spot590/conq_python/src/conq/manipulation_lib/gpd:/gpd",
-        "-v", "/tmp/.X11-unix:/tmp/.X11-unix",
+        "docker", "run", "-it",
+        "-v", "/home/saketp/Desktop/ARMLAB/conq_python/src/conq/manipulation_lib/gpd:/gpd",
         "conq_gpd:stanley",
         "/bin/bash", "-c", f"cd gpd/build && ./detect_grasps ../cfg/eigen_params.cfg ../data/PCD/{file}.pcd",
         "exit"
@@ -23,7 +21,7 @@ def get_grasp_candidates(file="live"):
 
     # Combine stdout and stderr into a single string
     output_text = stdout.decode() + stderr.decode()
-    #print(output_text)
+    print(output_text)
     # expression pattern to extract grasp information
     pattern = r'Grasp #(\d+): Score = (-?\d+\.\d+).*?Position: \[(.*?)\].*?Orientation \(Quaternion\): \[w: (-?\d+\.\d+), x: (-?\d+\.\d+), y: (-?\d+\.\d+), z: (-?\d+\.\d+)\]'
 
@@ -46,7 +44,7 @@ def get_grasp_candidates(file="live"):
             "orientation": orientation
         }
         grasp_candidates.append(grasp_candidate)
-
+    print("Got grasp candidates: ", grasp_candidates)
     return grasp_candidates
 
 def get_best_grasp_pose(file="live"):
