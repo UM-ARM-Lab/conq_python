@@ -1,22 +1,47 @@
 # BOSTON DYNAMICS API
-from bosdyn.api import estop_pb2, geometry_pb2, image_pb2, manipulation_api_pb2
-
+import cv2
 import numpy as np
 from bosdyn import geometry
-from bosdyn.api import geometry_pb2
+from bosdyn.api import (
+    arm_command_pb2,
+    estop_pb2,
+    geometry_pb2,
+    image_pb2,
+    manipulation_api_pb2,
+    robot_command_pb2,
+    synchronized_command_pb2,
+)
 from bosdyn.client import math_helpers
-from bosdyn.client.math_helpers import Quat, quat_to_eulerZYX
-from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME
-from bosdyn.client.robot_command import RobotCommandBuilder
 from bosdyn.client.estop import EstopClient
-from conq.cameras_utils import get_color_img, get_depth_img, pos_in_cam_to_pos_in_hand, image_to_opencv, RGB_SOURCES, DEPTH_SOURCES, rotate_image
-from bosdyn.api import arm_command_pb2, estop_pb2, robot_command_pb2, synchronized_command_pb2
-from bosdyn.client.robot_command import RobotCommandBuilder, block_until_arm_arrives, blocking_stand
-from conq.clients import Clients
-from bosdyn.api import image_pb2
-from bosdyn.client.image import _depth_image_data_to_numpy, _depth_image_get_valid_indices
-import cv2
+from bosdyn.client.frame_helpers import (
+    GRAV_ALIGNED_BODY_FRAME_NAME,
+    HAND_FRAME_NAME,
+    VISION_FRAME_NAME,
+    get_a_tform_b,
+)
+from bosdyn.client.image import (
+    _depth_image_data_to_numpy,
+    _depth_image_get_valid_indices,
+)
+from bosdyn.client.math_helpers import Quat, quat_to_eulerZYX
+from bosdyn.client.robot_command import (
+    RobotCommandBuilder,
+    block_until_arm_arrives,
+    blocking_stand,
+)
 from scipy.spatial.transform import Rotation as R
+
+from conq.cameras_utils import (
+    DEPTH_SOURCES,
+    RGB_SOURCES,
+    get_color_img,
+    get_depth_img,
+    image_to_opencv,
+    pos_in_cam_to_pos_in_hand,
+    rotate_image,
+)
+from conq.clients import Clients
+
 
 def build_arm_target_from_vision(clients, visual_pose):
     x_hand,y_hand,z_hand,roll_hand, pitch_hand, yaw_hand = visual_pose
@@ -160,7 +185,7 @@ def get_segmask(shape=(480,640), center=(240,320), min_radius = 20, max_radius =
 RGB_PATH = "src/conq/manipulation_lib/gpd/data/RGB/"
 MASK_PATH = "src/conq/manipulation_lib/gpd/data/MASK/"
 
-def get_segmask_manual(image_path, save_path = MASK_PATH):
+def get_segmask_manual(image_path = RGB_PATH+"live.jpg", save_path = MASK_PATH):
     # Global variables
     drawing = False  # True if mouse is pressed
     ix, iy = -1, -1  # Starting position of the drawing

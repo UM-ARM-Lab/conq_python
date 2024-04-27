@@ -24,3 +24,5 @@ Pipfile.lock
 .DS_Store
 *.env
 scripts/tests/
+.vscode
+*.tar

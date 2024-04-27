@@ -1,38 +1,77 @@
 # PYTHON
-import time
-import numpy as np
-import rerun as rr
 import math
+import time
 
 # BOSDYN: API
 import bosdyn
-from bosdyn.api import arm_command_pb2, estop_pb2, robot_command_pb2, synchronized_command_pb2, geometry_pb2
-from bosdyn.api.spot.inverse_kinematics_pb2 import (InverseKinematicsRequest,
-                                                    InverseKinematicsResponse)
-from google.protobuf import wrappers_pb2
+import numpy as np
+import rerun as rr
+from bosdyn.api import (
+    arm_command_pb2,
+    estop_pb2,
+    geometry_pb2,
+    robot_command_pb2,
+    synchronized_command_pb2,
+)
+from bosdyn.api.spot.inverse_kinematics_pb2 import (
+    InverseKinematicsRequest,
+    InverseKinematicsResponse,
+)
 
 # BOSDYN: Clients
-from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME, GROUND_PLANE_FRAME_NAME, BODY_FRAME_NAME, WR1_FRAME_NAME
+from bosdyn.client.frame_helpers import (
+    BODY_FRAME_NAME,
+    GRAV_ALIGNED_BODY_FRAME_NAME,
+    GROUND_PLANE_FRAME_NAME,
+    HAND_FRAME_NAME,
+    VISION_FRAME_NAME,
+    WR1_FRAME_NAME,
+    get_a_tform_b,
+)
+from bosdyn.client.math_helpers import Quat, SE3Pose
 from bosdyn.client.ray_cast import RayCastClient
-from bosdyn.client.robot_command import RobotCommandBuilder
-from bosdyn.client.robot_command import (RobotCommandBuilder, RobotCommandClient,
-                                         block_until_arm_arrives, blocking_stand)
-from bosdyn.client.math_helpers import SE3Pose, Quat
+from bosdyn.client.robot_command import (
+    RobotCommandBuilder,
+    RobotCommandClient,
+    block_until_arm_arrives,
+    blocking_stand,
+)
 
 # BODSYN: Utils
-from bosdyn.util import seconds_to_duration, duration_to_seconds
+from bosdyn.util import duration_to_seconds, seconds_to_duration
+from google.protobuf import wrappers_pb2
 
 # CONQ: Clients
 from conq.clients import Clients
-# CONQ: Wrappers
-from conq.manipulation import blocking_arm_command, get_is_grasping, add_follow_with_body #, open_gripper
-from conq.hand_motion import hand_pose_cmd_in_frame
-from conq.manipulation import add_follow_with_body
-from conq.hand_motion import hand_pose_cmd, hand_pose_cmd_to_vision
-from conq.utils import setup_and_stand
+from conq.hand_motion import (
+    hand_pose_cmd,
+    hand_pose_cmd_in_frame,
+    hand_pose_cmd_to_vision,
+)
 
+# CONQ: Wrappers
+from conq.manipulation import (  # , open_gripper
+    add_follow_with_body,
+    blocking_arm_command,
+    get_is_grasping,
+)
+from conq.manipulation_lib.Grasp import get_best_grasp_pose, get_grasp_candidates
+
+# CONQ: Manipulation modules
+from conq.manipulation_lib.Manipulation import close_gripper, move_gripper, open_gripper
+from conq.manipulation_lib.Perception3D import PointCloud, Vision, VisualPoseAcquirer
+
+# CONQ: Utils
 # CONQ: Manipulation 
-from conq.manipulation_lib.utils import make_robot_command, hand_pose_cmd_to_frame
+from conq.manipulation_lib.utils import (
+    get_segmask,
+    get_segmask_manual,
+    hand_pose_cmd_to_frame,
+    make_robot_command,
+    rotate_quaternion,
+    verify_estop,
+)
+from conq.utils import setup_and_stand
 
 
 def grasped_bool(clients: Clients):
@@ -105,6 +144,27 @@ def close_gripper(clients: Clients):
         time.sleep(1)  # FIXME: how to block on a gripper command?
         return True
     except:
+        return False
+
+def perform_grasp(clients: Clients, blocking=True):
+    """
+    Perform grasp action
+    """
+    try:
+        # Call Grasp detection Module
+        grasp_pose = get_best_grasp_pose()
+        modified_pose = list(grasp_pose)
+        # modified_pose[0]-=0.30
+        new_grasp_pose = tuple(modified_pose)
+
+        rotated_pose = rotate_quaternion(new_grasp_pose,-90,axis=(0,1,0))
+
+        # Execute grasp
+        status = move_gripper(clients, rotated_pose, blocking = True, duration = 1)
+        status = close_gripper(clients)
+        return status
+    except Exception as e:
+        print(e)
         return False
 
 def move_joint_trajectory(clients: Clients,joint_targets, max_vel=2.5, max_acc=15, times=[2.0,4.0]):
