@@ -91,3 +91,26 @@ class OpenAINavClient:
                 )
 
         return probabilities_out
+
+    @limits(calls=3, period=ONE_MINUTE)
+    def generate_label_for_image(self, prompt="Please describe the primary function of the following group of tools in a concise manner using no more than five words and avoid general terms like \"essential\" or \"gardening\".", image_url="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT354l_oPc87wCqcXwlLKCRPLfZUP-Cs3Wbzw&usqp=CAU"):
+        response = self.llm_client.chat.completions.create(
+            model=os.environ["model"],
+            messages=[
+                {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url,
+                    },
+                    },
+                ],
+                }
+            ],
+            temperature=0,
+        )
+    
+        print(response.choices[0].message.content)
