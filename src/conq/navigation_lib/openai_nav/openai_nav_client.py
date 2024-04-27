@@ -138,6 +138,7 @@ class OpenAINavClient:
             temperature=0,
         )
         print(response.choices[0].message.content)
+        return response.choices[0].message.content
 
 
 def encode_image_array(image_np):

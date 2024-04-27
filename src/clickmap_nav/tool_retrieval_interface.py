@@ -7,7 +7,7 @@ import bosdyn.client.util
 import numpy as np
 from arm_segmentation.predictor import Predictor
 from bosdyn.client import math_helpers
-from bosdyn.client.frame_helpers import get_vision_tform_body
+from bosdyn.client.frame_helpers import get_a_tform_b, get_vision_tform_body
 from bosdyn.client.image import ImageClient
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
@@ -15,9 +15,12 @@ from click_map_interface import ClickMapInterface
 from view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 
 from conq.cameras_utils import (  # , get_depth_img
+    DEPTH_SOURCES,
+    RGB_SOURCES,
     annotate_frame,
     display_image,
     get_color_img,
+    get_depth_img,
 )
 from conq.clients import Clients
 from conq.manipulation import (
@@ -402,35 +405,51 @@ class ToolRetrievalInferface(ClickMapInterface):
             # If the predicitons is not empty, then pass the image to ChatGPT to gather information about the object
             if xy_pixel is not None and rgb_response is not None:
                 # Get the current localization status to find the robot in the world frame
+
+                # TRANSFORM FROM sensor frame to TARGET frame
+
+                # TODO: Get the depth information from the frame that the object was detected in. This needs to be debugged
+                # depth_np, depth_res = get_depth_img(
+                #     self.image_client, rgb_response.source.name
+                # )
+                # BODY_T_SENSOR = get_a_tform_b(
+                #     rgb_response.shot.transforms_snapshot,
+                #     "body",
+                #     rgb_response.source.name,
+                # )  # 4x4
+                # body_T_sensor = np.dot(
+                #     BODY_T_SENSOR.to_matrix(),
+                #     np.array(
+                #         [
+                #             xy_pixel[0],
+                #             xy_pixel[1],
+                #             depth_np[int(xy_pixel[1]), int(xy_pixel[0])],
+                #             1,
+                #         ]
+                #     ),
+                # ).T  # Nx4
+
                 seed_tform_body = math_helpers.SE3Pose.from_proto(
                     self._get_localization_state().localization.seed_tform_body
                 )
 
-                # Going from vision frame to body frame
-                body_tform_vision = get_vision_tform_body(
-                    rgb_response.shot.transforms_snapshot
-                )
-
                 # Going from pixel frame to vision frame
                 # Make sure all input are not none
-                if seed_tform_body is not None and body_tform_vision is not None:
-                    pixels_in_seed = (
-                        seed_tform_body.to_matrix()
-                        @ body_tform_vision.to_matrix()
-                        @ np.array([xy_pixel[0], xy_pixel[1], 0, 1])
-                    )
+                if seed_tform_body is not None:
+                    # pixels_in_seed = seed_tform_body.to_matrix() @ body_T_sensor
 
                     # TODO: Use the transform function to get the object position in the world frame
                     curr_object_label = (
                         self.open_ai_nav_client.generate_label_for_image(image=rgb_np)
                     )
+                    # Currently setting the waypoint to where the robot is to test the semantic information since depth needs to be debugged.
                     self.semantic_information.create_waypoint(
                         curr_object_label,
-                        (pixels_in_seed[0], pixels_in_seed[1], pixels_in_seed[2]),
+                        seed_tform_body,
                     )
-                    print(
-                        f"Added semantic information to the map: {self.semantic_information.semantic_waypoints}"
-                    )
+
+        # Return home
+        self._navigate_to([self.waypoint_to_timestamp[0][0]])
         return
 
     def print_controls(self):
@@ -475,12 +494,11 @@ class ToolRetrievalInferface(ClickMapInterface):
         if len(self.semantic_information.semantic_waypoints) == 0:
             print("No semantic information to navigate to.")
             return
-        self._navigate_to_anchor(
-            [
-                self.semantic_information.coordinates[0],
-                self.semantic_information.coordinates[1],
-            ]
-        )
+        position = self.semantic_information.semantic_waypoints[0].coordinates.position
+        rotation = self.semantic_information.semantic_waypoints[0].coordinates.rotation
+        x, y, z = position.x, position.y, position.z
+        qx, qy, qz, qw = rotation.x, rotation.y, rotation.z, rotation.w
+        self._navigate_to_anchor([x, y, z, qw, qx, qy, qz])
 
 
 def main(argv):

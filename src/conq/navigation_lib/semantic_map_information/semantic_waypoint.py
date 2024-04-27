@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from typing import Tuple
 
+from bosdyn.client.math_helpers import SE3Pose
+
+
 @dataclass
 class SemanticWaypoint:
     """
@@ -8,4 +11,4 @@ class SemanticWaypoint:
     """
 
     name: str
-    coordinates: Tuple[float, float, float]
+    coordinates: SE3Pose
