@@ -3,7 +3,7 @@ import time
 from typing import Optional, Tuple, Union
 
 # CONQ: Perception-> Object Track/Pose Estimator
-import apriltag  # FIXME: Temporary until integrated with 6-DOF object pose estimator
+# import apriltag  # FIXME: Temporary until integrated with 6-DOF object pose estimator
 import cv2
 import numpy as np
 import open3d as o3d

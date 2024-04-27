@@ -57,9 +57,6 @@ from conq.manipulation import (  # , open_gripper
 )
 from conq.manipulation_lib.Grasp import get_best_grasp_pose, get_grasp_candidates
 
-# CONQ: Manipulation modules
-from conq.manipulation_lib.Manipulation import close_gripper, move_gripper, open_gripper
-from conq.manipulation_lib.Perception3D import PointCloud, Vision, VisualPoseAcquirer
 
 # CONQ: Utils
 # CONQ: Manipulation 

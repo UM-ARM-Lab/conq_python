@@ -34,8 +34,11 @@ from conq.manipulation import (
     rotate_body_in_place,
 )
 
+# CONQ PERCEPTION LIBS:
+from conq.perception_lib.get_mask import lang_sam
+
 # CONQ MANIPULATION LIBS:
-from conq.manipulation_lib.Manipulation import perform_grasp
+from conq.manipulation_lib.Manipulation import perform_grasp, open_gripper
 
 # CONQ MANIPULATION-PERCEPTION LIBS:
 from conq.manipulation_lib.Perception3D import PointCloud, Vision
@@ -186,15 +189,14 @@ class ToolRetrievalInferface(ClickMapInterface):
                     print(
                         f"Picking up {object_class} at {pixel_xy} in {rgb_response.source.name}"
                     )
-                    
+                    status = open_gripper(self.clients)
                     # Point cloud segmentation
                     rgb = vision.get_latest_RGB() # Segment this image
                     depth = vision.get_latest_Depth()
-                    
                     xyz = pointcloud.get_raw_point_cloud()
 
                     # Lang-SAM mask
-                    seg_mask = get_segmask_manual()
+                    seg_mask, _, _  = lang_sam(rgb, object_class)
 
                     # Segment pointcloud
                     pointcloud.segment_xyz(seg_mask)

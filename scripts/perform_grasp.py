@@ -34,6 +34,9 @@ from conq.clients import Clients
 from conq.manipulation_lib.Manipulation import move_gripper, open_gripper, close_gripper
 from conq.manipulation_lib.Perception3D import VisualPoseAcquirer, PointCloud, Vision
 from conq.manipulation_lib.Grasp import get_grasp_candidates, get_best_grasp_pose
+
+# CONQ: Perception modules
+from conq.perception_lib.get_mask import lang_sam
 # CONQ: Utils
 from conq.manipulation_lib.utils import verify_estop, get_segmask_manual, get_segmask, rotate_quaternion
 
@@ -99,8 +102,8 @@ if __name__ == "__main__":
         block_until_arm_arrives(command_client, cmd_id)
     
         # Task 1: Look at scene
-        # gaze_pose = (0.75,0.0,0.3, 0.7071,0.,0.7071,0)
-        gaze_pose = (0.75,0.0,0.3, 1,0.,0.,0.)
+        gaze_pose = (0.75,0.0,0.3, 0.7071,0.,0.7071,0)
+        # gaze_pose = (0.75,0.0,0.3, 1,0.,0.,0.)
         status = move_gripper(clients, gaze_pose, blocking = True, duration = 0.1)
         # Task 1.1: Open gripper
         status = open_gripper(clients)
@@ -119,11 +122,13 @@ if __name__ == "__main__":
                 xyz = pointcloud.get_raw_point_cloud() # RAW point cloud (N,3)
                 print("Shape of xyz: ", np.shape(xyz))
                 # Get segmentation mask from Lang-SAM
+                seg_mask, _, _ = lang_sam(rgb, "hose handle")
+                print(seg_mask.squeeze().shape)
                 # Random segmentation mask
-                seg_mask = get_segmask_manual(RGB_PATH+"live.jpg", save_path = MASK_PATH)
+                # seg_mask = get_segmask_manual(RGB_PATH+"live.jpg", save_path = MASK_PATH)
 
                 # Segment pointcloud
-                pointcloud.segment_xyz(seg_mask)
+                pointcloud.segment_xyz(seg_mask.squeeze().numpy())
 
                 pointcloud.save_pcd(path = PCD_PATH)
                 pointcloud.save_npy(path = NPY_PATH)
