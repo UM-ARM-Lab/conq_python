@@ -11,8 +11,8 @@ A `.env` file must be set in the [`nvaigation_lib`](../navigation_lib/) director
 OPENAI_API_KEY=<KEY>
 API_VERSION=YYYY-MM-DD
 openai_api_base=https://api.umgpt.umich.edu/azure-openai-api
-OPENAI_organization=<BILLING_SHORTCODE>
-model=gpt-35-turbo
+OPENAI_organization=<BILLING_SHORTCODE> # Only needed if using UM-GPT 
+model=gpt-4-turbo
 ```
 
 ## Some helpful AzureOpenAI documentation:
