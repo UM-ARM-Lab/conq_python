@@ -60,7 +60,7 @@ def image_to_opencv(image, auto_rotate=False):
 
 def rotate_image(img, angle):
     img = np.asarray(Image.fromarray(img).rotate(angle, expand=True))
-    return img
+    return imgrgb_np
 
 
 def get_color_img(image_client, src):
