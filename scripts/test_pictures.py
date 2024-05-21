@@ -16,7 +16,16 @@ from bosdyn.client.lease import LeaseClient
 
 # Conq
 from conq.clients import Clients
-from conq.manipulation_lib.utils import stand
+from conq.manipulation_lib.utils import verify_estop, get_segmask_manual, get_segmask, rotate_quaternion, unstow_arm, stow_arm, stand
+
+# Image utils
+from conq.cameras_utils import get_color_img
+
+# Assorted
+import cv2
+import time
+import numpy as np
+import json
 
 def verify_estop(robot):
     """Verify the robot is not estopped"""
@@ -28,8 +37,11 @@ def verify_estop(robot):
         robot.logger.error(error_message)
         raise Exception(error_message)
 
+
+    
+
 if __name__ == "__main__":
-    sources = 
+    sources = 'right_fisheye_image'
 
     # Create an instance of the boston dynamics sdk with a name
     # I think these functions are included in everything that is in the bosdyn.client package
@@ -49,8 +61,6 @@ if __name__ == "__main__":
     rc_client = robot.ensure_client(RayCastClient.default_service_name)
     command_client = robot.ensure_client(RobotCommandClient.default_service_name)
 
-    vision = Vision(image_client, sources)
-
     # I am fairly confident that this with statement's primary goal is to ensure that which ever device is currently leasing the robot is available through this entire function
     with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
         
@@ -67,4 +77,12 @@ if __name__ == "__main__":
         robot.logger.info('Commanding the robot to stand')
         stand(robot, command_client)
 
+        # This should return a numpy array which contains the image from the 'right_fisheye_image' camera on spot
+        image, _ = get_color_img(image_client, sources)
+        image = np.array(image,dtype=np.uint8)
+        # Printing out the shape of the image
+        print(np.shape(image))
         
+        cv2.imwrite(MEMORY_IMAGE_PATH + "test.jpg",image)
+
+        time.sleep(5)
