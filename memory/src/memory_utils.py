@@ -14,14 +14,13 @@ MEMORY_JSON_PATH = './memory/json/memory.json'
 # Constant for all of the sources spot will be using to gather information on its surroundings
 SOURCES = ['right_fisheye_image', 'left_fisheye_image', 'frontright_fisheye_image', 'frontleft_fisheye_image', 'back_fisheye_image']
 
-Item = namedtuple('Item', ['name', 'x', 'y'])
+Item = namedtuple('Item', ['x', 'y'])
 
 class Memory:
     def __init__(self, image_client):
         self.image_client = image_client
         # TODO: Make sure that this constructor properly reads the json file
-        self.object_set = {Item('monitor', 1, 1), Item('chair', 2, -1), Item('computer', 0.5, 0.5)}
-        self.json_list = list(self.object_set)
+        self.object_dict = {"chair": Item(1,1), "computer": Item(-1,0.5), "board": Item(2,2.5)}
 
 
     # The _ at the beginning of this member function is supposed to tell people that it is a "private" member function to the Memory class
@@ -39,9 +38,14 @@ class Memory:
 
     # This function will be used for writing to json files
     def _dump_json(self):
-        json_dump = json.dumps(self.json_list, indent = 4)
+        json_dump = json.dumps(self.object_dict, indent = 4)
         with open(MEMORY_JSON_PATH, 'w') as json_file:
             json_file.write(json_dump)
+
+    def _load_json(self):
+        with open(MEMORY_JSON_PATH, 'r') as json_file:
+            dictOfLists = json.load(json_file)
+            self.object_dict = {key: Item(dictOfLists[key][0], dictOfLists[key][1]) for key in dictOfLists}
 
     # This function calls _storeLens on all of the sources to capture the images in each of the lens
     def observe_surroundings(self):
@@ -58,4 +62,6 @@ class Memory:
         self.json_list.append(new_waypoint) # I think pyright is buggin here
 
 memory = Memory("image_client")
+memory._dump_json()
+memory._load_json()
 memory._dump_json()
