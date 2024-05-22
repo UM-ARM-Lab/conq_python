@@ -1,4 +1,5 @@
 # Conq perception
+from collections import namedtuple
 from conq.cameras_utils import get_color_img
 
 # Misc
@@ -13,17 +14,15 @@ MEMORY_JSON_PATH = './memory/json/memory.json'
 # Constant for all of the sources spot will be using to gather information on its surroundings
 SOURCES = ['right_fisheye_image', 'left_fisheye_image', 'frontright_fisheye_image', 'frontleft_fisheye_image', 'back_fisheye_image']
 
-class Waypoint:
-    def __init__(self, index):
-        self.index = index
-        self.objects = []
-        self.description = "no description provided"
+Item = namedtuple('Item', ['name', 'x', 'y'])
 
 class Memory:
     def __init__(self, image_client):
         self.image_client = image_client
         # TODO: Make sure that this constructor properly reads the json file
-        self.json_list = ["words", "more", "words"]
+        self.object_set = {Item('monitor', 1, 1), Item('chair', 2, -1), Item('computer', 0.5, 0.5)}
+        self.json_list = list(self.object_set)
+
 
     # The _ at the beginning of this member function is supposed to tell people that it is a "private" member function to the Memory class
     def _store_lens(self, source):
@@ -41,7 +40,7 @@ class Memory:
     # This function will be used for writing to json files
     def _dump_json(self):
         json_dump = json.dumps(self.json_list, indent = 4)
-        with open(MEMORY_JSON_PATH) as json_file:
+        with open(MEMORY_JSON_PATH, 'w') as json_file:
             json_file.write(json_dump)
 
     # This function calls _storeLens on all of the sources to capture the images in each of the lens
