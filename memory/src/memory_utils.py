@@ -18,10 +18,11 @@ Item = namedtuple('Item', ['x', 'y'])
 
 class Memory:
     def __init__(self, image_client):
+        # Save the image client for spot
         self.image_client = image_client
-        # TODO: Make sure that this constructor properly reads the json file
-        self.object_dict = {"chair": Item(1,1), "computer": Item(-1,0.5), "board": Item(2,2.5)}
 
+        # Load the existing memory json file into a dictionary of Item tuples
+        self._load_json()
 
     # The _ at the beginning of this member function is supposed to tell people that it is a "private" member function to the Memory class
     def _store_lens(self, source):
@@ -53,13 +54,6 @@ class Memory:
         for source in SOURCES:
             self._store_lens(source)
     
-    def write_object_to_waypoint(self, waypoint_index):
-        assert waypoint_index < len(self.json_list), "waypoint_index is out of bounds for json_list"
-        waypoint = self.json_list[waypoint_index]
-
-    def add_waypoint(self):
-        new_waypoint = Waypoint(len(self.json_list))
-        self.json_list.append(new_waypoint) # I think pyright is buggin here
 
 memory = Memory("image_client")
 memory._dump_json()
