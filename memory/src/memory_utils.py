@@ -42,7 +42,7 @@ class Memory:
         json_dump = json.dumps(self.object_dict, indent = 4)
         with open(MEMORY_JSON_PATH, 'w') as json_file:
             json_file.write(json_dump)
-
+    # This function writes all of the objects that spot has taken note of to a json file
     def _load_json(self):
         with open(MEMORY_JSON_PATH, 'r') as json_file:
             dictOfLists = json.load(json_file)
