@@ -12,6 +12,9 @@ from conq.cameras_utils import get_color_img
 # Conq Manipulation
 from conq.manipulation_lib.utils import verify_estop, stand
 
+# Conq Memory
+from conq.memory.src.dream_utils import Dreaming
+
 # Misc
 import cv2
 import numpy as np
@@ -28,6 +31,9 @@ Item = namedtuple('Item', ['x', 'y'])
 
 class Memory:
     def __init__(self, image_client):
+        # Create the dreaming object that memory will interface with
+        self.dreaming = Dreaming()
+        
         # Save the image client for spot
         self.image_client = image_client
 
@@ -68,5 +74,10 @@ class Memory:
         # Save all of the images from conq's sources in the temporary image folder
         for source in SOURCES:
             self._store_lens(source)
+            
+    # This function begins the dreaming sequence
+    def dream(self):
+        self.dreaming.detect_objects()
+
 
 

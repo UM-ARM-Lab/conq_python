@@ -51,3 +51,4 @@ if __name__ == "__main__":
         memory._load_json()
         memory._dump_json()
         memory.observe_surroundings()
+        memory.dream()
