@@ -4,13 +4,14 @@ import bosdyn.client.lease
 from bosdyn.client.image import ImageClient
 from bosdyn.client.lease import LeaseClient
 from bosdyn.client.robot_command import RobotCommandClient
+from bosdyn.client.robot_command import RobotCommandBuilder
 
 # Conq Manipulation
 from conq.manipulation_lib.utils import verify_estop, stand
 
 # Conq Memory
-import memory.src.memory_utils
-from memory.src.memory_utils import Memory
+import conq.memory.src.memory_utils
+from conq.memory.src.memory_utils import Memory
 
 # Testing for the functions
 if __name__ == "__main__":
@@ -41,7 +42,8 @@ if __name__ == "__main__":
         # Create a client object which is just a "struct" of all of the other clients used on the robot packaged nicely
         
         robot.logger.info('Commanding the robot to stand')
-        stand(robot, command_client)
+        my_params = RobotCommandBuilder.mobility_params(body_height=0.5)
+        stand(robot, command_client, params=my_params)
 
         # This should return a numpy array which contains the image from the 'right_fisheye_image' camera on spot
         memory = Memory(image_client)

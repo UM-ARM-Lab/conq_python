@@ -60,7 +60,7 @@ def image_to_opencv(image, auto_rotate=False):
 
 def rotate_image(img, angle):
     img = np.asarray(Image.fromarray(img).rotate(angle, expand=True))
-    return imgrgb_np
+    return img
 
 
 def get_color_img(image_client, src):
@@ -74,7 +74,7 @@ def get_color_img(image_client, src):
     """
     rgb_request = build_image_request(src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
     rgb_response: ImageResponse = image_client.get_image([rgb_request])[0]
-    rgb_np = image_to_opencv(rgb_response)
+    rgb_np = image_to_opencv(rgb_response, auto_rotate=True)
     return rgb_np, rgb_response
 
 

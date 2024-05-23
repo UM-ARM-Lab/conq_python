@@ -105,9 +105,9 @@ def stow_arm(robot, command_client):
     robot.logger.info('Stow command issued.')
     block_until_arm_arrives(command_client, stow_command_id, 3.0)
 
-def stand(robot, command_client):
+def stand(robot, command_client, params=None):
     robot.logger.info('Commanding robot to stand...')
-    blocking_stand(command_client, timeout_sec=10)
+    blocking_stand(command_client, timeout_sec=10, params=params)
     robot.logger.info('Robot standing.')
 
 #### PERCEPTION UTILS ####

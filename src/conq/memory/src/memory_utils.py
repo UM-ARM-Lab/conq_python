@@ -18,8 +18,8 @@ import numpy as np
 import json
 
 # Constant values for pathing
-MEMORY_IMAGE_PATH = './memory/memory_images/'
-MEMORY_JSON_PATH = './memory/json/memory.json'
+MEMORY_IMAGE_PATH = './data/memory_images/'
+MEMORY_JSON_PATH = './data/json/memory.json'
 
 # Constant for all of the sources spot will be using to gather information on its surroundings
 SOURCES = ['right_fisheye_image', 'left_fisheye_image', 'frontright_fisheye_image', 'frontleft_fisheye_image', 'back_fisheye_image']
@@ -39,6 +39,7 @@ class Memory:
         # Use the existing conq code to grab images in order to read images from conq's cameras
         image, _ = get_color_img(self.image_client, source)
         image = np.array(image,dtype=np.uint8)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         # Printing out the shape of the image
         dims = np.shape(image)
