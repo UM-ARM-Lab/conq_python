@@ -66,7 +66,7 @@ class Memory:
         print(f"Saving an image of size: {dims[0]} {dims[1]} {dims[2]} from source {source}")
     
         # Save the image
-        cv2.imwrite(MEMORY_IMAGE_PATH + source + '-' + waypoint_id + ".jpg", image)
+        cv2.imwrite(MEMORY_IMAGE_PATH + source + '-' + str(waypoint_id) + ".jpg", image)
 
     # This function will be used for writing to json files
     def _dump_json(self):
@@ -87,7 +87,7 @@ class Memory:
     def observe_surroundings(self):
         # Save all of the images from conq's sources in the temporary image folder
         for source in SOURCES:
-            self._store_lens(source)
+            self._store_lens(source, 1)
             
     # This function begins the dreaming sequence
     def dream(self):
@@ -97,6 +97,3 @@ class Memory:
             
             #for obj in curr_objects:
                 #new_obj = Item(obj, "lounge", [1])
-
-mem = Memory("image_client")
-print(mem.dream())
