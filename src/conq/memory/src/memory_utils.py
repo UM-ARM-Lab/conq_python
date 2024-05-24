@@ -25,13 +25,16 @@ MEMORY_IMAGE_PATH = './data/memory_images/'
 MEMORY_JSON_PATH = './data/json/memory.json'
 
 # Constant for all of the sources spot will be using to gather information on its surroundings
-SOURCES = ['right_fisheye_image', 'left_fisheye_image', 'frontright_fisheye_image', 'frontleft_fisheye_image', 'back_fisheye_image']
+SOURCES = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image']
 
 EXAMPLE_JSON = """
 {
     "chair": [
         "chair",
-        "lounge",
+        [
+            "lounge",
+            "seating area"
+        ],
         [
             1,
             2,
@@ -41,7 +44,11 @@ EXAMPLE_JSON = """
 }
 """
 
-Item = namedtuple('Item', ['name', 'area', 'waypoints_list'])
+NAME_INDEX = 0
+AREA_INDEX = 1
+WAYPOINT_INDEX = 2
+
+Item = namedtuple('Item', ['name', 'area_dict', 'waypoints_dict'])
 
 class Memory:
     def __init__(self, image_client):
@@ -50,6 +57,8 @@ class Memory:
         
         # Save the image client for spot
         self.image_client = image_client
+
+        #self._clear_json()
 
         # Load the existing memory json file into a dictionary of Item tuples
         self._load_json()
@@ -70,6 +79,7 @@ class Memory:
 
     # This function will be used for writing to json files
     def _dump_json(self):
+        self.object_dict = {key: Item(self.object_dict[key][0], list(self.object_dict[key][1]), list(self.object_dict[key][2])) for key in self.object_dict}
         json_dump = json.dumps(self.object_dict, indent = 4)
         with open(MEMORY_JSON_PATH, 'w') as json_file:
             json_file.write(json_dump)
@@ -78,10 +88,25 @@ class Memory:
     def _load_json(self):
         with open(MEMORY_JSON_PATH, 'r') as json_file:
             dictOfLists = json.load(json_file)
-            self.object_dict = {key: Item(dictOfLists[key][0], dictOfLists[key][1], dictOfLists[key][2]) for key in dictOfLists}
+            self.object_dict = {key: Item(dictOfLists[key][0], set(dictOfLists[key][1]), set(dictOfLists[key][2])) for key in dictOfLists}
 
-    def _add_object(self, name, attributes):
-        self.object_dict[name] = attributes
+    def _clear_json(self):
+        # Write an empty JSON object to the file
+        with open(MEMORY_JSON_PATH, 'w') as json_file:
+            json.dump({}, json_file, indent=4)
+
+
+    def _add_object(self, item):
+        if item.name in self.object_dict.keys():
+            # Append the observed waypoint to the master waypoints
+            for waypoint_id in item.waypoints_dict:
+                self.object_dict[item.name][WAYPOINT_INDEX].add(waypoint_id)
+            
+            # Append the observed areas to the master areas
+            for area in item.area_dict:
+                self.object_dict[item.name][AREA_INDEX].add(area)
+        else:
+            self.object_dict[item.name] = item
 
     # This function calls _storeLens on all of the sources to capture the images in each of the lens
     def observe_surroundings(self):
@@ -92,8 +117,10 @@ class Memory:
     # This function begins the dreaming sequence
     def dream(self):
         while self.dreamer.can_dream():
-            #waypoint_id, curr_objects, curr_areas = 
-            print(self.dreamer.detect_objects())
+            waypoint_id, curr_objects, curr_areas = self.dreamer.detect_objects()
+            print(waypoint_id, curr_objects, curr_areas)
             
-            #for obj in curr_objects:
-                #new_obj = Item(obj, "lounge", [1])
+            for obj in curr_objects:
+                if not obj == 'None':
+                    new_item = Item(obj, curr_areas, [waypoint_id])
+                    self._add_object(new_item)

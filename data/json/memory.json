@@ -1,11 +1,73 @@
 {
-    "chair": [
-        "chair",
-        "lounge",
+    "flashlight": [
+        "flashlight",
         [
-            1,
-            2,
-            3
+            "hallway",
+            "seating area"
+        ],
+        [
+            1
+        ]
+    ],
+    "drill": [
+        "drill",
+        [
+            "storage area",
+            "workshop area"
+        ],
+        [
+            1
+        ]
+    ],
+    "shovel": [
+        "shovel",
+        [
+            "meeting area",
+            "workspace",
+            "lounge area"
+        ],
+        [
+            1
+        ]
+    ],
+    "bucket": [
+        "bucket",
+        [
+            "corridor",
+            "seating area"
+        ],
+        [
+            1
+        ]
+    ],
+    "garden shear": [
+        "garden shear",
+        [
+            "corridor",
+            "seating area"
+        ],
+        [
+            1
+        ]
+    ],
+    "backpack": [
+        "backpack",
+        [
+            "corridor",
+            "seating area"
+        ],
+        [
+            1
+        ]
+    ],
+    "hoe": [
+        "hoe",
+        [
+            "meeting area",
+            "workspace"
+        ],
+        [
+            1
         ]
     ]
 }

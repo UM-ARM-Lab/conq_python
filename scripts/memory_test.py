@@ -47,8 +47,6 @@ if __name__ == "__main__":
 
         # This should return a numpy array which contains the image from the 'right_fisheye_image' camera on spot
         memory = Memory(image_client)
-        memory._dump_json()
-        memory._load_json()
-        memory._dump_json()
         memory.observe_surroundings()
         memory.dream()
+        memory._dump_json()
