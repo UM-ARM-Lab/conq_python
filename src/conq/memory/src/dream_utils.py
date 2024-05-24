@@ -5,8 +5,11 @@ import os
 import re
 import random
 from dotenv import load_dotenv
+import json
 
 MEMORY_IMAGES_DATAPATH = './data/memory_images/'
+MEMORY_JSON_PATH = './data/json/memory.json'
+AREA_MEMORY_JSON_PATH = './data/json/area_memory.json'
 
 # This is a class that memory interfaces while "dreaming"
 class Dreaming: 
@@ -116,3 +119,54 @@ class Dreaming:
         os.remove(path)
 
         return waypoint_id, obj_list, area_list
+    
+    def create_object_area_connections(self):
+
+        object_json = None
+        area_json = None
+        with open(MEMORY_JSON_PATH, 'r') as json_file:
+            object_json = json.load(json_file)
+
+        with open(AREA_MEMORY_JSON_PATH, 'r') as json_file:
+            area_json = json.load(json_file)
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.GPT_KEY}"
+        }
+
+        payload = {
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "system", "content": """
+                You are an expert farm/garden tool reasoning and sorting robot. Your job is to identify which farm/garden objects/tools belong in which areas of the space. You will be given a json containing farm/garden tools and a json containing areas within the farm/garden and will output the most likely areas each object is associated with in descending order of confidence. You will output it in this format obj: area1, area2, ...
+                
+                For example, if your objects json has hammer, coffee pot, lawnmower, and your areas json has tool shed, bathroom, garage, seating area, your output should look like this:
+                
+                hammer: tool shed, garage, seating area, bathroom
+                coffee pot: seating area, garage, tool shed, bathroom
+                lawnmower: garage, tool shed, seating area, bathroom
+                
+                """},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"""
+                            Print out tool/object - area relationships.
+                            objects json: {object_json}
+                            areas json: {area_json}
+                            """
+                        },
+                    ]
+                }
+            ],
+            "max_tokens": 300
+        }
+
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+        print(response.json()['choices'][0]['message']['content'])
+
+dream = Dreaming()
+dream.create_object_area_connections()

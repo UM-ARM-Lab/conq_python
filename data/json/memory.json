@@ -2,29 +2,26 @@
     "bucket": [
         "bucket",
         [
-            "lounge area",
-            "workspace area",
+            "seating area",
             "hallway"
         ],
         [
             1
         ]
     ],
-    "trowel": [
-        "trowel",
+    "scissors": [
+        "scissors",
         [
-            "lounge area",
-            "workspace area",
+            "seating area",
             "hallway"
         ],
         [
             1
         ]
     ],
-    "drill": [
-        "drill",
+    "power drill": [
+        "power drill",
         [
-            "workshop area",
             "storage area"
         ],
         [
@@ -35,7 +32,8 @@
         "shovel",
         [
             "seating area",
-            "entrance"
+            "meeting area",
+            "hallway"
         ],
         [
             1
