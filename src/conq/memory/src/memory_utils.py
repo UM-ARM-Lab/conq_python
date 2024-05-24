@@ -27,12 +27,26 @@ MEMORY_JSON_PATH = './data/json/memory.json'
 # Constant for all of the sources spot will be using to gather information on its surroundings
 SOURCES = ['right_fisheye_image', 'left_fisheye_image', 'frontright_fisheye_image', 'frontleft_fisheye_image', 'back_fisheye_image']
 
-Item = namedtuple('Item', ['x', 'y'])
+EXAMPLE_JSON = """
+{
+    "chair": [
+        "chair",
+        "lounge",
+        [
+            1,
+            2,
+            3
+        ]
+    ]
+}
+"""
+
+Item = namedtuple('Item', ['name', 'area', 'waypoints_list'])
 
 class Memory:
     def __init__(self, image_client):
         # Create the dreaming object that memory will interface with
-        self.dreaming = Dreaming()
+        self.dreamer = Dreaming()
         
         # Save the image client for spot
         self.image_client = image_client
@@ -41,7 +55,7 @@ class Memory:
         self._load_json()
 
     # The _ at the beginning of this member function is supposed to tell people that it is a "private" member function to the Memory class
-    def _store_lens(self, source):
+    def _store_lens(self, source, waypoint_id):
         # Use the existing conq code to grab images in order to read images from conq's cameras
         image, _ = get_color_img(self.image_client, source)
         image = np.array(image,dtype=np.uint8)
@@ -52,7 +66,7 @@ class Memory:
         print(f"Saving an image of size: {dims[0]} {dims[1]} {dims[2]} from source {source}")
     
         # Save the image
-        cv2.imwrite(MEMORY_IMAGE_PATH + source + ".jpg", image)
+        cv2.imwrite(MEMORY_IMAGE_PATH + source + '-' + waypoint_id + ".jpg", image)
 
     # This function will be used for writing to json files
     def _dump_json(self):
@@ -64,7 +78,7 @@ class Memory:
     def _load_json(self):
         with open(MEMORY_JSON_PATH, 'r') as json_file:
             dictOfLists = json.load(json_file)
-            self.object_dict = {key: Item(dictOfLists[key][0], dictOfLists[key][1]) for key in dictOfLists}
+            self.object_dict = {key: Item(dictOfLists[key][0], dictOfLists[key][1], dictOfLists[key][2]) for key in dictOfLists}
 
     def _add_object(self, name, attributes):
         self.object_dict[name] = attributes
@@ -77,7 +91,12 @@ class Memory:
             
     # This function begins the dreaming sequence
     def dream(self):
-        self.dreaming.detect_objects()
+        while self.dreamer.can_dream():
+            #waypoint_id, curr_objects, curr_areas = 
+            print(self.dreamer.detect_objects())
+            
+            #for obj in curr_objects:
+                #new_obj = Item(obj, "lounge", [1])
 
-
-
+mem = Memory("image_client")
+print(mem.dream())
