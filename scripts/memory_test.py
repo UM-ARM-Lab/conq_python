@@ -51,3 +51,4 @@ if __name__ == "__main__":
         memory.dream()
         memory._dump_object_json()
         memory._dump_area_json()
+        memory.make_semantic_connections()

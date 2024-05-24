@@ -33,7 +33,7 @@ class Dreaming:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
         
-    def _parse_gpt_output(self, response):
+    def _parse_scene_output(self, response):
           # Regular expression to extract objects and areas
             objects_match = re.search(r"Objects: (.*)", response)
             areas_match = re.search(r"Areas: (.*)", response)
@@ -50,6 +50,8 @@ class Dreaming:
                 area_list = []
 
             return obj_list, area_list
+    
+    
     
     def _get_dream_waypoint(self):
         assert self.can_dream()
@@ -114,7 +116,7 @@ class Dreaming:
 
         response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
 
-        obj_list, area_list = self._parse_gpt_output(response.json()['choices'][0]['message']['content'])
+        obj_list, area_list = self._parse_scene_output(response.json()['choices'][0]['message']['content'])
 
         os.remove(path)
 
@@ -166,7 +168,22 @@ class Dreaming:
         }
 
         response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-        print(response.json()['choices'][0]['message']['content'])
+        connections_dict = self._parse_object_area_connections(response.json()['choices'][0]['message']['content'])
+        
+        return connections_dict
+    
+    def _parse_object_area_connections(self, response):
+        object_to_areas = {}
 
-dream = Dreaming()
-dream.create_object_area_connections()
+        lines = response.split('\n')
+
+        for line in lines:
+            object_name, areas_str = line.split(': ')
+            areas = areas_str.split(', ')
+            object_to_areas[object_name] = areas
+
+        return object_to_areas
+
+# dream = Dreaming()
+# response = dream.create_object_area_connections()
+# print(dream.parse_object_area_connections(response))

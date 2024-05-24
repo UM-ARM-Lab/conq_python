@@ -3,26 +3,50 @@
         "bucket",
         [
             "seating area",
+            "workspace",
             "hallway"
         ],
         [
             1
         ]
     ],
-    "scissors": [
-        "scissors",
+    "garden shears": [
+        "garden shears",
         [
             "seating area",
+            "workspace",
             "hallway"
         ],
         [
             1
         ]
     ],
-    "power drill": [
-        "power drill",
+    "hose nozzle": [
+        "hose nozzle",
         [
-            "storage area"
+            "seating area",
+            "workspace",
+            "hallway"
+        ],
+        [
+            1
+        ]
+    ],
+    "drill": [
+        "drill",
+        [
+            "office area"
+        ],
+        [
+            1
+        ]
+    ],
+    "hand cultivator": [
+        "hand cultivator",
+        [
+            "seating area",
+            "walkway",
+            "meeting area"
         ],
         [
             1
@@ -32,8 +56,8 @@
         "shovel",
         [
             "seating area",
-            "meeting area",
-            "hallway"
+            "walkway",
+            "meeting area"
         ],
         [
             1

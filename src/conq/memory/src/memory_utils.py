@@ -49,7 +49,7 @@ NAME_INDEX = 0
 AREA_INDEX = 1
 WAYPOINT_INDEX = 2
 
-Item = namedtuple('Item', ['name', 'area_dict', 'waypoints_dict'])
+Item = namedtuple('Item', ['name', 'area_list', 'waypoints_dict'])
 
 class Memory:
     def __init__(self, image_client):
@@ -94,7 +94,7 @@ class Memory:
     def _load_object_json(self):
         with open(MEMORY_JSON_PATH, 'r') as json_file:
             dictOfLists = json.load(json_file)
-            self.object_dict = {key: Item(dictOfLists[key][0], set(dictOfLists[key][1]), set(dictOfLists[key][2])) for key in dictOfLists}
+            self.object_dict = {key: Item(dictOfLists[key][0], dictOfLists[key][1], set(dictOfLists[key][2])) for key in dictOfLists}
 
     # This function writes a empty json object to the object json file
     def _clear_object_json(self):
@@ -105,7 +105,7 @@ class Memory:
     # This function puts all of the semantic areas that are stored inside of the json file into a dictionary
     def _load_area_json(self):
         with open(AREA_MEMORY_JSON_PATH, 'r') as json_file:
-            self.area_dict = json.load(json_file)
+            self.area_list = json.load(json_file)
 
     # This function writes a empty json object to the area json file
     def _clear_area_json(self):
@@ -115,7 +115,7 @@ class Memory:
 
     # This function will be used for writing to json files
     def _dump_area_json(self):
-        json_dump = json.dumps(self.area_dict, indent = 4)
+        json_dump = json.dumps(self.area_list, indent = 4)
         with open(AREA_MEMORY_JSON_PATH, 'w') as json_file:
             json_file.write(json_dump)
 
@@ -130,8 +130,8 @@ class Memory:
 
     # Updates all of the areas inside of the set to correspond to the appropriate waypoint
     def _add_area(self, item):
-        for area in item.area_dict:
-            self.area_dict[area] = item.waypoints_dict[0]
+        for area in item.area_list:
+            self.area_list[area] = item.waypoints_dict[0]
 
     #### PUBLIC MEMBER FUNCTIONS ####
 
@@ -152,3 +152,9 @@ class Memory:
                     new_item = Item(obj, curr_areas, [waypoint_id])
                     self._add_object(new_item)
                     self._add_area(new_item)
+
+    def make_semantic_connections(self):
+        connections_list = self.dreamer.create_object_area_connections()
+        
+        for k, v in connections_list.items():
+            self.object_dict[k][AREA_INDEX] = v
