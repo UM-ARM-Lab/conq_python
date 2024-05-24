@@ -1,9 +1,21 @@
 {
-    "flashlight": [
-        "flashlight",
+    "bucket": [
+        "bucket",
         [
-            "hallway",
-            "seating area"
+            "lounge area",
+            "workspace area",
+            "hallway"
+        ],
+        [
+            1
+        ]
+    ],
+    "trowel": [
+        "trowel",
+        [
+            "lounge area",
+            "workspace area",
+            "hallway"
         ],
         [
             1
@@ -12,8 +24,8 @@
     "drill": [
         "drill",
         [
-            "storage area",
-            "workshop area"
+            "workshop area",
+            "storage area"
         ],
         [
             1
@@ -22,49 +34,8 @@
     "shovel": [
         "shovel",
         [
-            "meeting area",
-            "workspace",
-            "lounge area"
-        ],
-        [
-            1
-        ]
-    ],
-    "bucket": [
-        "bucket",
-        [
-            "corridor",
-            "seating area"
-        ],
-        [
-            1
-        ]
-    ],
-    "garden shear": [
-        "garden shear",
-        [
-            "corridor",
-            "seating area"
-        ],
-        [
-            1
-        ]
-    ],
-    "backpack": [
-        "backpack",
-        [
-            "corridor",
-            "seating area"
-        ],
-        [
-            1
-        ]
-    ],
-    "hoe": [
-        "hoe",
-        [
-            "meeting area",
-            "workspace"
+            "seating area",
+            "entrance"
         ],
         [
             1

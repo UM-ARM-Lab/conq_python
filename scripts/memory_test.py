@@ -49,4 +49,5 @@ if __name__ == "__main__":
         memory = Memory(image_client)
         memory.observe_surroundings()
         memory.dream()
-        memory._dump_json()
+        memory._dump_object_json()
+        memory._dump_area_json()
