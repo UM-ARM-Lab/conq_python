@@ -46,13 +46,15 @@ class GraphNav:
         self._started_powered_on = (power_state.motor_power_state == power_state.STATE_ON)
         self._powered_on = self._started_powered_on
 
-
+        # Graphs
         # Store the most recent knowledge of the state of the robot based on rpc calls.
         self._current_graph = None
         self._current_edges = dict()  #maps to_waypoint to list(from_waypoint)
         self._current_waypoint_snapshots = dict()  # maps id to waypoint snapshot
         self._current_edge_snapshots = dict()  # maps id to edge snapshot
         self._current_annotation_name_to_wp_id = dict()
+
+    #### PRIVATE UTILITY FUNCTIONS
 
     def _upload_graph_and_snapshots(self):
         """Upload the graph and snapshots to the robot."""
@@ -108,7 +110,7 @@ class GraphNav:
                 ' the robot using commands (2) or (3) before attempting a navigation command.')
     
     # Convert the given waypoint name into 
-    def find_unique_waypoint_id(self, short_code, graph, name_to_id):
+    def _find_unique_waypoint_id(self, short_code, graph, name_to_id):
         """Convert either a 2 letter short code or an annotation name into the associated unique id."""
         if graph is None:
             print(
@@ -134,49 +136,15 @@ class GraphNav:
 
         ret = short_code
         for waypoint in graph.waypoints:
-            if short_code == self.id_to_short_code(waypoint.id):
+            if short_code == self._id_to_short_code(waypoint.id):
                 if ret != short_code:
                     return short_code  # Multiple waypoints with same short code.
                 ret = waypoint.id
         return ret
-                
-    # This function will tell spot to go to a specific waypoint NUMBER, please provide this function with an integer as the waypoint_number argument
-    def _navigate_to(self, waypoint_number):
-        waypoint_name = f'waypoint_{waypoint_number}'
-        destination_waypoint = self.find_unique_waypoint_id(
-            waypoint_name, self._current_graph, self._current_annotation_name_to_wp_id)
-        if not destination_waypoint:
-            # Failed to find the appropriate unique waypoint id for the navigation command.
-            return
-        if not self.toggle_power(should_power_on=True):
-            print('Failed to power on the robot, and cannot complete navigate to request.')
-            return
 
-        nav_to_cmd_id = None
-        # Navigate to the destination waypoint.
-        is_finished = False
-        while not is_finished:
-            # Issue the navigation command about twice a second such that it is easy to terminate the
-            # navigation command (with estop or killing the program).
-            try:
-                nav_to_cmd_id = self._graph_nav_client.navigate_to(destination_waypoint, 1.0,
-                                                                command_id=nav_to_cmd_id)
-            except ResponseError as e:
-                print(f'Error while navigating {e}')
-                break
-            time.sleep(.5)  # Sleep for half a second to allow for command execution.
-            # Poll the robot for feedback to determine if the navigation command is complete. Then sit
-            # the robot down once it is finished.
-            is_finished = self._check_success(nav_to_cmd_id)
-
-        # Power off the robot if appropriate.
-        if self._powered_on and not self._started_powered_on:
-            # Sit the robot down + power off after the navigation command is complete.
-            self.toggle_power(should_power_on=False)
-
-    def toggle_power(self, should_power_on):
+    def _toggle_power(self, should_power_on):
         """Power the robot on/off dependent on the current power state."""
-        is_powered_on = self.check_is_powered_on()
+        is_powered_on = self._check_is_powered_on()
         if not is_powered_on and should_power_on:
             # Power on the robot up before navigating when it is in a powered-off state.
             power_on_motors(self._power_client)
@@ -198,17 +166,17 @@ class GraphNav:
             # Return the current power state without change.
             return is_powered_on
         # Update the locally stored power state.
-        self.check_is_powered_on()
+        self._check_is_powered_on()
         return self._powered_on
     
-    def id_to_short_code(self, id):
+    def _id_to_short_code(self, id):
         """Convert a unique id to a 2 letter short code."""
         tokens = id.split('-')
         if len(tokens) > 2:
             return f'{tokens[0][0]}{tokens[1][0]}'
         return None
     
-    def check_is_powered_on(self):
+    def _check_is_powered_on(self):
         """Determine if the robot is powered on or off."""
         power_state = self._robot_state_client.get_robot_state().power_state
         self._powered_on = (power_state.motor_power_state == power_state.STATE_ON)
@@ -249,10 +217,10 @@ class GraphNav:
         localization_id = self._graph_nav_client.get_localization_state().localization.waypoint_id
 
         # Update and print waypoints and edges
-        self._current_annotation_name_to_wp_id, self._current_edges = self.update_waypoints_and_edges(
+        self._current_annotation_name_to_wp_id, self._current_edges = self._update_waypoints_and_edges(
             graph, localization_id)
         
-    def update_waypoints_and_edges(self, graph, localization_id, do_print=True):
+    def _update_waypoints_and_edges(self, graph, localization_id, do_print=True):
         """Update and print waypoint ids and edge ids."""
         name_to_id = dict()
         edges = dict()
@@ -271,7 +239,7 @@ class GraphNav:
             waypoint_to_timestamp.append((waypoint.id, timestamp, waypoint.annotations.name))
 
             # Determine how many waypoints have the same short code.
-            short_code = self.id_to_short_code(waypoint.id)
+            short_code = self._id_to_short_code(waypoint.id)
             if short_code not in short_code_to_count:
                 short_code_to_count[short_code] = 0
             short_code_to_count[short_code] += 1
@@ -297,7 +265,7 @@ class GraphNav:
         if do_print:
             print(f'{len(graph.waypoints):d} waypoints:')
             for waypoint in waypoint_to_timestamp:
-                self.pretty_print_waypoints(waypoint[0], waypoint[2], short_code_to_count, localization_id)
+                self._pretty_print_waypoints(waypoint[0], waypoint[2], short_code_to_count, localization_id)
 
         for edge in graph.edges:
             if edge.id.to_waypoint in edges:
@@ -311,8 +279,8 @@ class GraphNav:
 
         return name_to_id, edges
     
-    def pretty_print_waypoints(self, waypoint_id, waypoint_name, short_code_to_count, localization_id):
-        short_code = self.id_to_short_code(waypoint_id)
+    def _pretty_print_waypoints(self, waypoint_id, waypoint_name, short_code_to_count, localization_id):
+        short_code = self._id_to_short_code(waypoint_id)
         if short_code is None or short_code_to_count[short_code] != 1:
             short_code = '  '  # If the short code is not valid/unique, don't show it.
 
@@ -320,7 +288,44 @@ class GraphNav:
         print(
             f'{waypoint_symbol} Waypoint name: {waypoint_name} id: {waypoint_id} short code: {short_code}'
         )
+
+    #### PUBLIC MEMBER FUNCTIONS ####
+
+    # This function will tell spot to go to a specific waypoint name, waypoint names are of the format waypoint_{id_number}
+    def navigate_to(self, waypoint_number):
+        waypoint_name = f'waypoint_{waypoint_number}'
+        destination_waypoint = self._find_unique_waypoint_id(
+            waypoint_name, self._current_graph, self._current_annotation_name_to_wp_id)
+        if not destination_waypoint:
+            # Failed to find the appropriate unique waypoint id for the navigation command.
+            return
+        if not self._toggle_power(should_power_on=True):
+            print('Failed to power on the robot, and cannot complete navigate to request.')
+            return
+
+        nav_to_cmd_id = None
+        # Navigate to the destination waypoint.
+        is_finished = False
+        while not is_finished:
+            # Issue the navigation command about twice a second such that it is easy to terminate the
+            # navigation command (with estop or killing the program).
+            try:
+                nav_to_cmd_id = self._graph_nav_client.navigate_to(destination_waypoint, 1.0,
+                                                                command_id=nav_to_cmd_id)
+            except ResponseError as e:
+                print(f'Error while navigating {e}')
+                break
+            time.sleep(.5)  # Sleep for half a second to allow for command execution.
+            # Poll the robot for feedback to determine if the navigation command is complete. Then sit
+            # the robot down once it is finished.
+            is_finished = self._check_success(nav_to_cmd_id)
+
+        # Power off the robot if appropriate.
+        if self._powered_on and not self._started_powered_on:
+            # Sit the robot down + power off after the navigation command is complete.
+            self._toggle_power(should_power_on=False)
         
+# Setup and authenticate the robot.
 sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
 robot = sdk.create_robot('192.168.80.3')
 bosdyn.client.util.authenticate(robot) 
@@ -330,10 +335,7 @@ lease_client = robot.ensure_client(LeaseClient.default_service_name)
 lease_client.take()
 
 with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-    # Setup and authenticate the robot.
-    
-
     gn = GraphNav(robot)
     gn._upload_graph_and_snapshots()
     gn._list_graph_waypoint_and_edge_ids()
-    gn._navigate_to(0)
+    gn.navigate_to('waypoint_0')
