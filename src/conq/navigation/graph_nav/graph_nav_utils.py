@@ -54,10 +54,18 @@ class GraphNav:
         self._current_edge_snapshots = dict()  # maps id to edge snapshot
         self._current_annotation_name_to_wp_id = dict()
 
+        # Init the graph for spot to use
+        self._init_graph()
+
     #### PRIVATE UTILITY FUNCTIONS
 
+    # This function uploads the graph file from your computer and loads the waypoint names
+    def _init_graph(self):
+        self._upload_graph_and_snapshots()
+        self._list_graph_waypoint_and_edge_ids()
+
+    # This function uploads the graph file from your computer to spot
     def _upload_graph_and_snapshots(self):
-        """Upload the graph and snapshots to the robot."""
         print('Loading the graph from disk into local storage...')
         with open(self._upload_filepath + '/graph', 'rb') as graph_file:
             # Load the graph from disk.
@@ -336,6 +344,4 @@ lease_client.take()
 
 with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
     gn = GraphNav(robot)
-    gn._upload_graph_and_snapshots()
-    gn._list_graph_waypoint_and_edge_ids()
     gn.navigate_to('waypoint_0')
