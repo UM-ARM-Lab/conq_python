@@ -347,7 +347,7 @@ class GraphNav:
         if self._powered_on and not self._started_powered_on:
             # Sit the robot down + power off after the navigation command is complete.
             self._toggle_power(should_power_on=False)
-        
+
 # Setup and authenticate the robot.
 sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
 robot = sdk.create_robot('192.168.80.3')
