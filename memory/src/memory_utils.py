@@ -52,11 +52,15 @@ class Memory:
         json_dump = json.dumps(self.object_dict, indent = 4)
         with open(MEMORY_JSON_PATH, 'w') as json_file:
             json_file.write(json_dump)
+
     # This function writes all of the objects that spot has taken note of to a json file
     def _load_json(self):
         with open(MEMORY_JSON_PATH, 'r') as json_file:
             dictOfLists = json.load(json_file)
             self.object_dict = {key: Item(dictOfLists[key][0], dictOfLists[key][1]) for key in dictOfLists}
+
+    def _add_object(self, name, attributes):
+        self.object_dict[name] = attributes
 
     # This function calls _storeLens on all of the sources to capture the images in each of the lens
     def observe_surroundings(self):
