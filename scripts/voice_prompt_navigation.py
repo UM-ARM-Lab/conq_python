@@ -6,6 +6,7 @@ from conq.navigation.graph_nav.graph_nav_utils import GraphNav
 from conq.navigation.graph_nav.scene_labeler import SceneLabeler
 
 import speech_recognition as sr
+import time
 
 
 def recognize_speech_from_mic():
@@ -65,6 +66,10 @@ with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_
 
     print(f'Reached goal! Grasping {obj_of_interest}..')
 
-    gn.toggle_power(should_power_on=False)
+    time.sleep(2)
+
+    print(f'Going back to start point...')
+
+    gn.navigate_to('waypoint_0', sit_down_after_reached=True)
 
     

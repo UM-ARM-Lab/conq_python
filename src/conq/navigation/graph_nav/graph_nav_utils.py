@@ -1,5 +1,5 @@
 from bosdyn.api import robot_state_pb2
-from bosdyn.api.graph_nav import map_pb2, graph_nav_pb2
+from bosdyn.api.graph_nav import map_pb2, graph_nav_pb2, nav_pb2
 from bosdyn.client.graph_nav import GraphNavClient
 from bosdyn.client.power import power_on_motors, safe_power_off_motors, PowerClient
 from bosdyn.client.exceptions import ResponseError
@@ -18,7 +18,7 @@ class GraphNav:
     # Constructor that will initialize everything that is needed for navigating to waypoints
     def __init__(self, robot, is_debug=False):
         # Load the graph_nav graph file from the environment variable GRAPH_NAV_GRAPH_FILEPATH
-        load_dotenv('.env.local')
+        load_dotenv('/Users/adibalaji/Desktop/agrobots/conq_python/src/.env.local')
         self._upload_filepath = os.getenv('GRAPH_NAV_GRAPH_FILEPATH')
 
         # Save the robot as a private member variable and sync with the robot
@@ -313,12 +313,13 @@ class GraphNav:
 
     # This function will tell spot to go to a specific waypoint name, waypoint names are of the format waypoint_{id_number}
     def navigate_to(self, waypoint_number, sit_down_after_reached=True):
+        print(f'Navigating to {waypoint_number}...')
         destination_waypoint = self._find_unique_waypoint_id(
             waypoint_number, self._current_graph, self._current_annotation_name_to_wp_id)
         if not destination_waypoint:
             # Failed to find the appropriate unique waypoint id for the navigation command.
             return
-        if not self._toggle_power(should_power_on=True):
+        if not self.toggle_power(should_power_on=True):
             if(self._is_debug):
                 print('Failed to power on the robot, and cannot complete navigate to request.')
             return
@@ -346,14 +347,14 @@ class GraphNav:
             self.toggle_power(should_power_on=False)
 
 # Setup and authenticate the robot.
-sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
-robot = sdk.create_robot('192.168.80.3')
-bosdyn.client.util.authenticate(robot) 
+# sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
+# robot = sdk.create_robot('192.168.80.3')
+# bosdyn.client.util.authenticate(robot) 
 
-lease_client = robot.ensure_client(LeaseClient.default_service_name)
+# lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-lease_client.take()
+# lease_client.take()
 
-with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-    gn = GraphNav(robot)
-    gn.navigate_to('waypoint_0')
+# with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
+#     gn = GraphNav(robot)
+#     gn.navigate_to('waypoint_4')

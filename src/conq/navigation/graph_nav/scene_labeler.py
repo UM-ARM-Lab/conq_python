@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 class SceneLabeler:
     def __init__(self):
-        load_dotenv('.env.local')
+        load_dotenv('/Users/adibalaji/Desktop/agrobots/conq_python/src/.env.local')
 
         self.images_loc = os.getenv('MEMORY_IMAGE_PATH')
         self.json_loc = os.getenv('MEMORY_JSON_OBJECT_PATH')
@@ -23,7 +23,8 @@ class SceneLabeler:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
         
-    def extract_objects(self, image_paths):
+    def extract_objects(self):
+        image_paths = os.listdir(self.images_loc)
         images = [self._encode_image(self.images_loc + path) for path in image_paths]
 
         img_waypoint_ids = [path.split('_')[4] for path in image_paths]

@@ -1,15 +1,3 @@
-from bosdyn.api import robot_state_pb2
-from bosdyn.api.graph_nav import map_pb2, graph_nav_pb2
-from bosdyn.client.graph_nav import GraphNavClient
-from bosdyn.client.power import power_on_motors, safe_power_off_motors, PowerClient
-from bosdyn.client.exceptions import ResponseError
-from bosdyn.client.robot_command import RobotCommandClient
-from bosdyn.client.robot_state import RobotStateClient
-import bosdyn.client.util
-import bosdyn.client.lease
-from bosdyn.client.lease import LeaseClient
-
-#ADI CHANGES !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 from bosdyn.client.image import ImageClient
 from bosdyn.api import image_pb2
 from bosdyn.api.image_pb2 import ImageResponse
@@ -17,29 +5,29 @@ from bosdyn.client.image import build_image_request
 import os
 import cv2
 
-from graph_nav_utils import GraphNav
-#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+from conq.navigation.graph_nav.graph_nav_utils import GraphNav
 
 from PIL import Image
 import numpy as np
 from dotenv import load_dotenv
+import time
 
 class WaypointPhotographer:
 
     def __init__(self, robot, is_debug=False):
         
-        load_dotenv('.env.local')
+        load_dotenv('/Users/adibalaji/Desktop/agrobots/conq_python/src/.env.local')
         self._upload_filepath = os.getenv('GRAPH_NAV_GRAPH_FILEPATH')
 
         self.MEMORY_IMAGE_PATH = os.getenv('MEMORY_IMAGE_PATH')
 
         self._robot = robot
 
-        self._graph_nav = GraphNav(self.robot, is_debug=is_debug)
+        self._graph_nav = GraphNav(self._robot, is_debug=is_debug)
 
         self._image_client = self._robot.ensure_client(ImageClient.default_service_name)
 
-        self._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image', 'frontleft_color_image', 'frontright_color_image']
+        self._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image']
 
         self.ROTATION_ANGLE = {
                                 'back_fisheye_image':               0,
@@ -100,7 +88,7 @@ class WaypointPhotographer:
 
         for src in self._img_sources:
             rgb_request = build_image_request(src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
-            rgb_response= self.image_client.get_image([rgb_request])[0]
+            rgb_response= self._image_client.get_image([rgb_request])[0]
             rgb_np = self._image_to_opencv(rgb_response, auto_rotate=True)
             image = np.array(rgb_np,dtype=np.uint8)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -112,15 +100,16 @@ class WaypointPhotographer:
             # Save the image
             cv2.imwrite(self.MEMORY_IMAGE_PATH + src + f"_{waypoint_str}_.jpg", image)    
 
-    def go_to_waypoint_and_take_photos(self, waypoint_number):
+    def go_to_waypoint_and_take_photos(self, waypoint_name):
 
-        self._graph_nav.navigate_to(waypoint_number=waypoint_number, sit_down_after_reached=False)
-        self._take_photos_at_waypoint(f'waypoint_{waypoint_number}')
-        self._graph_nav.toggle_power(self.toggle_power(should_power_on=False))
+        self._graph_nav.navigate_to(waypoint_number=waypoint_name, sit_down_after_reached=False)
+        self._take_photos_at_waypoint(waypoint_name)
+        # self._graph_nav.toggle_power(should_power_on=False)
 
     def take_photos_of_full_map(self):
 
         for waypoint_num in range(0, len(self._graph_nav._current_graph.waypoints)):
-            self.go_to_waypoint_and_take_photos(waypoint_number=waypoint_num)
-
-        self._graph_nav.navigate_to(waypoint_number=0)
+            waypoint_name = f'waypoint_{waypoint_num}'
+            self.go_to_waypoint_and_take_photos(waypoint_name=waypoint_name)
+        self._graph_nav.navigate_to(waypoint_number='waypoint_0')
+        self._graph_nav.toggle_power(should_power_on=False)
