@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 class GraphNav:
     # Constructor that will initialize everything that is needed for navigating to waypoints
-    def __init__(self, robot, is_debug):
+    def __init__(self, robot, is_debug=False):
         # Load the graph_nav graph file from the environment variable GRAPH_NAV_GRAPH_FILEPATH
         load_dotenv('.env.local')
         self._upload_filepath = os.getenv('GRAPH_NAV_GRAPH_FILEPATH')
@@ -157,7 +157,7 @@ class GraphNav:
         return ret
 
     # This function will toggle the motor power on the robot to ensure that the robot will be able to move when trying to navigate
-    def _toggle_power(self, should_power_on):
+    def toggle_power(self, should_power_on):
         is_powered_on = self._check_is_powered_on()
         if not is_powered_on and should_power_on:
             # Power on the robot up before navigating when it is in a powered-off state.
@@ -312,7 +312,7 @@ class GraphNav:
     #### PUBLIC MEMBER FUNCTIONS ####
 
     # This function will tell spot to go to a specific waypoint name, waypoint names are of the format waypoint_{id_number}
-    def navigate_to(self, waypoint_number):
+    def navigate_to(self, waypoint_number, sit_down_after_reached=True):
         destination_waypoint = self._find_unique_waypoint_id(
             waypoint_number, self._current_graph, self._current_annotation_name_to_wp_id)
         if not destination_waypoint:
@@ -341,9 +341,9 @@ class GraphNav:
             is_finished = self._check_success(nav_to_cmd_id)
 
         # Power off the robot if appropriate.
-        if self._powered_on and not self._started_powered_on:
+        if self._powered_on and not self._started_powered_on and sit_down_after_reached:
             # Sit the robot down + power off after the navigation command is complete.
-            self._toggle_power(should_power_on=False)
+            self.toggle_power(should_power_on=False)
 
 # Setup and authenticate the robot.
 sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
@@ -355,5 +355,5 @@ lease_client = robot.ensure_client(LeaseClient.default_service_name)
 lease_client.take()
 
 with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-    gn = GraphNav(robot, False)
+    gn = GraphNav(robot)
     gn.navigate_to('waypoint_0')
