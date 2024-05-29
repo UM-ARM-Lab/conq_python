@@ -9,13 +9,10 @@ import bosdyn.client.util
 import bosdyn.client.lease
 from bosdyn.client.lease import LeaseClient
 
-
-
 # misc
 import os
 import time
 from dotenv import load_dotenv
-
 
 class GraphNav:
     # Constructor that will initialize everything that is needed for navigating to waypoints
