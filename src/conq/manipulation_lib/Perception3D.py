@@ -63,7 +63,7 @@ class VisualPoseAcquirer(threading.Thread):
             try:
                 image_responses = self.image_client.get_image_from_sources(self.sources)
                 start_time = time.time()
-                img_bgr, rgb_response = get_Image(self.image_client, self.sources[1])
+                img_bgr, rgb_response, rgb_np = get_Image(self.image_client, self.sources[1])
                 result, _, img_bgr, visual_pose, object_center = get_object_pose(img_bgr, rgb_response, self.camera_params)
                 current_time = time.time()
                 
@@ -153,7 +153,7 @@ class Vision:
         return self.latest_response
 
     def get_latest_RGB(self,path=RGB_PATH, save=True, file_name = "live"):
-        img_bgr, _ = get_Image(self.image_client, self.sources[1])
+        img_bgr, _, rgb_np = get_Image(self.image_client, self.sources[1])
         self.latest_image = img_bgr
         if save:
             extension = file_name+".jpg"
@@ -161,11 +161,14 @@ class Vision:
             cv2.imwrite(path + extension, img_bgr)
             print(f"File written in {path + extension}")
 
-        return img_bgr
+        return img_bgr, rgb_np
     
-    def get_latest_Depth(self,path=DEPTH_PATH,save=True, file_name="live"):
+    def get_latest_Depth(self,path=DEPTH_PATH,save=True, file_name="live", target_frame = "body"):
         depth_frame = _depth_image_data_to_numpy(image_response=self.get_latest_response()[0]) # Need this for aligning RGB and Depth
-        print("Shape of Depth frame: ", np.shape(depth_frame))
+
+        BODY_T_VISION = get_a_tform_b(self.get_latest_response()[0].shot.transforms_snapshot, target_frame, "hand_color_image_sensor") # 4x4
+        
+        K_DEPTH,_ = self.get_intrinsics()
         if save:
             # Array
             extension = file_name+".npy"
@@ -185,7 +188,7 @@ class Vision:
             cv2.imwrite(path + extension, depth8_rgb)
             print(f"File written in {path + extension}")
 
-        return depth_frame
+        return np.float32(depth_frame), BODY_T_VISION.to_matrix(), np.float32(K_DEPTH)
     
     def segment_image(self,depth_image, seg_mask):
         """Segment the depth image (aligned with RGB frame) based on the segmentation mask."""
@@ -193,13 +196,32 @@ class Vision:
         segmented_depth_image[~seg_mask] = 0  # Set non-segmented regions to zero
         return segmented_depth_image
     
+    def get_intrinsics(self):
+        """
+        Returns the intrinsics of the source specified
+        """
+        cam_intr_D = self.get_latest_response()[0].source.pinhole.intrinsics
+        cam_intr_RGB = self.get_latest_response()[1].source.pinhole.intrinsics
+        K_DEPTH = np.array([
+            [cam_intr_D.focal_length.x, 0, cam_intr_D.principal_point.x],
+            [0, cam_intr_D.focal_length.y, cam_intr_D.principal_point.y],
+            [0, 0, 1]
+            ])
+        K_RGB = np.array([
+            [cam_intr_RGB.focal_length.x, 0, cam_intr_RGB.principal_point.x],
+            [0, cam_intr_RGB.focal_length.y, cam_intr_RGB.principal_point.y],
+            [0, 0, 1]
+            ])
+        
+        return K_DEPTH,K_RGB
+    
 class PointCloud:
     def __init__(self, vision):
         self.xyz = None
         self.vision = vision
         self.sources = vision.sources
 
-    def get_raw_point_cloud(self,min_dist=0,max_dist=100, target_frame = "body"):
+    def get_raw_point_cloud(self,min_dist=0,max_dist=100, target_frame = "body",to_body = False):
         
         image_response = self.vision.get_latest_response()[0]
         if image_response is None:
@@ -209,32 +231,38 @@ class PointCloud:
         else:
             
             sensor_pcl = depth_image_to_pointcloud(image_response=image_response, min_dist = min_dist, max_dist = max_dist)
-            print(np.shape(sensor_pcl))
             # Transform pcl to target_frame
-            target_pcl_sensor = pcl_transform(sensor_pcl, image_response, source = self.sources[1], target_frame = target_frame)
-            self.xyz = target_pcl_sensor
-            return target_pcl_sensor
+            if to_body:
+                print("Transforming pcl to target_frame")
+                target_pcl_sensor = pcl_transform(sensor_pcl, image_response, source = self.sources[1], target_frame = target_frame)
+                self.xyz = target_pcl_sensor
+            else:
+                # FIXME: Need the point cloud in hand gripper sensor frame for correct GPD inference
+                self.xyz = sensor_pcl
+            return self.xyz
         
     def process(self,seg_mask,target_frame):
         """Process raw pointcloud: 1) Segment pointcloud from Lang-SAM"""
         
         return self.xyz
     
-    def segment_xyz(self, seg_mask, target_frame = "body", min_dist=0,max_dist=10):
+    def segment_xyz(self, seg_mask, target_frame = "body", min_dist=0,max_dist=10,to_body = False):
         """Segment depth image and pointcloud"""
         # Get depth image (RGB-aligned)
-        depth_image = self.vision.get_latest_Depth()
+        depth_image, _, _ = self.vision.get_latest_Depth()
         # Depth response:
         depth_response = self.vision.get_latest_response()[0]
         # DEBUGGING: Segmented depth image
-        segmented_depth = self.vision.segment_image(depth_image, seg_mask)
-        print(np.shape(segmented_depth))
+        # segmented_depth = self.vision.segment_image(depth_image, seg_mask)
         sensor_pcl = depth2pcl(depth_response, seg_mask, min_dist, max_dist)
-        # Transform pcl to target_frame
-        target_pcl_sensor = pcl_transform(sensor_pcl, depth_response, source = self.sources[0], target_frame = target_frame)
-        
-        self.xyz = target_pcl_sensor
-        return target_pcl_sensor
+        if to_body:
+            # Transform pcl to target_frame
+            print("Transforming pcl to target_frame")
+            target_pcl_sensor = pcl_transform(sensor_pcl, depth_response, source = self.sources[0], target_frame = target_frame)
+            self.xyz = target_pcl_sensor
+        else:
+            self.xyz = sensor_pcl
+        return self.xyz
     
     def get_pcd(self):
         pcd = None

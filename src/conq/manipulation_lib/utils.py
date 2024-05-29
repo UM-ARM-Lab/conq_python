@@ -255,7 +255,7 @@ def get_Image(image_client, sources):
     rgb_np = np.array(rgb_np, dtype=np.uint8)
 
     img_bgr = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2BGR) 
-    return img_bgr, rgb_response
+    return img_bgr, rgb_response, rgb_np
     
 def get_object_pose(img_bgr, rgb_response, camera_params):
             

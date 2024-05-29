@@ -24,6 +24,13 @@ RUN apt-get update && apt-get install -y \
     libpcap-dev \
     wget \ 
     unzip \ 
+    libgl1-mesa-glx \
+    libgl1-mesa-dri \
+    mesa-utils \
+    x11-apps \
+    libglu1-mesa \
+    libxi6 \
+    libxrender1\
     && rm -rf /var/lib/apt/lists/*
 
 # Compile and install PCL 1.10
