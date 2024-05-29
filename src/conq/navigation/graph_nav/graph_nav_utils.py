@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 
 
 class GraphNav:
+    # Constructor that will initialize everything that is needed for navigating to waypoints
     def __init__(self, robot, is_debug):
         # Load the graph_nav graph file from the environment variable GRAPH_NAV_GRAPH_FILEPATH
         load_dotenv('.env.local')
@@ -158,6 +159,7 @@ class GraphNav:
                 ret = waypoint.id
         return ret
 
+    # This function will toggle the motor power on the robot to ensure that the robot will be able to move when trying to navigate
     def _toggle_power(self, should_power_on):
         is_powered_on = self._check_is_powered_on()
         if not is_powered_on and should_power_on:
@@ -184,17 +186,20 @@ class GraphNav:
         self._check_is_powered_on()
         return self._powered_on
     
+    # This function converts a given long string to a shortened string
     def _id_to_short_code(self, id):
         tokens = id.split('-')
         if len(tokens) > 2:
             return f'{tokens[0][0]}{tokens[1][0]}'
         return None
     
+    # This function ensures the robot is powered on
     def _check_is_powered_on(self):
         power_state = self._robot_state_client.get_robot_state().power_state
         self._powered_on = (power_state.motor_power_state == power_state.STATE_ON)
         return self._powered_on
     
+    # This function checks to see if the robot successfully navigated to its desired waypoint
     def _check_success(self, command_id=-1):
         if command_id == -1:
             # No command, so we have no status to check.
@@ -219,6 +224,7 @@ class GraphNav:
             # Navigation command is not complete yet.
             return False
         
+    # This function connects the list of waypoint "names" to their unique IDs
     def _list_graph_waypoint_and_edge_ids(self):
         # Download current graph
         graph = self._graph_nav_client.download_graph()
@@ -232,7 +238,8 @@ class GraphNav:
         # Update and print waypoints and edges
         self._current_annotation_name_to_wp_id, self._current_edges = self._update_waypoints_and_edges(
             graph, localization_id)
-        
+    
+    # This function updates the waypoints and their respective connections
     def _update_waypoints_and_edges(self, graph, localization_id, do_print=True):
         name_to_id = dict()
         edges = dict()
@@ -292,7 +299,8 @@ class GraphNav:
                     f'(cost {edge.annotations.cost.value})')
 
         return name_to_id, edges
-    
+
+    # This function prints a waypoint in a readable way
     def _pretty_print_waypoints(self, waypoint_id, waypoint_name, short_code_to_count, localization_id):
         short_code = self._id_to_short_code(waypoint_id)
         if short_code is None or short_code_to_count[short_code] != 1:
