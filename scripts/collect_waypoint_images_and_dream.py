@@ -6,6 +6,7 @@ from bosdyn.client.lease import LeaseClient
 import time
 
 from conq.navigation.graph_nav.waypoint_photographer import WaypointPhotographer
+from conq.navigation.graph_nav.scene_labeler import SceneLabeler
 
 # Setup and authenticate the robot.
 sdk = bosdyn.client.create_standard_sdk('WaypointPhotographerClient')
@@ -19,3 +20,7 @@ lease_client.take()
 with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
     wp = WaypointPhotographer(robot)
     wp.take_photos_of_full_map()
+
+sl = SceneLabeler()
+object_dict = sl.extract_objects()
+sl.save_dict_to_json(object_dict)
