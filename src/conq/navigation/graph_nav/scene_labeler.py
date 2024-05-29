@@ -2,14 +2,21 @@ import requests
 import base64
 from openai import OpenAI
 import json
+import os
+
+from dotenv import load_dotenv
+
 
 class SceneLabeler:
     def __init__(self):
+        load_dotenv('.env.local')
+
         self.images_loc = '/Users/adibalaji/Desktop/agrobots/conq_python/data/memory_images/'
         self.json_loc = '/Users/adibalaji/Desktop/agrobots/conq_python/data/json/spot_memory.json'
 
-        # self.MY_API_KEY = blah blah blah
-        # self.client = OpenAI(organization='<org_id>', api_key=self.MY_API_KEY)
+        self.MY_API_KEY = os.getenv('GPT_KEY')
+        self.ORG_KEY = os.getenv('ORG_KEY')
+        self.client = OpenAI(organization=self.ORG_KEY, api_key=self.MY_API_KEY)
         self.object_dict = {}
 
     def _encode_image(self, image_path):
@@ -118,4 +125,4 @@ class SceneLabeler:
             data = json.load(json_file)
             print(f'Loaded semantic memory from {self.json_loc}')
         
-        return data
+        return data 
