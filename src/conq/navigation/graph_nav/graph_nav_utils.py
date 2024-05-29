@@ -18,13 +18,15 @@ from dotenv import load_dotenv
 
 
 class GraphNav:
-    def __init__(self, robot):
+    def __init__(self, robot, is_debug):
         # Load the graph_nav graph file from the environment variable GRAPH_NAV_GRAPH_FILEPATH
         load_dotenv('.env.local')
         self._upload_filepath = os.getenv('GRAPH_NAV_GRAPH_FILEPATH')
 
         # Save the robot as a private member variable and sync with the robot
         self._robot = robot
+
+        self._is_debug = is_debug
         
         self._robot.time_sync.wait_for_sync()
 
@@ -66,15 +68,17 @@ class GraphNav:
 
     # This function uploads the graph file from your computer to spot
     def _upload_graph_and_snapshots(self):
-        print('Loading the graph from disk into local storage...')
+        if(self._is_debug):
+            print('Loading the graph from disk into local storage...')
         with open(self._upload_filepath + '/graph', 'rb') as graph_file:
             # Load the graph from disk.
             data = graph_file.read()
             self._current_graph = map_pb2.Graph()
             self._current_graph.ParseFromString(data)
-            print(
-                f'Loaded graph has {len(self._current_graph.waypoints)} waypoints and {self._current_graph.edges} edges'
-            )
+            if(self._is_debug):
+                print(
+                    f'Loaded graph has {len(self._current_graph.waypoints)} waypoints and {self._current_graph.edges} edges'
+                )
         for waypoint in self._current_graph.waypoints:
             # Load the waypoint snapshots from disk.
             with open(f'{self._upload_filepath}/waypoint_snapshots/{waypoint.snapshot_id}',
@@ -92,7 +96,8 @@ class GraphNav:
                 edge_snapshot.ParseFromString(snapshot_file.read())
                 self._current_edge_snapshots[edge_snapshot.id] = edge_snapshot
         # Upload the graph to the robot.
-        print('Uploading the graph and snapshots to the robot...')
+        if(self._is_debug):
+            print('Uploading the graph and snapshots to the robot...')
         true_if_empty = not len(self._current_graph.anchoring.anchors)
         response = self._graph_nav_client.upload_graph(graph=self._current_graph,
                                                        generate_new_anchoring=true_if_empty)
@@ -100,11 +105,13 @@ class GraphNav:
         for snapshot_id in response.unknown_waypoint_snapshot_ids:
             waypoint_snapshot = self._current_waypoint_snapshots[snapshot_id]
             self._graph_nav_client.upload_waypoint_snapshot(waypoint_snapshot)
-            print(f'Uploaded {waypoint_snapshot.id}')
+            if(self._is_debug):
+                print(f'Uploaded {waypoint_snapshot.id}')
         for snapshot_id in response.unknown_edge_snapshot_ids:
             edge_snapshot = self._current_edge_snapshots[snapshot_id]
             self._graph_nav_client.upload_edge_snapshot(edge_snapshot)
-            print(f'Uploaded {edge_snapshot.id}')
+            if(self._is_debug):
+                print(f'Uploaded {edge_snapshot.id}')
 
         # The upload is complete! Check that the robot is localized to the graph,
         # and if it is not, prompt the user to localize the robot before attempting
@@ -112,18 +119,18 @@ class GraphNav:
         localization_state = self._graph_nav_client.get_localization_state()
         if not localization_state.localization.waypoint_id:
             # The robot is not localized to the newly uploaded graph.
-            print('\n')
-            print(
-                'Upload complete! The robot is currently not localized to the map; please localize'
-                ' the robot using commands (2) or (3) before attempting a navigation command.')
+            if(self._is_debug):
+                print('\n')
+                print(
+                    'Graph map upload is complete! However the robot is not localized in the map')
     
     # Convert the given waypoint name into 
     def _find_unique_waypoint_id(self, short_code, graph, name_to_id):
-        """Convert either a 2 letter short code or an annotation name into the associated unique id."""
-        if graph is None:
-            print(
-                'Please list the waypoints in the map before trying to navigate to a specific one (Option #4).'
-            )
+        if graph is None: 
+            if(self._is_debug):
+                print(
+                    'Waypoints have not been loaded properly'
+                )
             return
 
         if len(short_code) != 2:
@@ -134,9 +141,10 @@ class GraphNav:
                     # Has an associated waypoint id!
                     return name_to_id[short_code]
                 else:
-                    print(
-                        f'The waypoint name {short_code} is used for multiple different unique waypoints. Please use '
-                        f'the waypoint id.')
+                    if(self._is_debug):
+                        print(
+                            f'The waypoint name {short_code} is used for multiple different unique waypoints. Please use '
+                            f'the waypoint id.')
                     return None
             # Also not a waypoint annotation name, so we will operate under the assumption that it is a
             # unique waypoint id.
@@ -151,7 +159,6 @@ class GraphNav:
         return ret
 
     def _toggle_power(self, should_power_on):
-        """Power the robot on/off dependent on the current power state."""
         is_powered_on = self._check_is_powered_on()
         if not is_powered_on and should_power_on:
             # Power on the robot up before navigating when it is in a powered-off state.
@@ -178,20 +185,17 @@ class GraphNav:
         return self._powered_on
     
     def _id_to_short_code(self, id):
-        """Convert a unique id to a 2 letter short code."""
         tokens = id.split('-')
         if len(tokens) > 2:
             return f'{tokens[0][0]}{tokens[1][0]}'
         return None
     
     def _check_is_powered_on(self):
-        """Determine if the robot is powered on or off."""
         power_state = self._robot_state_client.get_robot_state().power_state
         self._powered_on = (power_state.motor_power_state == power_state.STATE_ON)
         return self._powered_on
     
     def _check_success(self, command_id=-1):
-        """Use a navigation command id to get feedback from the robot and sit when command succeeds."""
         if command_id == -1:
             # No command, so we have no status to check.
             return False
@@ -200,21 +204,22 @@ class GraphNav:
             # Successfully completed the navigation commands!
             return True
         elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_LOST:
-            print('Robot got lost when navigating the route, the robot will now sit down.')
+            if(self._is_debug):
+                print('Robot got lost when navigating the route, the robot will now sit down.')
             return True
         elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_STUCK:
-            print('Robot got stuck when navigating the route, the robot will now sit down.')
+            if(self._is_debug):
+                print('Robot got stuck when navigating the route, the robot will now sit down.')
             return True
         elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_ROBOT_IMPAIRED:
-            print('Robot is impaired.')
+            if(self._is_debug):
+                print('Robot is impaired.')
             return True
         else:
             # Navigation command is not complete yet.
             return False
         
     def _list_graph_waypoint_and_edge_ids(self):
-        """List the waypoint ids and edge ids of the graph currently on the robot."""
-
         # Download current graph
         graph = self._graph_nav_client.download_graph()
         if graph is None:
@@ -229,7 +234,6 @@ class GraphNav:
             graph, localization_id)
         
     def _update_waypoints_and_edges(self, graph, localization_id, do_print=True):
-        """Update and print waypoint ids and edge ids."""
         name_to_id = dict()
         edges = dict()
 
@@ -271,7 +275,8 @@ class GraphNav:
         # Print out the waypoints name, id, and short code in an ordered sorted by the timestamp from
         # when the waypoint was created.
         if do_print:
-            print(f'{len(graph.waypoints):d} waypoints:')
+            if(self._is_debug):
+                print(f'{len(graph.waypoints):d} waypoints:')
             for waypoint in waypoint_to_timestamp:
                 self._pretty_print_waypoints(waypoint[0], waypoint[2], short_code_to_count, localization_id)
 
@@ -282,7 +287,8 @@ class GraphNav:
             else:
                 edges[edge.id.to_waypoint] = [edge.id.from_waypoint]
             if do_print:
-                print(f'(Edge) from waypoint {edge.id.from_waypoint} to waypoint {edge.id.to_waypoint} '
+                if(self._is_debug):
+                    print(f'(Edge) from waypoint {edge.id.from_waypoint} to waypoint {edge.id.to_waypoint} '
                     f'(cost {edge.annotations.cost.value})')
 
         return name_to_id, edges
@@ -293,9 +299,10 @@ class GraphNav:
             short_code = '  '  # If the short code is not valid/unique, don't show it.
 
         waypoint_symbol = '->' if localization_id == waypoint_id else '  '
-        print(
-            f'{waypoint_symbol} Waypoint name: {waypoint_name} id: {waypoint_id} short code: {short_code}'
-        )
+        if(self._is_debug):
+            print(
+                f'{waypoint_symbol} Waypoint name: {waypoint_name} id: {waypoint_id} short code: {short_code}'
+            )
 
     #### PUBLIC MEMBER FUNCTIONS ####
 
@@ -307,7 +314,8 @@ class GraphNav:
             # Failed to find the appropriate unique waypoint id for the navigation command.
             return
         if not self._toggle_power(should_power_on=True):
-            print('Failed to power on the robot, and cannot complete navigate to request.')
+            if(self._is_debug):
+                print('Failed to power on the robot, and cannot complete navigate to request.')
             return
 
         nav_to_cmd_id = None
@@ -342,5 +350,5 @@ lease_client = robot.ensure_client(LeaseClient.default_service_name)
 lease_client.take()
 
 with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-    gn = GraphNav(robot)
+    gn = GraphNav(robot, False)
     gn.navigate_to('waypoint_0')
