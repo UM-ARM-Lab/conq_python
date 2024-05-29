@@ -301,9 +301,8 @@ class GraphNav:
 
     # This function will tell spot to go to a specific waypoint name, waypoint names are of the format waypoint_{id_number}
     def navigate_to(self, waypoint_number):
-        waypoint_name = f'waypoint_{waypoint_number}'
         destination_waypoint = self._find_unique_waypoint_id(
-            waypoint_name, self._current_graph, self._current_annotation_name_to_wp_id)
+            waypoint_number, self._current_graph, self._current_annotation_name_to_wp_id)
         if not destination_waypoint:
             # Failed to find the appropriate unique waypoint id for the navigation command.
             return
