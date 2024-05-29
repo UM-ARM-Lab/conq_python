@@ -11,8 +11,8 @@ class SceneLabeler:
     def __init__(self):
         load_dotenv('.env.local')
 
-        self.images_loc = '/Users/adibalaji/Desktop/agrobots/conq_python/data/memory_images/'
-        self.json_loc = '/Users/adibalaji/Desktop/agrobots/conq_python/data/json/spot_memory.json'
+        self.images_loc = os.getenv('MEMORY_IMAGE_PATH')
+        self.json_loc = os.getenv('MEMORY_JSON_OBJECT_PATH')
 
         self.MY_API_KEY = os.getenv('GPT_KEY')
         self.ORG_KEY = os.getenv('ORG_KEY')
