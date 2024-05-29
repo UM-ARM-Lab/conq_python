@@ -1,15 +1,21 @@
-from dotenv import load_dotenv
 from bosdyn.api import robot_state_pb2
-from bosdyn.api.graph_nav import map_pb2
+from bosdyn.api.graph_nav import map_pb2, graph_nav_pb2
 from bosdyn.client.graph_nav import GraphNavClient
-from bosdyn.client.power import power_on_motors, safe_power_off_motors
+from bosdyn.client.power import power_on_motors, safe_power_off_motors, PowerClient
 from bosdyn.client.exceptions import ResponseError
+from bosdyn.client.robot_command import RobotCommandClient
+from bosdyn.client.robot_state import RobotStateClient
+import bosdyn.client.util
+import bosdyn.client.lease
+from bosdyn.client.lease import LeaseClient
 
 
 
 # misc
 import os
 import time
+from dotenv import load_dotenv
+
 
 class GraphNav:
     def __init__(self, robot):
@@ -25,8 +31,21 @@ class GraphNav:
         # Member variables
 
         # Clients
+        self._robot_command_client = self._robot.ensure_client(
+            RobotCommandClient.default_service_name)
+        self._robot_state_client = self._robot.ensure_client(RobotStateClient.default_service_name)
+
         # Create the client for the Graph Nav main service.
         self._graph_nav_client = self._robot.ensure_client(GraphNavClient.default_service_name)
+
+        # Create the power client to ensure that all motors are functioning accordingly
+        self._power_client = self._robot.ensure_client(PowerClient.default_service_name)
+
+        # Update the robot's power state
+        power_state = self._robot_state_client.get_robot_state().power_state
+        self._started_powered_on = (power_state.motor_power_state == power_state.STATE_ON)
+        self._powered_on = self._started_powered_on
+
 
         # Store the most recent knowledge of the state of the robot based on rpc calls.
         self._current_graph = None
@@ -182,9 +201,139 @@ class GraphNav:
         self.check_is_powered_on()
         return self._powered_on
     
-    def id_to_short_code(id):
+    def id_to_short_code(self, id):
         """Convert a unique id to a 2 letter short code."""
         tokens = id.split('-')
         if len(tokens) > 2:
             return f'{tokens[0][0]}{tokens[1][0]}'
         return None
+    
+    def check_is_powered_on(self):
+        """Determine if the robot is powered on or off."""
+        power_state = self._robot_state_client.get_robot_state().power_state
+        self._powered_on = (power_state.motor_power_state == power_state.STATE_ON)
+        return self._powered_on
+    
+    def _check_success(self, command_id=-1):
+        """Use a navigation command id to get feedback from the robot and sit when command succeeds."""
+        if command_id == -1:
+            # No command, so we have no status to check.
+            return False
+        status = self._graph_nav_client.navigation_feedback(command_id)
+        if status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_REACHED_GOAL:
+            # Successfully completed the navigation commands!
+            return True
+        elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_LOST:
+            print('Robot got lost when navigating the route, the robot will now sit down.')
+            return True
+        elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_STUCK:
+            print('Robot got stuck when navigating the route, the robot will now sit down.')
+            return True
+        elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_ROBOT_IMPAIRED:
+            print('Robot is impaired.')
+            return True
+        else:
+            # Navigation command is not complete yet.
+            return False
+        
+    def _list_graph_waypoint_and_edge_ids(self):
+        """List the waypoint ids and edge ids of the graph currently on the robot."""
+
+        # Download current graph
+        graph = self._graph_nav_client.download_graph()
+        if graph is None:
+            print('Empty graph.')
+            return
+        self._current_graph = graph
+
+        localization_id = self._graph_nav_client.get_localization_state().localization.waypoint_id
+
+        # Update and print waypoints and edges
+        self._current_annotation_name_to_wp_id, self._current_edges = self.update_waypoints_and_edges(
+            graph, localization_id)
+        
+    def update_waypoints_and_edges(self, graph, localization_id, do_print=True):
+        """Update and print waypoint ids and edge ids."""
+        name_to_id = dict()
+        edges = dict()
+
+        short_code_to_count = {}
+        waypoint_to_timestamp = []
+        for waypoint in graph.waypoints:
+            # Determine the timestamp that this waypoint was created at.
+            timestamp = -1.0
+            try:
+                timestamp = waypoint.annotations.creation_time.seconds + waypoint.annotations.creation_time.nanos / 1e9
+            except:
+                # Must be operating on an older graph nav map, since the creation_time is not
+                # available within the waypoint annotations message.
+                pass
+            waypoint_to_timestamp.append((waypoint.id, timestamp, waypoint.annotations.name))
+
+            # Determine how many waypoints have the same short code.
+            short_code = self.id_to_short_code(waypoint.id)
+            if short_code not in short_code_to_count:
+                short_code_to_count[short_code] = 0
+            short_code_to_count[short_code] += 1
+
+            # Add the annotation name/id into the current dictionary.
+            waypoint_name = waypoint.annotations.name
+            if waypoint_name:
+                if waypoint_name in name_to_id:
+                    # Waypoint name is used for multiple different waypoints, so set the waypoint id
+                    # in this dictionary to None to avoid confusion between two different waypoints.
+                    name_to_id[waypoint_name] = None
+                else:
+                    # First time we have seen this waypoint annotation name. Add it into the dictionary
+                    # with the respective waypoint unique id.
+                    name_to_id[waypoint_name] = waypoint.id
+
+        # Sort the set of waypoints by their creation timestamp. If the creation timestamp is unavailable,
+        # fallback to sorting by annotation name.
+        waypoint_to_timestamp = sorted(waypoint_to_timestamp, key=lambda x: (x[1], x[2]))
+
+        # Print out the waypoints name, id, and short code in an ordered sorted by the timestamp from
+        # when the waypoint was created.
+        if do_print:
+            print(f'{len(graph.waypoints):d} waypoints:')
+            for waypoint in waypoint_to_timestamp:
+                self.pretty_print_waypoints(waypoint[0], waypoint[2], short_code_to_count, localization_id)
+
+        for edge in graph.edges:
+            if edge.id.to_waypoint in edges:
+                if edge.id.from_waypoint not in edges[edge.id.to_waypoint]:
+                    edges[edge.id.to_waypoint].append(edge.id.from_waypoint)
+            else:
+                edges[edge.id.to_waypoint] = [edge.id.from_waypoint]
+            if do_print:
+                print(f'(Edge) from waypoint {edge.id.from_waypoint} to waypoint {edge.id.to_waypoint} '
+                    f'(cost {edge.annotations.cost.value})')
+
+        return name_to_id, edges
+    
+    def pretty_print_waypoints(self, waypoint_id, waypoint_name, short_code_to_count, localization_id):
+        short_code = self.id_to_short_code(waypoint_id)
+        if short_code is None or short_code_to_count[short_code] != 1:
+            short_code = '  '  # If the short code is not valid/unique, don't show it.
+
+        waypoint_symbol = '->' if localization_id == waypoint_id else '  '
+        print(
+            f'{waypoint_symbol} Waypoint name: {waypoint_name} id: {waypoint_id} short code: {short_code}'
+        )
+        
+sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
+robot = sdk.create_robot('192.168.80.3')
+bosdyn.client.util.authenticate(robot) 
+
+lease_client = robot.ensure_client(LeaseClient.default_service_name)
+
+lease_client.take()
+
+with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
+    # Setup and authenticate the robot.
+    
+
+    gn = GraphNav(robot)
+    gn._upload_graph_and_snapshots()
+    gn._list_graph_waypoint_and_edge_ids()
+    gn._navigate_to(0)
