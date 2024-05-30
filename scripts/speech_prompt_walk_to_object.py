@@ -1,9 +1,3 @@
-# Copyright (c) 2024 Boston Dynamics, Inc.  All rights reserved.
-#
-# Downloading, reproducing, distributing or otherwise using the SDK Software
-# is subject to the terms and conditions of the Boston Dynamics Software
-# Development Kit License (20191101-BDSDK-SL).
-
 """
 Tutorial to walk the robot to an object by giving a text prompt, usually in preparation for manipulation.
 
@@ -117,12 +111,11 @@ def walk_to_object(config):
         
         #FIXME: Precautionary measure, to be dealt with later
         time.sleep(1)
+      
         # text_prompt = "ball" #FIXME: Forgot to remove this in the last test, TBD later
-
         print('Done till process 1')
 
         text_prompt_langsam = str(run_chatgpt_integration())
-
         print('Done till process 2')
         
         centroid_x, centroid_y = run_test_script(text_prompt_langsam)
@@ -215,10 +208,10 @@ def run_test_script(text_prompt):
     #TODO: lang-sam setup and environment
     #HACK: Make this a microservice; host somewhere TBD
 
-    script_directory = "/Users/saketpradhan/Desktop/lang-segment-anything/lang-segment-anything/" 
+    script_directory = "/Users/your-user-name/Desktop/lang-segment-anything/lang-segment-anything/" 
     command = [
         "conda", "run", "-n", "lang-sam", "python3", "test_script.py", "--conq-image-source", 
-        "/Users/saketpradhan/Desktop/ARMLAB/conq_python/scripts/image_capture.jpg", "--text-prompt", text_prompt
+        "/Users/your-user-name/Desktop/ARMLAB/conq_python/scripts/image_capture.jpg", "--text-prompt", text_prompt
     ] 
 
     try:
