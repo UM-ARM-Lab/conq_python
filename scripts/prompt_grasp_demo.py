@@ -9,8 +9,10 @@ import cv2
 import time
 import numpy as np
 import pdb
+import torch
 
 from conq.manipulation_lib.Manipulation import grasped_bool, open_gripper, close_gripper, move_gripper, move_gripper
+from conq.manipulation_lib.Perception3D import VisualPoseAcquirer, PointCloud, Vision
 
 import bosdyn.client.estop
 import bosdyn.client.lease
@@ -37,6 +39,8 @@ from conq.clients import Clients
 
 import matplotlib.pyplot as plt
 
+from adi_owlsam import OwlSam
+
 def verify_estop(robot):
     """Verify the robot is not estopped"""
 
@@ -62,6 +66,9 @@ def key_callback(vis, action, mods):
         return False  # Return False to indicate the event has been handled
 
 def main(argv):
+
+    owlsam = OwlSam()
+
     # Parse args
     parser = argparse.ArgumentParser()
     bosdyn.client.util.add_base_arguments(parser)
@@ -78,7 +85,8 @@ def main(argv):
     if options.to_depth:
         sources = [options.camera + '_depth', options.camera +'_color_image']
     else:
-        sources = [options.camera + 'frontleft_depth_in_visual_frame', options.camera + '_fisheye_image']
+        # sources = [options.camera + 'frontleft_depth_in_visual_frame', options.camera + '_fisheye_image']
+        sources = [options.camera + '_depth', options.camera +'_fisheye_image']
 
 
     # Create robot object with an image client.
@@ -101,6 +109,8 @@ def main(argv):
     command_client = robot.ensure_client(RobotCommandClient.default_service_name)
 
     lease_client.take()
+
+    vision = Vision(image_client, sources)
 
     with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
         # Now, we are ready to power on the robot. This call will block until the power
@@ -129,12 +139,20 @@ def main(argv):
         status = move_gripper(clients, gaze_pose, blocking=False, duration = 0.5)
         status = open_gripper(clients)
         time.sleep(1)
-        
+
+        #ADI CHANGES #########################################################
         image_responses = image_client.get_image_from_sources(sources)
-        pix_x, pix_y = (256,256) # Get from object detector
+
+        rgb = vision.get_latest_RGB()
+
+        boxes, centroid = owlsam.predict_boxes(rgb, [["tool"]])
+        print(f'predicted boxes shape: {boxes.shape}')
+        pix_x, pix_y = (centroid[0],centroid[1]) # Get from object detector
+        #ADI CHANGES #########################################################
+        
         pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
 
-        grasp_point_in_image(clients,image_responses[1],pick_vec)
+        grasp_point_in_image(clients,image_responses[0],pick_vec)
         
 
     return True
