@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 class SceneLabeler:
     def __init__(self):
-        load_dotenv('/Users/adibalaji/Desktop/agrobots/conq_python/src/.env.local')
+        load_dotenv('.env.local')
 
         self.images_loc = os.getenv('MEMORY_IMAGE_PATH')
         self.json_loc = os.getenv('MEMORY_JSON_OBJECT_PATH')
@@ -30,6 +30,10 @@ class SceneLabeler:
         img_waypoint_ids = [path.split('_')[4] for path in image_paths]
 
         for idx, image in enumerate(images):
+
+            if idx % 3 == 0:
+                print(f'Dreamed {idx} images...')
+
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.MY_API_KEY}"
@@ -73,6 +77,7 @@ class SceneLabeler:
                     curr_img_waypoint_id = f"waypoint_{img_waypoint_ids[idx]}"
                     self.object_dict[obj_name] = curr_img_waypoint_id
                     
+        print(f'Dreaming complete!')
         
         return self.object_dict
     

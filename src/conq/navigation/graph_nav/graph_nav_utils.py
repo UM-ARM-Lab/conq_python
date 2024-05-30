@@ -18,7 +18,7 @@ class GraphNav:
     # Constructor that will initialize everything that is needed for navigating to waypoints
     def __init__(self, robot, is_debug=False):
         # Load the graph_nav graph file from the environment variable GRAPH_NAV_GRAPH_FILEPATH
-        load_dotenv('/Users/adibalaji/Desktop/agrobots/conq_python/src/.env.local')
+        load_dotenv('.env.local')
         self._upload_filepath = os.getenv('GRAPH_NAV_GRAPH_FILEPATH')
 
         # Save the robot as a private member variable and sync with the robot

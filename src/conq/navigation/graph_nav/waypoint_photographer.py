@@ -16,7 +16,7 @@ class WaypointPhotographer:
 
     def __init__(self, robot, is_debug=False):
         
-        load_dotenv('/Users/adibalaji/Desktop/agrobots/conq_python/src/.env.local')
+        load_dotenv('.env.local')
         self._upload_filepath = os.getenv('GRAPH_NAV_GRAPH_FILEPATH')
 
         self.MEMORY_IMAGE_PATH = os.getenv('MEMORY_IMAGE_PATH')
