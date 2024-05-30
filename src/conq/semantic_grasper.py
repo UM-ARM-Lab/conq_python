@@ -91,8 +91,8 @@ class SemanticGrapser:
     def take_photos(self):
         self.waypoint_photographer._take_photos_at_waypoint(waypoint_str='grasp_waypoint')
 
-    def find_object_in_photos(self, object, img_loc):
-        image_paths = os.listdir(img_loc)
+    def find_object_in_photos(self, object):
+        image_paths = os.listdir(self.images_loc)
         images = [self._encode_image(self.images_loc + path) for path in image_paths]
 
         for idx, image in enumerate(images):
@@ -132,6 +132,8 @@ class SemanticGrapser:
 
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
 
+            os.remove(image_paths[idx])
+
             found_obj = True if response.json()['choices'][0]['message']['content'] == 'yes' else False
 
             if found_obj:
@@ -155,7 +157,7 @@ class SemanticGrapser:
             raise Exception(error_message)
 
     #orient gripper along with object direction
-    def orient_and_grasp(self,name):
+    def orient_and_grasp(self, object_direction_name):
         assert self.robot.has_arm(), 'Robot requires an arm to run this example.'
         self.verify_estop()
         self.lease_client.take()
@@ -176,7 +178,7 @@ class SemanticGrapser:
             block_until_arm_arrives(self.command_client, cmd_id)
 
             #look at scene
-            gaze_pose = ORIENTATION_MAP[name]
+            gaze_pose = ORIENTATION_MAP[object_direction_name]
             status = move_gripper(clients, gaze_pose, blocking=False, duration = 0.5)
             status = open_gripper(clients)
             time.sleep(1)
@@ -195,6 +197,8 @@ class SemanticGrapser:
 
             status = move_gripper(clients, ORIENTATION_MAP['frontleft_fisheye_image'], blocking=False, duration=0.5)
             time.sleep(1)
+
+        return True
 
 
             

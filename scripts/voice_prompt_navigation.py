@@ -6,6 +6,7 @@ from bosdyn.client.lease import LeaseClient
 
 from conq.navigation.graph_nav.graph_nav_utils import GraphNav
 from conq.navigation.graph_nav.scene_labeler import SceneLabeler
+from conq.semantic_grasper import SemanticGrasper
 
 import speech_recognition as sr
 import time
@@ -48,6 +49,7 @@ lease_client.take()
 with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
     gn = GraphNav(robot)
     sl = SceneLabeler()
+    sg = SemanticGrasper(robot)
 
     obj_wp_dict = sl.load_dict_from_json()
 
@@ -68,10 +70,12 @@ with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_
 
     print(f'Reached goal! Grasping {obj_of_interest}..')
 
-    time.sleep(2)
+    sg.take_photos()
+    object_direction = sg.find_object_in_photos(obj_of_interest)
+    sg.orient_and_grasp(object_direction)
 
     print(f'Going back to start point...')
 
-    gn.navigate_to('waypoint_0', sit_down_after_reached=True)
+    gn.navigate_to('waypoint_0', sit_down_after_reached=False)
 
     

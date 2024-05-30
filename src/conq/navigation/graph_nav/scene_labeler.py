@@ -67,6 +67,8 @@ class SceneLabeler:
                 "max_tokens": 300
             }
 
+            os.remove(image_paths[idx])
+
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
 
             objs_str = response.json()['choices'][0]['message']['content']
