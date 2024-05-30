@@ -1,3 +1,5 @@
+# export PYTHONPATH="${PYTHONPATH}:/Users/adibalaji/Desktop/agrobots/conq_python/src"
+
 import bosdyn.client.util
 import bosdyn.client.lease
 from bosdyn.client.lease import LeaseClient
