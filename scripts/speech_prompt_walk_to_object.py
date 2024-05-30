@@ -113,10 +113,7 @@ def walk_to_object(config):
         time.sleep(1)
       
         # text_prompt = "ball" #FIXME: Forgot to remove this in the last test, TBD later
-        print('Done till process 1')
-
         text_prompt_langsam = str(run_chatgpt_integration())
-        print('Done till process 2')
         
         centroid_x, centroid_y = run_test_script(text_prompt_langsam)
 
