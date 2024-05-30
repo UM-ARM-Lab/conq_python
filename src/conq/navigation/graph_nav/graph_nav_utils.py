@@ -8,10 +8,12 @@ from bosdyn.client.robot_state import RobotStateClient
 import bosdyn.client.util
 import bosdyn.client.lease
 from bosdyn.client.lease import LeaseClient
+from bosdyn.client.frame_helpers import get_odom_tform_body
 
 # misc
 import os
 import time
+import math
 from dotenv import load_dotenv
 
 class GraphNav:
@@ -61,8 +63,14 @@ class GraphNav:
 
     # This function uploads the graph file from your computer and loads the waypoint names
     def _init_graph(self):
+        # Upload the graph from your local machine
         self._upload_graph_and_snapshots()
+        # Load the name tables
         self._list_graph_waypoint_and_edge_ids()
+
+        self._set_initial_localization_waypoint()
+        # Localize spot in a previously loaded map? 
+        #self._get_localization_state()
 
     # This function uploads the graph file from your computer to spot
     def _upload_graph_and_snapshots(self):
@@ -308,6 +316,40 @@ class GraphNav:
             print(
                 f'{waypoint_symbol} Waypoint name: {waypoint_name} id: {waypoint_id} short code: {short_code}'
             )
+
+    # This function "should" update the robots pose while having turned the robot on and off
+    def _get_localization_state(self):
+        """Get the current localization and state of the robot."""
+        state = self._graph_nav_client.get_localization_state(request_gps_state=self.use_gps)
+        print(f'Got localization: \n{state.localization}')
+        odom_tform_body = get_odom_tform_body(state.robot_kinematics.transforms_snapshot)
+        print(f'Got robot state in kinematic odometry frame: \n{odom_tform_body}')
+        if self.use_gps:
+            print(f'GPS info:\n{state.gps}')
+
+    def _set_initial_localization_waypoint(self):
+        """Trigger localization to a waypoint."""
+        # Take the first argument as the localization waypoint.
+        destination_waypoint = self._find_unique_waypoint_id(
+            'waypoint_0', self._current_graph, self._current_annotation_name_to_wp_id)
+        if not destination_waypoint:
+            # Failed to find the unique waypoint id.
+            return
+
+        robot_state = self._robot_state_client.get_robot_state()
+        current_odom_tform_body = get_odom_tform_body(
+            robot_state.kinematic_state.transforms_snapshot).to_proto()
+        # Create an initial localization to the specified waypoint as the identity.
+        localization = nav_pb2.Localization()
+        localization.waypoint_id = destination_waypoint
+        localization.waypoint_tform_body.rotation.w = 1.0
+        self._graph_nav_client.set_localization(
+            initial_guess_localization=localization,
+            # It's hard to get the pose perfect, search +/-20 deg and +/-20cm (0.2m).
+            max_distance=0.2,
+            max_yaw=20.0 * math.pi / 180.0,
+            fiducial_init=graph_nav_pb2.SetLocalizationRequest.FIDUCIAL_INIT_NO_FIDUCIAL,
+            ko_tform_body=current_odom_tform_body)
 
     #### PUBLIC MEMBER FUNCTIONS ####
 

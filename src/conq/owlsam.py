@@ -14,6 +14,7 @@ from segment_anything import build_sam, SamPredictor
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from dotenv import load_dotenv
 
 
 class OwlSam():
@@ -81,11 +82,14 @@ class OwlSam():
         return model, processor
     
     def __init__(self):
+        load_dotenv('.env.local')
         self.model, self.processor = self.load_owlvit()
-        self.predictor = SamPredictor(build_sam(checkpoint="/Users/adibalaji/Desktop/agrobots/owlvit_segment_anything/sam_vit_h_4b8939.pth"))
+        self.predictor = SamPredictor(build_sam(checkpoint=os.getenv('SAM_PATH')))
         self.box_threshold = 0.0
         self.device = "cpu"
         self.get_top_k = True
+
+        
 
     def predict_boxes(self, image, texts):
         with torch.no_grad():

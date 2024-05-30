@@ -44,9 +44,9 @@ from bosdyn.client.frame_helpers import get_a_tform_b, VISION_FRAME_NAME, GRAV_A
 
 from conq.manipulation import grasp_point_in_image
 from conq.clients import Clients
-
+from conq.manipulation_lib.utils import stow_arm
 import matplotlib.pyplot as plt
-from owlsam import OwlSam
+from conq.owlsam import OwlSam
 
 ORIENTATION_MAP = {
     'back_fisheye_image':               (-1.00,0.0,0.1, 0.7071,0.,0.7071,0),
@@ -58,14 +58,15 @@ ORIENTATION_MAP = {
     'hand_depth':                       (0.75,0.0,0.1, 0.7071,0.,0.7071,0),
     'hand_color_image':                 (0.75,0.0,0.1, 0.7071,0.,0.7071,0),
     'left_fisheye_image':               (0,0.75,0.1, 0.7071,0.,0.7071,0),
-    'right_fisheye_image':              (0,-0.75,0.1, 0.7071,0.,0.7071,0)
+    'right_fisheye_image':              (0,-0.75,0.1, 0.7071,0.,0.7071,0),
+    'straight':                         (0.75,0,0.3, 0.7071,0.,0.7071,0)
 }
 
-class SemanticGrapser:
+class SemanticGrasper:
 
     def __init__(self, robot):
 
-        load_dotenv('/Users/adibalaji/Desktop/agrobots/conq_python/src/.env.local')
+        load_dotenv('.env.local')
 
         self.robot = robot
         self.MY_API_KEY = os.getenv('GPT_KEY')
@@ -132,14 +133,14 @@ class SemanticGrapser:
 
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
 
-            os.remove(image_paths[idx])
+            os.remove(self.images_loc + image_paths[idx])
 
             found_obj = True if response.json()['choices'][0]['message']['content'] == 'yes' else False
 
             if found_obj:
                 found_obj_img_path = image_paths[idx]
-                found_camera_frame = found_obj_img_path.split('_')[0:3]
-                return found_camera_frame
+                found_camera_frame = found_obj_img_path.split('_')[0:3] #
+                return f'{found_camera_frame[0]}_{found_camera_frame[1]}_{found_camera_frame[2]}'
             
         
         #fail to find object
@@ -192,11 +193,16 @@ class SemanticGrapser:
             pix_x, pix_y = (centroid[0],centroid[1]) # Get from object detector
                 
             pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
-
-            grasp_point_in_image(clients,image_responses[0],pick_vec)
-
-            status = move_gripper(clients, ORIENTATION_MAP['frontleft_fisheye_image'], blocking=False, duration=0.5)
+            try:
+                grasp_point_in_image(clients,image_responses[0],pick_vec)
+                status = move_gripper(clients, ORIENTATION_MAP['straight'], blocking=True, duration=0.5)
+            except Exception as e:
+                print("Whoops")
+                close_gripper(clients=clients)
+                stow_arm(self.robot, self.command_client)
             time.sleep(1)
+            
+
 
         return True
 

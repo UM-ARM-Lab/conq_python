@@ -153,7 +153,7 @@ class Vision:
         return self.latest_response
 
     def get_latest_RGB(self,path=RGB_PATH, save=True, file_name = "live"):
-        img_bgr, _ = get_Image(self.image_client, self.sources[1])
+        img_bgr, _ = get_Image(self.image_client, self.sources[0])
         self.latest_image = img_bgr
         if save:
             extension = file_name+".jpg"
