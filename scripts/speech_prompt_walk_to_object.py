@@ -173,20 +173,16 @@ def walk_to_object(config):
 def run_chatgpt_integration():
     """Setup command to run ChatGPT integration code from within a conda environment"""
 
-    script_directory = "/Users/saketpradhan/Desktop/chatgpt-integration/"
+    script_directory = "/Users/your-user-name/Desktop/chatgpt-integration/"
     command = [
         "conda", "run", "-n", "chatgpt-env", "python3 chatgpt_integration.py --speech-lang en-US"
     ]
 
     try: 
         os.chdir(script_directory) # Change directory to where chatgpt_integration.py is located
-
-        print('went to the directory!!')
-
         result = subprocess.run(command, capture_output=True, text=True, check=True)
 
         print('got the result!!')
-
         output_lines = result.stdout.splitlines()
         text_prompt_line  = output_lines[-1]
 
