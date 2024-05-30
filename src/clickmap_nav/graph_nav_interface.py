@@ -11,7 +11,7 @@ This includes options to download/upload a map and to navigate a map. """
 
 import math
 import time
-import graph_nav_util
+import clickmap_nav.graph_nav_util as graph_nav_util
 from bosdyn.api import robot_state_pb2
 from bosdyn.api.graph_nav import graph_nav_pb2, map_pb2, nav_pb2
 from bosdyn.client.exceptions import ResponseError

@@ -20,7 +20,7 @@ import numpy as np
 from bosdyn.api.graph_nav import map_pb2
 from bosdyn.client.frame_helpers import *
 from bosdyn.client.math_helpers import *
-from bosdyn_vtk_utils import numpy_to_poly_data, mat_to_vtk
+from clickmap_nav.bosdyn_vtk_utils import numpy_to_poly_data, mat_to_vtk
 
 
 def get_program_parameters():

@@ -1,7 +1,7 @@
 arm_segmentation
-bosdyn-client
-bosdyn-mission
-bosdyn-choreography-client
+bosdyn-client==4.0.0
+bosdyn-mission==4.0.0
+bosdyn-choreography-client==4.0.0
 pip>=23.1.2
 matplotlib
 numpy
@@ -12,3 +12,8 @@ rerun-sdk
 roboflow
 scipy
 torch
+PyQt5==5.15.10
+vtk==9.3.0
+ratelimit==2.2.1
+openai==1.6.1
+keyring==24.3.1

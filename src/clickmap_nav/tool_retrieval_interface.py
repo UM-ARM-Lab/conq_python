@@ -1,31 +1,44 @@
-from click_map_interface import ClickMapInterface
-from arm_segmentation.predictor import Predictor
 import argparse
 import os
 import sys
+
 import bosdyn.client.channel
 import bosdyn.client.util
-from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
-from bosdyn.client.image import ImageClient
-from bosdyn.client.manipulation_api_client import ManipulationApiClient
 import numpy as np
+from arm_segmentation.predictor import Predictor
+from bosdyn.client.image import ImageClient
+from bosdyn.client.lease import LeaseClient, LeaseKeepAlive, ResourceAlreadyClaimedError
+from bosdyn.client.manipulation_api_client import ManipulationApiClient
+from click_map_interface import ClickMapInterface
+from view_map_highlighted import BosdynVTKInterface, SpotMap, VTKEngine
 
-from view_map_highlighted import SpotMap, VTKEngine, BosdynVTKInterface
-from conq.cameras_utils import get_color_img , display_image, annotate_frame#, get_depth_img
-from conq.manipulation import grasp_point_in_image_basic, \
-                                move_gripper_to_pose, \
-                                follow_gripper_trajectory, \
-                                arm_stow, gripper_open_fraction, \
-                                rotate_body_in_place, move_body, \
-                                is_grasping
+from conq.cameras_utils import (  # , get_depth_img
+    annotate_frame,
+    display_image,
+    get_color_img,
+)
+from conq.clients import Clients
+from conq.manipulation import (
+    arm_stow,
+    follow_gripper_trajectory,
+    grasp_point_in_image_basic,
+    gripper_open_fraction,
+    is_grasping,
+    move_body,
+    move_gripper_to_pose,
+    rotate_body_in_place,
+)
+from conq.navigation_lib.openai_nav.openai_nav_client import OpenAINavClient
+
 # TODO: Implement a state machine to deal with edge cases in a structured way
 
 class ToolRetrievalInferface(ClickMapInterface):
     def __init__(self, robot, upload_path, model_path, silhouette=None, silhouetteActor=None):
-        super().__init__(robot, upload_path, silhouette, silhouetteActor)
-        self.predictor = Predictor(model_path)
         self.image_client = robot.ensure_client(ImageClient.default_service_name)
         self.manipulation_client = robot.ensure_client(ManipulationApiClient.default_service_name)
+        self.clients = Clients(image=self.image_client, manipulation=self.manipulation_client)
+        super().__init__(robot, upload_path, clients=self.clients, silhouette=silhouette, silhouetteActor=silhouetteActor)
+        self.predictor = Predictor(model_path)
         # Cameras through which to look for objects
         self.cameras = [
             'back_fisheye_image',
@@ -34,6 +47,12 @@ class ToolRetrievalInferface(ClickMapInterface):
             'left_fisheye_image',
             'right_fisheye_image',
         ] # See conq/cameras_utils.py RGB_SOURCES
+
+        # Get locations to feed to open_ai_nav_client
+        self.waypoint_names = [name for name in self.name_to_id.keys() if 'waypoint' not in name]
+
+        # Create Azure client
+        self.open_ai_nav_client = OpenAINavClient(locations=self.waypoint_names)
 
 
     def onKeyPressEvent(self, obj, event):
@@ -51,9 +70,24 @@ class ToolRetrievalInferface(ClickMapInterface):
         if object_class is not None:
             # Go to a waypoint and pick up the tool, then come back
             if actor:
-                print(f"Looking for {object_class}...")
-                fetch_success = self.fetch_object(object_class, actor.waypoint_id)
-                print(f"Fetch success: {fetch_success}")
+                # Try to query chatgpt for the waypoint id
+                print(f"Finding probable location for {object_class}...")
+                likely_locations = self.open_ai_nav_client.find_probable_location_for_object(object_class)
+                # Likely location names sorted by probability
+                locations_sorted = [item[0] for item in sorted(likely_locations.items(), key=lambda x: x[1], reverse=True)]
+                
+                # Loop through all locations
+                for location in locations_sorted:
+                    print(f"Navigating to {location} to find the {object_class}...")
+                    print(f"Looking for {object_class}...")
+                    fetch_success = self.fetch_object(object_class, location)
+
+                    # If the fetch is a success, break. If not, go to the next location
+                    if fetch_success:
+                        print(f"Fetch successful!")
+                        break
+                    else:
+                        print(f"Fetch not successful: {fetch_success}")
             else:
                 print("No waypoint selected")
             self.print_controls()
@@ -284,7 +318,7 @@ def main(argv):
     vtk_engine.set_camera(avg_pos + np.array([-1.0, 0.0, 5.0]))
 
     silhouette, silhouetteActor = bosdyn_vtk_interface.make_silhouette_actor()
-    style = ToolRetrievalInferface(robot, options.upload_filepath, options.model_filepath, silhouette, silhouetteActor)
+    style = ToolRetrievalInferface(robot=robot, upload_path=options.upload_filepath, model_path=options.model_filepath, silhouette=silhouette, silhouetteActor=silhouetteActor)
     vtk_engine.set_interactor_style(style)
 
     lease_client = robot.ensure_client(LeaseClient.default_service_name)

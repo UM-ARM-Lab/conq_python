@@ -21,3 +21,4 @@ data/
 Pipfile
 Pipfile.lock
 .DS_Store
+*.env
