@@ -22,6 +22,7 @@ class GraphNav:
         # Load the graph_nav graph file from the environment variable GRAPH_NAV_GRAPH_FILEPATH
         load_dotenv('.env.local')
         self._upload_filepath = os.getenv('GRAPH_NAV_GRAPH_FILEPATH')
+        self.location_cache = os.getenv('GRAPH_NAV_LOCATION_CACHE') 
 
         # Save the robot as a private member variable and sync with the robot
         self._robot = robot
@@ -57,7 +58,7 @@ class GraphNav:
         self._current_annotation_name_to_wp_id = dict()
 
         # Init the graph for spot to use
-        self._init_graph()
+        self._init_graph()        
 
     #### PRIVATE UTILITY FUNCTIONS
 
@@ -69,8 +70,6 @@ class GraphNav:
         self._list_graph_waypoint_and_edge_ids()
 
         self._set_initial_localization_waypoint()
-        # Localize spot in a previously loaded map? 
-        #self._get_localization_state()
 
     # This function uploads the graph file from your computer to spot
     def _upload_graph_and_snapshots(self):
@@ -329,9 +328,13 @@ class GraphNav:
 
     def _set_initial_localization_waypoint(self):
         """Trigger localization to a waypoint."""
+        # This causes the localization to default to waypoint 0 unless specified otherwise
+        name = "waypoint_0"
+        with open(self.location_cache, 'r') as cache:
+            name = cache.readline()
         # Take the first argument as the localization waypoint.
         destination_waypoint = self._find_unique_waypoint_id(
-            'waypoint_0', self._current_graph, self._current_annotation_name_to_wp_id)
+            name, self._current_graph, self._current_annotation_name_to_wp_id)
         if not destination_waypoint:
             # Failed to find the unique waypoint id.
             return
@@ -388,15 +391,29 @@ class GraphNav:
             # Sit the robot down + power off after the navigation command is complete.
             self.toggle_power(should_power_on=False)
 
-# Setup and authenticate the robot.
-# sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
-# robot = sdk.create_robot('192.168.80.3')
-# bosdyn.client.util.authenticate(robot) 
+    # This function saves the current location so that spot can localize again on startup
+    def save_current_location(self):
+        print(self.location_cache)
+        with open(self.location_cache, 'w') as cache:
+            print("instide")
+            state = self._graph_nav_client.get_localization_state()
+            name = list(self._current_annotation_name_to_wp_id.keys())[list(self._current_annotation_name_to_wp_id.values()).index(state.localization.waypoint_id)]
+            print(f'Got waypoint: \n{name}')
+            cache.write(name)
+        
 
-# lease_client = robot.ensure_client(LeaseClient.default_service_name)
+#Setup and authenticate the robot.
+sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
+robot = sdk.create_robot('192.168.80.3')
+bosdyn.client.util.authenticate(robot) 
 
-# lease_client.take()
+lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-# with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-#     gn = GraphNav(robot)
-#     gn.navigate_to('waypoint_4')
+lease_client.take()
+
+with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
+    gn = GraphNav(robot)
+    gn.navigate_to('waypoint_0')
+    gn.save_current_location()
+
+    
