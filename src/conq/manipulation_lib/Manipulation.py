@@ -105,7 +105,6 @@ def move_gripper(clients: Clients, pose, blocking = True, frame_name = BODY_FRAM
     """
     
     try:
-        print("Arm command received")
         x,y,z,qw,qx,qy,qz = pose
         arm_command = RobotCommandBuilder.arm_pose_command(
             x, y, z, qw, qx,qy, qz, frame_name, duration,False)

@@ -26,3 +26,4 @@ Pipfile.lock
 scripts/tests/
 .vscode
 *.tar
+*.rrd

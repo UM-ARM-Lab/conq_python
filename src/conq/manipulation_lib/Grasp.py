@@ -3,7 +3,7 @@ import subprocess
 import time
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from sklearn.cluster import DBSCAN
+import open3d as o3d
 
 REPO_DIR = "/home/jemprem/Spot590/"
 
@@ -60,18 +60,36 @@ def get_grasp_candidates(file="live"):
 
 def get_best_grasp_pose(Target_T_Source, file="live", to_body=False):
     "Returns best grasp pose as tuple"
-    grasp_candidates = get_grasp_candidates(file)
+    grasp_candidates = get_grasp_candidates(file) # Grasp candidates from hand_sensor_frame
     
     grasp_cand_list = []
+    grasp_pos_list = []
+    grasp_quat_list = []
     for grasp in grasp_candidates:
+        
+        pos = np.array(grasp["position"]) #
+        quat = np.array(tuple(dict_to_tuple_wxyz(grasp["orientation"]))) # [qw, qx, qy, qz]
+
+        grasp_pos_list.append(pos)
+        grasp_quat_list.append(quat)
+
         pose_print = transform_grasp_pose(grasp,Target_T_Source)
         print(pose_print)
         grasp_cand_list.append(pose_print)
 
+    grasp_cand_array = np.hstack((grasp_pos_list,grasp_quat_list)) # nd.array: N x 7 (x,y,z,qw,qx,qy,qz)
+    print("Concatenated",grasp_cand_array)
+    # Visualize grasp candidates in hand pose frame
+    # Path to the point cloud file
+    PCD_PATH = "src/conq/manipulation_lib/gpd/data/PCD/live.pcd"
+    # Load the point cloud
+    point_cloud = o3d.io.read_point_cloud(PCD_PATH)
+    viz_grasp_cand(point_cloud, grasp_cand_array)
+    
     if to_body:
         print("Grasp from target frame")
         position = tuple(grasp_candidates[0]["position"])
-        orientation = tuple(dict_to_tuple_wxyz(grasp_candidates[0]["orientation"])) #(qw, qx, qy, qz)
+        orientation = tuple(dict_to_tuple_scipy(grasp_candidates[0]["orientation"])) #(qw, qx, qy, qz)
         pose_tuple = position + orientation
     else:
         # pose_tuple = transform_grasp_pose(grasp_candidates[0],Target_T_Source)
@@ -119,7 +137,6 @@ def choose_best_grasp(grasp_candidates, gaze_pose):
         if similarity > best_similarity:
             best_similarity = similarity
             best_grasp = grasp
-    
     return best_grasp
 
 def dict_to_tuple_wxyz(orientation_dict):
@@ -138,6 +155,34 @@ def dict_to_tuple_scipy(orientation_dict):
         orientation_dict["z"],
         orientation_dict["w"],
     )
+
+def viz_grasp_cand(point_cloud, grasp_candidates_array):
+    geometries = [point_cloud]
+
+    # coordinate frame for the origin
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.25, origin=[0, 0, 0])
+    geometries.append(coordinate_frame)
+
+    grasp_points = grasp_candidates_array[:,:3]
+    grasp_orientations = grasp_candidates_array[:,3:]
+
+    for i, (point, orientation) in enumerate(zip(grasp_points, grasp_orientations)):
+        # small sphere at the grasp point
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.005)
+        sphere.translate(point)
+        sphere.paint_uniform_color([0, 0, 0])  # black color
+        geometries.append(sphere)
+        
+        # coordinate frame at the grasp point with the given orientation
+        grasp_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05, origin=point)
+        
+        # Convert quaternion to rotation matrix
+        R = o3d.geometry.get_rotation_matrix_from_quaternion(orientation)
+        grasp_frame.rotate(R, center=point)
+        geometries.append(grasp_frame)
+
+    # Visualize the point cloud along with the grasp points and their orientations
+    o3d.visualization.draw_geometries(geometries)
 
 
 def main():
