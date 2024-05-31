@@ -164,9 +164,13 @@ class OwlSam():
         
 
 owlsam = OwlSam()
-img_path = "/home/qianwei/conq_python/data/memory/IMG_1720.jpg"
+img_path = "/home/qianwei/conq_python/data/memory/drill.jpg"
+cv_image = cv2.imread(img_path)
 image = Image.open(img_path)
-pred_box, centroid = owlsam.predict_boxes(image, [["hand rake"]])
+pred_box, centroid = owlsam.predict_boxes(image, [["drill"]])
+x1, y1, x2, y2 = map(int, pred_box)  # Ensure coordinates are integers
+cv2.rectangle(cv_image, (x1, y1), (x2, y2), (255, 0, 0), 2)  # Draw rectangle
+
 pred_box = torch.tensor(pred_box)
 # print(f'\nObject centroid @ {centroid}')
 # print(f'Object bounding box {pred_box}')
@@ -177,6 +181,28 @@ del owlsam.model
 masks = owlsam.predict_masks(img_path, pred_box)
 print(f'Mask found of shape {masks.shape}')
 
-plt.imshow(image)
-plt.imshow(masks.squeeze(0).permute(1,2,0).numpy(), alpha=0.5)
-plt.show()
+
+
+# Convert the mask tensor to a format suitable for visualization
+mask_image = masks.squeeze(0).permute(1, 2, 0).numpy()
+
+# Create an overlay with the mask
+overlay = cv_image.copy()
+for i in range(mask_image.shape[2]):
+    mask = mask_image[:, :, i]
+    overlay[mask > 0.5] = (0, 255, 0)  # Color the mask area in green
+
+# Blend the overlay with the original image
+alpha = 0.5  # Transparency factor
+cv_image_with_mask = cv2.addWeighted(overlay, alpha, cv_image, 1 - alpha, 0)
+
+
+
+cv2.imshow('Image with Bounding Box',cv_image_with_mask)
+cv2.waitKey(0)  # Wait for a key press to close the window
+cv2.destroyAllWindows()
+
+
+# plt.imshow(image)
+# plt.imshow(masks.squeeze(0).permute(1,2,0).numpy(), alpha=0.5)
+# plt.show()

@@ -58,8 +58,8 @@ ORIENTATION_MAP = {
     'hand_depth':                       (0.75,0.0,0.1, 0.7071,0.,0.7071,0),
     'hand_color_image':                 (0.75,0.0,0.1, 0.7071,0.,0.7071,0),
     'left_fisheye_image':               (0,0.75,0.1, 0.7071,0.,0.7071,0),
-    'right_fisheye_image':              (0,-0.75,0.1, 0.7071,0.,0.7071,0),
-    'straight_up':                         (0.05,0,0.7, 0.7071,0,0.7071,0)
+    'right_fisheye_image':              (0,-0.65,0.1, 0.7071,0.,0.7071,0),
+    'straight_up':                         (0.5,0,0.85, 0.7071,0,-0.7071,0)
 }
 
 class SemanticGrasper:
@@ -74,6 +74,8 @@ class SemanticGrasper:
         self.client = OpenAI(organization=self.ORG_KEY, api_key=self.MY_API_KEY)
 
         self.waypoint_photographer = WaypointPhotographer(self.robot)
+        self.waypoint_photographer._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image', 'frontleft_fisheye_image', 'frontright_fisheye_image']
+
 
         self.images_loc = os.getenv('MEMORY_IMAGE_PATH')
 
@@ -140,6 +142,7 @@ class SemanticGrasper:
             if found_obj:
                 found_obj_img_path = image_paths[idx]
                 found_camera_frame = found_obj_img_path.split('_')[0:3] #
+                print(f'Frame of found obj: {found_camera_frame}')
                 return f'{found_camera_frame[0]}_{found_camera_frame[1]}_{found_camera_frame[2]}'
             
         
@@ -182,14 +185,16 @@ class SemanticGrasper:
             gaze_pose = ORIENTATION_MAP[object_direction_name]
             status = move_gripper(clients, gaze_pose, blocking=False, duration = 0.5)
             status = open_gripper(clients)
-            time.sleep(1)
+            time.sleep(3)
 
             image_responses = self.image_client.get_image_from_sources(sources)
 
-            rgb = vision.get_latest_RGB()
+            rgb = vision.get_latest_RGB(path=self.images_loc, save=True, file_name='live_hand')
 
             boxes, centroid = owlsam.predict_boxes(rgb, [[object_name]])
             print(f'predicted boxes shape: {boxes.shape}')
+            seg = owlsam.predict_masks(img_path=self.images_loc+'live_hand.jpg', boxes=boxes)
+            centroid = owlsam.mask_centroid(seg)
             pix_x, pix_y = (centroid[0],centroid[1]) # Get from object detector
                 
             pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
@@ -202,7 +207,7 @@ class SemanticGrasper:
             #     stow_arm(self.robot, self.command_client)
             result = grasp_point_in_image(clients,image_responses[0],pick_vec)
             status = move_gripper(clients, ORIENTATION_MAP['straight_up'], blocking=False, duration=0.5)
-            
+            os.remove(self.images_loc+'live_hand.jpg')
             
 
 
