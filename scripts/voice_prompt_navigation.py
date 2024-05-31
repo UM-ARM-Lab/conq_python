@@ -72,7 +72,7 @@ with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_
 
     sg.take_photos()
     object_direction = sg.find_object_in_photos(obj_of_interest)
-    sg.orient_and_grasp(object_direction)
+    sg.orient_and_grasp(object_direction,obj_of_interest)
 
     print(f'Going back to start point...')
 

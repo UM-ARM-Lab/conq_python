@@ -59,7 +59,7 @@ ORIENTATION_MAP = {
     'hand_color_image':                 (0.75,0.0,0.1, 0.7071,0.,0.7071,0),
     'left_fisheye_image':               (0,0.75,0.1, 0.7071,0.,0.7071,0),
     'right_fisheye_image':              (0,-0.75,0.1, 0.7071,0.,0.7071,0),
-    'straight':                         (0.75,0,0.3, 0.7071,0.,0.7071,0)
+    'straight_up':                         (0.05,0,0.7, 0.7071,0,0.7071,0)
 }
 
 class SemanticGrasper:
@@ -158,7 +158,7 @@ class SemanticGrasper:
             raise Exception(error_message)
 
     #orient gripper along with object direction
-    def orient_and_grasp(self, object_direction_name):
+    def orient_and_grasp(self, object_direction_name,object_name):
         assert self.robot.has_arm(), 'Robot requires an arm to run this example.'
         self.verify_estop()
         self.lease_client.take()
@@ -188,19 +188,21 @@ class SemanticGrasper:
 
             rgb = vision.get_latest_RGB()
 
-            boxes, centroid = owlsam.predict_boxes(rgb, [["tool"]])
+            boxes, centroid = owlsam.predict_boxes(rgb, [[object_name]])
             print(f'predicted boxes shape: {boxes.shape}')
             pix_x, pix_y = (centroid[0],centroid[1]) # Get from object detector
                 
             pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
-            try:
-                grasp_point_in_image(clients,image_responses[0],pick_vec)
-                status = move_gripper(clients, ORIENTATION_MAP['straight'], blocking=True, duration=0.5)
-            except Exception as e:
-                print("Whoops")
-                close_gripper(clients=clients)
-                stow_arm(self.robot, self.command_client)
-            time.sleep(1)
+            # try:
+            #     grasp_point_in_image(clients,image_responses[0],pick_vec)
+            #     status = move_gripper(clients, ORIENTATION_MAP['straight'], blocking=True, duration=0.5)
+            # except Exception as e:
+            #     print("Whoops")
+            #     close_gripper(clients=clients)
+            #     stow_arm(self.robot, self.command_client)
+            result = grasp_point_in_image(clients,image_responses[0],pick_vec)
+            status = move_gripper(clients, ORIENTATION_MAP['straight_up'], blocking=False, duration=0.5)
+            
             
 
 

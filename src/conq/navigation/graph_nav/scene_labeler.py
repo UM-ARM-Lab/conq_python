@@ -67,17 +67,20 @@ class SceneLabeler:
                 "max_tokens": 300
             }
 
-            os.remove(image_paths[idx])
+            os.remove(self.images_loc + image_paths[idx])
 
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
 
-            objs_str = response.json()['choices'][0]['message']['content']
-            image_objects = objs_str.split(', ')
-            
-            for obj_name in image_objects:
-                if obj_name != 'None':
-                    curr_img_waypoint_id = f"waypoint_{img_waypoint_ids[idx]}"
-                    self.object_dict[obj_name] = curr_img_waypoint_id
+            try:
+                objs_str = response.json()['choices'][0]['message']['content']
+                image_objects = objs_str.split(', ')
+                
+                for obj_name in image_objects:
+                    if obj_name != 'None':
+                        curr_img_waypoint_id = f"waypoint_{img_waypoint_ids[idx]}"
+                        self.object_dict[obj_name] = curr_img_waypoint_id
+            except:
+                print('Issue with GPT output..')
                     
         print(f'Dreaming complete!')
         
