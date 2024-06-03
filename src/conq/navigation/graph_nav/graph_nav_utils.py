@@ -326,6 +326,8 @@ class GraphNav:
         if self.use_gps:
             print(f'GPS info:\n{state.gps}')
 
+    # This uses the Scan Match algorithm that the spok sdk has for using slam to find an estimated localization
+    # This happens because in the set_localization function the argument FIDUCIAL_INIT_NO_FIDUCIAL is passed which signals that spot should use slam to help localize itself
     def _set_initial_localization_waypoint(self):
         """Trigger localization to a waypoint."""
         # This causes the localization to default to waypoint 0 unless specified otherwise
@@ -413,7 +415,7 @@ lease_client.take()
 
 with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
     gn = GraphNav(robot)
-    gn.navigate_to('waypoint_0')
+    gn.navigate_to('waypoint_21')
     gn.save_current_location()
 
     
