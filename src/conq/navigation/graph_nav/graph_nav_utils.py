@@ -351,8 +351,8 @@ class GraphNav:
         self._graph_nav_client.set_localization(
             initial_guess_localization=localization,
             # It's hard to get the pose perfect, search +/-20 deg and +/-20cm (0.2m).
-            max_distance=0.2,
-            max_yaw=20.0 * math.pi / 180.0,
+            max_distance=4.0,
+            max_yaw=180.0 * math.pi / 180.0,
             fiducial_init=graph_nav_pb2.SetLocalizationRequest.FIDUCIAL_INIT_NO_FIDUCIAL,
             ko_tform_body=current_odom_tform_body)
 
@@ -415,7 +415,7 @@ lease_client.take()
 
 with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
     gn = GraphNav(robot)
-    gn.navigate_to('waypoint_21')
+    gn.navigate_to('waypoint_10')
     gn.save_current_location()
 
     
