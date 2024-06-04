@@ -69,7 +69,7 @@ class GraphNav:
         # Load the name tables
         self._list_graph_waypoint_and_edge_ids()
 
-        self._set_initial_localization_waypoint()
+        self._localize()
 
     # This function uploads the graph file from your computer to spot
     def _upload_graph_and_snapshots(self):
@@ -326,20 +326,36 @@ class GraphNav:
         if self.use_gps:
             print(f'GPS info:\n{state.gps}')
 
+    # This is a higher level function for localizing in an entire graph
+    def _localize(self):
+        # Read the cached value for an estimate as to where we started in the map
+        cached = "waypoint_0"
+        with open(self.location_cache, 'r') as cache:
+            cached = cache.readline()
+
+        cached_number = int(cached[9:])
+        
+        num_waypoints = len(self._current_annotation_name_to_wp_id)
+
+        for i in range(0, num_waypoints):
+            if(self._set_initial_localization_waypoint((cached_number + i) % num_waypoints)):
+                break
+                
+                
+
+
+
     # This uses the Scan Match algorithm that the spok sdk has for using slam to find an estimated localization
     # This happens because in the set_localization function the argument FIDUCIAL_INIT_NO_FIDUCIAL is passed which signals that spot should use slam to help localize itself
-    def _set_initial_localization_waypoint(self):
-        """Trigger localization to a waypoint."""
-        # This causes the localization to default to waypoint 0 unless specified otherwise
-        name = "waypoint_0"
-        with open(self.location_cache, 'r') as cache:
-            name = cache.readline()
+    def _set_initial_localization_waypoint(self, waypoint_id):
+        print("Localizing to waypoint: " + str(waypoint_id))
+        name = "waypoint_" + str(waypoint_id)
         # Take the first argument as the localization waypoint.
         destination_waypoint = self._find_unique_waypoint_id(
             name, self._current_graph, self._current_annotation_name_to_wp_id)
         if not destination_waypoint:
             # Failed to find the unique waypoint id.
-            return
+            return False
 
         robot_state = self._robot_state_client.get_robot_state()
         current_odom_tform_body = get_odom_tform_body(
@@ -348,13 +364,18 @@ class GraphNav:
         localization = nav_pb2.Localization()
         localization.waypoint_id = destination_waypoint
         localization.waypoint_tform_body.rotation.w = 1.0
-        self._graph_nav_client.set_localization(
-            initial_guess_localization=localization,
-            # It's hard to get the pose perfect, search +/-20 deg and +/-20cm (0.2m).
-            max_distance=4.0,
-            max_yaw=180.0 * math.pi / 180.0,
-            fiducial_init=graph_nav_pb2.SetLocalizationRequest.FIDUCIAL_INIT_NO_FIDUCIAL,
-            ko_tform_body=current_odom_tform_body)
+        try:    
+            self._graph_nav_client.set_localization(
+                initial_guess_localization=localization,
+                # It's hard to get the pose perfect, search +/-20 deg and +/-20cm (0.2m).
+                max_distance=4.0,
+                max_yaw=180.0 * math.pi / 180.0,
+                fiducial_init=graph_nav_pb2.SetLocalizationRequest.FIDUCIAL_INIT_NO_FIDUCIAL,
+                ko_tform_body=current_odom_tform_body)
+            return True
+        except bosdyn.client.exceptions.TimedOutError:
+            print("Localizing to waypoint: " + str(waypoint_id) + " Failed")
+            return False
 
     #### PUBLIC MEMBER FUNCTIONS ####
 
@@ -415,7 +436,7 @@ lease_client.take()
 
 with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
     gn = GraphNav(robot)
-    gn.navigate_to('waypoint_10')
+    gn.navigate_to('waypoint_0')
     gn.save_current_location()
 
     
