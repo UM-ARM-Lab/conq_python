@@ -142,72 +142,85 @@ if __name__ == "__main__":
 
     # This is the function that uses the username and password env vars to verify that we should have access to spot
     bosdyn.client.util.authenticate(robot)
+    robot.time_sync.wait_for_sync()
+
 
     # This is a homebrewed function ensures a given robot is not currently e-stopped
     verify_estop(robot)
 
+    lease_client = robot.ensure_client(LeaseClient.default_service_name)
     image_client = robot.ensure_client(ImageClient.default_service_name)
+    command_client = robot.ensure_client(RobotCommandClient.default_service_name)
 
-    
-    # Get right_fisheye_image
-    rgb_request = build_image_request('right_fisheye_image', pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
-    rgb_response= image_client.get_image([rgb_request])[0]
-    rgb_np = _image_to_opencv(rgb_response, auto_rotate=True)
-    image = np.array(rgb_np,dtype=np.uint8)
-    right_fisheye_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    cv2.imwrite(MEMORY_IMAGE_PATH + "curr1.jpg", right_fisheye_image)    
-    curr_right_fisheye_image_embedding = get_image_embedding(MEMORY_IMAGE_PATH + "curr1.jpg")
+    lease_client.take()
 
-    # Get left_fisheye_image
-    rgb_request = build_image_request('left_fisheye_image', pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
-    rgb_response= image_client.get_image([rgb_request])[0]
-    rgb_np = _image_to_opencv(rgb_response, auto_rotate=True)
-    image = np.array(rgb_np,dtype=np.uint8)
-    left_fisheye_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    cv2.imwrite(MEMORY_IMAGE_PATH + "curr2.jpg", left_fisheye_image)    
-    curr_left_fisheye_image_embedding = get_image_embedding(MEMORY_IMAGE_PATH + "curr2.jpg")
+    robot.logger.info('Powering on robot... This may take a several seconds.')
+    robot.power_on(timeout_sec=20)
+    assert robot.is_powered_on(), 'Robot power on failed.'
+    robot.logger.info('Robot powered on.')
 
+    stand(robot, command_client)
 
-    # Get back_fisheye_image
-    rgb_request = build_image_request('back_fisheye_image', pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
-    rgb_response= image_client.get_image([rgb_request])[0]
-    rgb_np = _image_to_opencv(rgb_response, auto_rotate=True)
-    image = np.array(rgb_np,dtype=np.uint8)
-    back_fisheye_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    cv2.imwrite(MEMORY_IMAGE_PATH + "curr3.jpg", back_fisheye_image)    
-    curr_back_fisheye_image_embedding = get_image_embedding(MEMORY_IMAGE_PATH + "curr3.jpg")
-
-    gn = GraphNav(robot)
-
-    scores = []
-
-    for waypoint_num in range(gn.get_graph_size()):
-        print(f'Embedding waypoint_{waypoint_num}')
+    with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
         # Get right_fisheye_image
-        img_path_right_fisheye_image = MEMORY_IMAGE_PATH + 'right_fisheye_image' + f"_waypoint_{waypoint_num}_.jpg"
-        mem_right_fisheye_image_embedding = get_image_embedding(img_path_right_fisheye_image)    
-        cosine_sim_right_fisheye_image = cosine_similarity([mem_right_fisheye_image_embedding], [curr_right_fisheye_image_embedding])
+        rgb_request = build_image_request('right_fisheye_image', pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+        rgb_response= image_client.get_image([rgb_request])[0]
+        rgb_np = _image_to_opencv(rgb_response, auto_rotate=True)
+        image = np.array(rgb_np,dtype=np.uint8)
+        right_fisheye_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        cv2.imwrite(MEMORY_IMAGE_PATH + "curr1.jpg", right_fisheye_image)    
+        curr_right_fisheye_image_embedding = get_image_embedding(MEMORY_IMAGE_PATH + "curr1.jpg")
 
         # Get left_fisheye_image
-        img_path_left_fisheye_image = MEMORY_IMAGE_PATH + 'left_fisheye_image' + f"_waypoint_{waypoint_num}_.jpg"
-        mem_left_fisheye_image_embedding = get_image_embedding(img_path_left_fisheye_image)   
-        cosine_sim_left_fisheye_image = cosine_similarity([mem_left_fisheye_image_embedding], [curr_left_fisheye_image_embedding])
+        rgb_request = build_image_request('left_fisheye_image', pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+        rgb_response= image_client.get_image([rgb_request])[0]
+        rgb_np = _image_to_opencv(rgb_response, auto_rotate=True)
+        image = np.array(rgb_np,dtype=np.uint8)
+        left_fisheye_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        cv2.imwrite(MEMORY_IMAGE_PATH + "curr2.jpg", left_fisheye_image)    
+        curr_left_fisheye_image_embedding = get_image_embedding(MEMORY_IMAGE_PATH + "curr2.jpg")
+
 
         # Get back_fisheye_image
-        img_path_back_fisheye_image = MEMORY_IMAGE_PATH + 'back_fisheye_image' + f"_waypoint_{waypoint_num}_.jpg"
-        mem_back_fisheye_image_embedding = get_image_embedding(img_path_back_fisheye_image)   
-        cosine_sim_back_fisheye_image = cosine_similarity([mem_back_fisheye_image_embedding], [curr_back_fisheye_image_embedding])
+        rgb_request = build_image_request('back_fisheye_image', pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+        rgb_response= image_client.get_image([rgb_request])[0]
+        rgb_np = _image_to_opencv(rgb_response, auto_rotate=True)
+        image = np.array(rgb_np,dtype=np.uint8)
+        back_fisheye_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        cv2.imwrite(MEMORY_IMAGE_PATH + "curr3.jpg", back_fisheye_image)    
+        curr_back_fisheye_image_embedding = get_image_embedding(MEMORY_IMAGE_PATH + "curr3.jpg")
 
-        print(f'waypoint_{waypoint_num} has a score of {cosine_sim_right_fisheye_image + cosine_sim_left_fisheye_image + cosine_sim_back_fisheye_image}')
-        scores.append(cosine_sim_right_fisheye_image + cosine_sim_left_fisheye_image + cosine_sim_back_fisheye_image)
+        gn = GraphNav(robot)
+
+        scores = []
+
+        for waypoint_num in range(gn.get_graph_size()):
+            print(f'Embedding waypoint_{waypoint_num}')
+            # Get right_fisheye_image
+            img_path_right_fisheye_image = MEMORY_IMAGE_PATH + 'right_fisheye_image' + f"_waypoint_{waypoint_num}_.jpg"
+            mem_right_fisheye_image_embedding = get_image_embedding(img_path_right_fisheye_image)    
+            cosine_sim_right_fisheye_image = cosine_similarity([mem_right_fisheye_image_embedding], [curr_right_fisheye_image_embedding])
+
+            # Get left_fisheye_image
+            img_path_left_fisheye_image = MEMORY_IMAGE_PATH + 'left_fisheye_image' + f"_waypoint_{waypoint_num}_.jpg"
+            mem_left_fisheye_image_embedding = get_image_embedding(img_path_left_fisheye_image)   
+            cosine_sim_left_fisheye_image = cosine_similarity([mem_left_fisheye_image_embedding], [curr_left_fisheye_image_embedding])
+
+            # Get back_fisheye_image
+            img_path_back_fisheye_image = MEMORY_IMAGE_PATH + 'back_fisheye_image' + f"_waypoint_{waypoint_num}_.jpg"
+            mem_back_fisheye_image_embedding = get_image_embedding(img_path_back_fisheye_image)   
+            cosine_sim_back_fisheye_image = cosine_similarity([mem_back_fisheye_image_embedding], [curr_back_fisheye_image_embedding])
+
+            print(f'waypoint_{waypoint_num} has a score of {cosine_sim_right_fisheye_image + cosine_sim_left_fisheye_image + cosine_sim_back_fisheye_image}')
+            scores.append(cosine_sim_right_fisheye_image + cosine_sim_left_fisheye_image + cosine_sim_back_fisheye_image)
 
 
-    maxIndex = 0
-    maxScore = 0
-    for i in range(gn.get_graph_size()):
-        if(scores[i] > maxScore):
-            maxScore = scores[i]
-            maxIndex = i
+        maxIndex = 0
+        maxScore = 0
+        for i in range(gn.get_graph_size()):
+            if(scores[i] > maxScore):
+                maxScore = scores[i]
+                maxIndex = i
 
-    print(f"We are estimated to be at waypoint {maxIndex}")
+        print(f"We are estimated to be at waypoint {maxIndex}")
 
