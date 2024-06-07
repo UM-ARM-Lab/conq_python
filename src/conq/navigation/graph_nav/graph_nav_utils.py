@@ -69,7 +69,7 @@ class GraphNav:
         # Load the name tables
         self._list_graph_waypoint_and_edge_ids()
 
-        self._localize()
+        #self._localize()
 
     # This function uploads the graph file from your computer to spot
     def _upload_graph_and_snapshots(self):
@@ -423,20 +423,24 @@ class GraphNav:
             name = list(self._current_annotation_name_to_wp_id.keys())[list(self._current_annotation_name_to_wp_id.values()).index(state.localization.waypoint_id)]
             print(f'Got waypoint: \n{name}')
             cache.write(name)
+
+    # Get the size of the current graph
+    def get_graph_size(self):
+        return len(self._current_annotation_name_to_wp_id)
         
 
-#Setup and authenticate the robot.
-sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
-robot = sdk.create_robot('192.168.80.3')
-bosdyn.client.util.authenticate(robot) 
+# #Setup and authenticate the robot.
+# sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
+# robot = sdk.create_robot('192.168.80.3')
+# bosdyn.client.util.authenticate(robot) 
 
-lease_client = robot.ensure_client(LeaseClient.default_service_name)
+# lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-lease_client.take()
+# lease_client.take()
 
-with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-    gn = GraphNav(robot)
-    gn.navigate_to('waypoint_0')
-    gn.save_current_location()
+# with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
+#     gn = GraphNav(robot)
+#     gn.navigate_to('waypoint_0')
+#     gn.save_current_location()
 
     
