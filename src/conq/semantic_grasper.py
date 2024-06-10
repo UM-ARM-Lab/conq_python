@@ -47,6 +47,7 @@ from conq.clients import Clients
 from conq.manipulation_lib.utils import stow_arm
 import matplotlib.pyplot as plt
 from conq.owlsam import OwlSam
+from conq.perception_lib.grounded_sam_inference import GroundedSAM
 
 ORIENTATION_MAP = {
     'back_fisheye_image':               (-1.00,0.0,0.1, 0.7071,0.,0.7071,0),
@@ -59,7 +60,8 @@ ORIENTATION_MAP = {
     'hand_color_image':                 (0.75,0.0,0.1, 0.7071,0.,0.7071,0),
     'left_fisheye_image':               (0,0.75,0.1, 0.7071,0.,0.7071,0),
     'right_fisheye_image':              (0,-0.65,0.1, 0.7071,0.,0.7071,0),
-    'straight_up':                         (0.5,0,0.85, 0.7071,0,-0.7071,0)
+    'straight_up':                      (0.5,0,0.85, 1.0,0,0,0),
+    'put_down':                         (0.5,0,-0.30, 0.7071,0.,0.7071,0)
 }
 
 class SemanticGrasper:
@@ -166,6 +168,7 @@ class SemanticGrasper:
         self.verify_estop()
         self.lease_client.take()
         owlsam = OwlSam()
+        gds = GroundedSAM()
 
         sources = ["hand_color_image"]
         vision = Vision(self.image_client, sources)
@@ -181,36 +184,42 @@ class SemanticGrasper:
             cmd_id = self.command_client.robot_command(robot_cmd)
             block_until_arm_arrives(self.command_client, cmd_id)
 
-            #look at scene
-            gaze_pose = ORIENTATION_MAP[object_direction_name]
-            status = move_gripper(clients, gaze_pose, blocking=False, duration = 0.5)
-            status = open_gripper(clients)
-            time.sleep(3)
+            grasp_result = False
+            while grasp_result is False:
 
-            image_responses = self.image_client.get_image_from_sources(sources)
+                #look at scene
+                gaze_pose = ORIENTATION_MAP[object_direction_name]
+                status = move_gripper(clients, gaze_pose, blocking=False, duration = 0.5)
+                status = open_gripper(clients)
+                time.sleep(3)
 
-            rgb = vision.get_latest_RGB(path=self.images_loc, save=True, file_name='live_hand')
+                image_responses = self.image_client.get_image_from_sources(sources)
+                rgb = vision.get_latest_RGB(path=self.images_loc, save=True, file_name='live_hand')
 
-            boxes, centroid = owlsam.predict_boxes(rgb, [[object_name]])
-            print(f'predicted boxes shape: {boxes.shape}')
-            seg = owlsam.predict_masks(img_path=self.images_loc+'live_hand.jpg', boxes=boxes)
-            centroid = owlsam.mask_centroid(seg)
-            pix_x, pix_y = (centroid[0],centroid[1]) # Get from object detector
-                
-            pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
-            # try:
-            #     grasp_point_in_image(clients,image_responses[0],pick_vec)
-            #     status = move_gripper(clients, ORIENTATION_MAP['straight'], blocking=True, duration=0.5)
-            # except Exception as e:
-            #     print("Whoops")
-            #     close_gripper(clients=clients)
-            #     stow_arm(self.robot, self.command_client)
-            result = grasp_point_in_image(clients,image_responses[0],pick_vec)
-            status = move_gripper(clients, ORIENTATION_MAP['straight_up'], blocking=False, duration=0.5)
-            os.remove(self.images_loc+'live_hand.jpg')
+                pred_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name)
+                pred_centroid = gds.compute_mask_centroid(pred_mask)
+
+                # boxes, centroid = owlsam.predict_boxes(rgb, [[object_name]])
+                # print(f'predicted boxes shape: {boxes.shape}')
+                # seg = owlsam.predict_masks(img_path=self.images_loc+'live_hand.jpg', boxes=boxes)
+                # centroid = owlsam.mask_centroid(seg)
+
+                pix_x, pix_y = (pred_centroid[0],pred_centroid[1]) # Get from object detector
+                pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
+
+                try:
+                    grasp_point_in_image(clients,image_responses[0],pick_vec)
+                except Exception as e:
+                    print("Whoops")
+                    close_gripper(clients=clients)
+                    stow_arm(self.robot, self.command_client)
+
+            status = move_gripper(clients, ORIENTATION_MAP[object_direction_name], blocking=False, duration=1)
+            time.sleep(1)
+            status = move_gripper(clients, ORIENTATION_MAP['put_down'], blocking=False, duration=1)
+            time.sleep(1)
+            open_gripper(clients)
             
-
-
         return True
 
 
