@@ -21,8 +21,8 @@ with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_
     wp = WaypointPhotographer(robot)
     wp.take_photos_of_full_map()
 
-print(f'Photos recorded. Begin dreaming..')
+# print(f'Photos recorded. Begin dreaming..')
 
-sl = SceneLabeler()
-object_dict = sl.extract_objects()
-sl.save_dict_to_json(object_dict)
+# sl = SceneLabeler()
+# object_dict = sl.extract_objects()
+# sl.save_dict_to_json(object_dict)

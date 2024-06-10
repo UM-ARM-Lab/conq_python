@@ -222,5 +222,9 @@ if __name__ == "__main__":
                 maxScore = scores[i]
                 maxIndex = i
 
+        gn.localize(maxIndex)
+
+        gn.navigate_to(f'waypoint_{6}')
+
         print(f"We are estimated to be at waypoint {maxIndex}")
 

@@ -69,7 +69,7 @@ class GraphNav:
         # Load the name tables
         self._list_graph_waypoint_and_edge_ids()
 
-        #self._localize()
+        #self.localize()
 
     # This function uploads the graph file from your computer to spot
     def _upload_graph_and_snapshots(self):
@@ -327,19 +327,9 @@ class GraphNav:
             print(f'GPS info:\n{state.gps}')
 
     # This is a higher level function for localizing in an entire graph
-    def _localize(self):
+    def localize(self, waypoint_num):
         # Read the cached value for an estimate as to where we started in the map
-        cached = "waypoint_0"
-        with open(self.location_cache, 'r') as cache:
-            cached = cache.readline()
-
-        cached_number = int(cached[9:])
-        
-        num_waypoints = len(self._current_annotation_name_to_wp_id)
-
-        for i in range(0, num_waypoints):
-            if(self._set_initial_localization_waypoint((cached_number + i) % num_waypoints)):
-                break
+        self._set_initial_localization_waypoint(waypoint_num)
                 
                 
 
