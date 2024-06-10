@@ -1,5 +1,6 @@
 
 import zmq
+import json
 
 context = zmq.Context()
 
@@ -11,7 +12,7 @@ socket.connect("ipc:///tmp/feeds/0")
 #  Do 10 requests, waiting each time for a response
 for request in range(10):
     print(f"Sending request {request} ...")
-    socket.send_string("Hello")
+    socket.send_string(json.dumps(["Hello", "World"]))
 
     #  Get the reply.
     message = socket.recv()
