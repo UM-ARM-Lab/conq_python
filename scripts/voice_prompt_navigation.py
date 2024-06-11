@@ -46,36 +46,35 @@ lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
 lease_client.take()
 
-with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-    gn = GraphNav(robot)
-    sl = SceneLabeler()
-    sg = SemanticGrasper(robot)
+gn = GraphNav(robot)
+sl = SceneLabeler()
+sg = SemanticGrasper(robot)
 
-    obj_wp_dict = sl.load_dict_from_json()
-
-
-    print('Setting up microphone...')
+obj_wp_dict = sl.load_dict_from_json()
 
 
-    task = recognize_speech_from_mic()
-    
+print('Setting up microphone...')
 
-    obj_of_interest = sl.identify_object_from_bank(task, obj_wp_dict)
 
-    print(f'Okay! Navigating towards the {obj_of_interest}...')
+task = recognize_speech_from_mic()
 
-    goal_waypoint = obj_wp_dict[obj_of_interest]
 
-    gn.navigate_to(goal_waypoint, sit_down_after_reached=False)
+obj_of_interest = sl.identify_object_from_bank(task, obj_wp_dict)
 
-    print(f'Reached goal! Grasping {obj_of_interest}..')
+print(f'Okay! Navigating towards the {obj_of_interest}...')
 
-    sg.take_photos()
-    object_direction = sg.find_object_in_photos(obj_of_interest)
-    sg.orient_and_grasp(object_direction,obj_of_interest)
+goal_waypoint = obj_wp_dict[obj_of_interest]
 
-    print(f'Going back to start point...')
+gn.navigate_to(goal_waypoint, sit_down_after_reached=False)
 
-    gn.navigate_to('waypoint_0', sit_down_after_reached=False)
+print(f'Reached goal! Grasping {obj_of_interest}..')
+
+sg.take_photos()
+object_direction = sg.find_object_in_photos(obj_of_interest)
+sg.orient_and_grasp(object_direction,obj_of_interest)
+
+print(f'Going back to start point...')
+
+gn.navigate_to('waypoint_0', sit_down_after_reached=False)
 
     

@@ -1,6 +1,7 @@
 from bosdyn.api import robot_state_pb2
 from bosdyn.api.graph_nav import map_pb2, graph_nav_pb2, nav_pb2
 from bosdyn.client.graph_nav import GraphNavClient
+from bosdyn.client.image import ImageClient
 from bosdyn.client.power import power_on_motors, safe_power_off_motors, PowerClient
 from bosdyn.client.exceptions import ResponseError
 from bosdyn.client.robot_command import RobotCommandClient
@@ -15,6 +16,7 @@ import os
 import time
 import math
 from dotenv import load_dotenv
+from conq.localization.localization_utils import Localization
 
 class GraphNav:
     # Constructor that will initialize everything that is needed for navigating to waypoints
@@ -326,14 +328,17 @@ class GraphNav:
         if self.use_gps:
             print(f'GPS info:\n{state.gps}')
 
+
+
     # This is a higher level function for localizing in an entire graph
-    def localize(self, waypoint_num):
+    def localize(self):
+        image_client = self.robot.ensure_client(ImageClient.default_service_name)
+
+        local = Localization(image_client, self.get_graph_size())
+        
+        waypoint_num = local.get_waypoint_estimate()
         # Read the cached value for an estimate as to where we started in the map
         self._set_initial_localization_waypoint(waypoint_num)
-                
-                
-
-
 
     # This uses the Scan Match algorithm that the spok sdk has for using slam to find an estimated localization
     # This happens because in the set_localization function the argument FIDUCIAL_INIT_NO_FIDUCIAL is passed which signals that spot should use slam to help localize itself
