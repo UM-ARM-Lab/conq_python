@@ -17,6 +17,7 @@ maintainers = [
 ]
 
 dependencies = [
+	"bosdyn",
     "Pillow",
     "arm_segmentation",
     "bosdyn-choreography-client",
@@ -46,3 +47,9 @@ dependencies = [
 [build-system]
 requires = ["setuptools>=43.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.pyright]
+include = ["src"]
+executionEnvironments = [
+	{ root = "src" }
+]

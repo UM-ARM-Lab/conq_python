@@ -27,3 +27,9 @@ scripts/tests/
 .vscode
 *.tar
 *.rrd
+.env*
+scripts/adi_owlsam.py
+scripts/gptv_testing.py
+scripts/navigation_labeller.py
+scripts/save_waypoint_pics.py
+scripts/vlm_declutter.py
