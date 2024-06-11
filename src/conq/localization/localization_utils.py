@@ -38,8 +38,6 @@ import time
 import numpy as np
 import json
 
-from conq.navigation.graph_nav.graph_nav_utils import GraphNav
-
 from dotenv import load_dotenv
 import os
 
@@ -47,7 +45,7 @@ class Localization:
     def __init__(self, image_client, num_waypoints):
         # Load .env
         load_dotenv('.env.local')
-        MEMORY_IMAGE_PATH = os.getenv('MEMORY_IMAGE_PATH')
+        self.MEMORY_IMAGE_PATH = os.getenv('MEMORY_IMAGE_PATH')
 
         self.image_client = image_client
         self.num_waypoints = num_waypoints

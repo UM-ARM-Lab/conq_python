@@ -25,8 +25,6 @@ class WaypointPhotographer:
 
         self._graph_nav = GraphNav(self._robot, is_debug=is_debug)
 
-        self._graph_nav.localize(0)
-
         self._image_client = self._robot.ensure_client(ImageClient.default_service_name)
 
         self._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image']

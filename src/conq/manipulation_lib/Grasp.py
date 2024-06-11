@@ -84,7 +84,7 @@ def get_best_grasp_pose(Target_T_Source, file="live", to_body=False):
     PCD_PATH = "src/conq/manipulation_lib/gpd/data/PCD/live.pcd"
     # Load the point cloud
     point_cloud = o3d.io.read_point_cloud(PCD_PATH)
-    viz_grasp_cand(point_cloud, grasp_cand_array)
+    # viz_grasp_cand(point_cloud, grasp_cand_array)
     
     if to_body:
         print("Grasp from target frame")

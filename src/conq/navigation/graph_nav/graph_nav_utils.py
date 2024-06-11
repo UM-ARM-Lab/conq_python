@@ -71,8 +71,6 @@ class GraphNav:
         # Load the name tables
         self._list_graph_waypoint_and_edge_ids()
 
-        #self.localize()
-
     # This function uploads the graph file from your computer to spot
     def _upload_graph_and_snapshots(self):
         if(self._is_debug):
@@ -330,7 +328,7 @@ class GraphNav:
 
     # This is a higher level function for localizing in an entire graph
     def localize(self):
-        image_client = self.robot.ensure_client(ImageClient.default_service_name)
+        image_client = self._robot.ensure_client(ImageClient.default_service_name)
 
         local = Localization(image_client, self.get_graph_size())
         

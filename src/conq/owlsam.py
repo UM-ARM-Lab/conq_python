@@ -163,20 +163,20 @@ class OwlSam():
         return cents[2], cents[3]
         
 
-owlsam = OwlSam()
-img_path = "/home/qianwei/conq_python/data/memory/IMG_1720.jpg"
-image = Image.open(img_path)
-pred_box, centroid = owlsam.predict_boxes(image, [["hand rake"]])
-pred_box = torch.tensor(pred_box)
-# print(f'\nObject centroid @ {centroid}')
-# print(f'Object bounding box {pred_box}')
+# owlsam = OwlSam()
+# img_path = "/home/qianwei/conq_python/data/memory/IMG_1720.jpg"
+# image = Image.open(img_path)
+# pred_box, centroid = owlsam.predict_boxes(image, [["hand rake"]])
+# pred_box = torch.tensor(pred_box)
+# # print(f'\nObject centroid @ {centroid}')
+# # print(f'Object bounding box {pred_box}')
 
-owlsam.model.cpu()
-del owlsam.model
+# owlsam.model.cpu()
+# del owlsam.model
 
-masks = owlsam.predict_masks(img_path, pred_box)
-print(f'Mask found of shape {masks.shape}')
+# masks = owlsam.predict_masks(img_path, pred_box)
+# print(f'Mask found of shape {masks.shape}')
 
-plt.imshow(image)
-plt.imshow(masks.squeeze(0).permute(1,2,0).numpy(), alpha=0.5)
-plt.show()
+# plt.imshow(image)
+# plt.imshow(masks.squeeze(0).permute(1,2,0).numpy(), alpha=0.5)
+# plt.show()

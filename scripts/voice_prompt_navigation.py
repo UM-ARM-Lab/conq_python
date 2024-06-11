@@ -47,6 +47,7 @@ lease_client = robot.ensure_client(LeaseClient.default_service_name)
 lease_client.take()
 
 gn = GraphNav(robot)
+gn.localize()
 sl = SceneLabeler()
 sg = SemanticGrasper(robot)
 
