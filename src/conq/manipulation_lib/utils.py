@@ -165,15 +165,18 @@ def pcl_transform(pcl_xyz, image_response, source,target_frame):
 
     return body_pcl_hand_sensor
 
-def rotate_quaternion(pose,angle_degrees, axis=(0,1,0)):
-    pose = list(pose)
-    angle_radians = np.radians(angle_degrees)
-    rotation = R.from_rotvec(angle_radians*np.array(axis))
-    quat_matrix = R.from_quat([pose[3], pose[4], pose[5], pose[6]]).as_matrix()
-    rotate_quat_matrix = rotation.apply(quat_matrix)
-    rotated_quaternion = R.from_matrix(rotate_quat_matrix).as_quat()
-    return tuple([pose[0],pose[1],pose[2],rotated_quaternion[0],rotated_quaternion[1],rotated_quaternion[2],rotated_quaternion[3]])
+def rotate_quaternion(pose, angle_degrees=90., axis=(1,0,0)):
+    x, y, z, qw, qx, qy, qz = pose
+    angle_rad = np.radians(angle_degrees)
 
+    offset_rot = R.from_rotvec(np.array(axis) * angle_rad)
+
+    orig_quat = np.array([qx, qy, qz, qw])
+    orig_rot = R.from_quat(orig_quat)
+
+    new_quat = (orig_rot * offset_rot).as_quat() # [qx, qy, qz, qw]
+
+    return (x, y, z-0.05, new_quat[3], new_quat[0], new_quat[1], new_quat[2])
 
 def get_segmask(shape=(480,640), center=(240,320), min_radius = 20, max_radius = 100):
     y,x = np.ogrid[:shape[0], :shape[1]]

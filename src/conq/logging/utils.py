@@ -1,5 +1,43 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+import rerun as rr
+
+ARM_LINK_NAMES = [
+    "arm0.link_sh0",
+    "arm0.link_sh1",
+    "arm0.link_el0",
+    "arm0.link_el1",
+    "arm0.link_wr0",
+    "arm0.link_wr1",
+    "arm0.link_fngr"
+]
+
+def path_to_link(link: int) -> str:
+    """Returns the link name corresponding to the given index."""
+    if 0 <= link < len(ARM_LINK_NAMES):
+        return ARM_LINK_NAMES[link]
+    else:
+        raise ValueError("Invalid link index")
+
+def log_angle_rot(entity_to_transform: dict[str, tuple[np.ndarray, np.ndarray]], link: int, angle_rad: int) -> None:
+    """Logs an angle for the spot robot"""
+    entity_path = path_to_link(link)
+    
+    start_translation, start_rotation_mat = entity_to_transform[entity_path]
+
+    # All angles describe rotations around the transformed z-axis.
+    vec = np.array(np.array([0, 0, 1]) * angle_rad)
+
+    rot = R.from_rotvec(vec).as_matrix()
+    rotation_mat = start_rotation_mat @ rot
+
+    rr.log(
+        entity_path, rr.Transform3D(translation=start_translation, mat3x3=rotation_mat)
+    )
+
+def extract_camera_name(source):
+    """Extract the camera name from the first element of the source list."""
+    return source[0].split('_')[0]
 
 def parse_image_response(image_response):
     camera_intrinsics = None

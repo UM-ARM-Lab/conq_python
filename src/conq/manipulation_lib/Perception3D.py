@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import open3d as o3d
 from bosdyn.api.image_pb2 import _IMAGERESPONSE, ImageResponse
-from bosdyn.client.frame_helpers import VISION_FRAME_NAME, get_a_tform_b
+from bosdyn.client.frame_helpers import VISION_FRAME_NAME, get_a_tform_b, ODOM_FRAME_NAME,BODY_FRAME_NAME
 
 # BOSDYN
 from bosdyn.client.image import (
@@ -163,7 +163,7 @@ class Vision:
 
         return img_bgr, rgb_np
     
-    def get_latest_Depth(self,path=DEPTH_PATH,save=True, file_name="live", target_frame = "body"):
+    def get_latest_Depth(self,path=DEPTH_PATH,save=True, file_name="live", target_frame = BODY_FRAME_NAME):
         depth_frame = _depth_image_data_to_numpy(image_response=self.get_latest_response()[0]) # Need this for aligning RGB and Depth
 
         BODY_T_VISION = get_a_tform_b(self.get_latest_response()[0].shot.transforms_snapshot, target_frame, "hand_color_image_sensor") # 4x4
@@ -221,7 +221,7 @@ class PointCloud:
         self.vision = vision
         self.sources = vision.sources
 
-    def get_raw_point_cloud(self,min_dist=0,max_dist=100, target_frame = "body",to_body = False):
+    def get_raw_point_cloud(self,min_dist=0,max_dist=100, target_frame = BODY_FRAME_NAME,to_body = False):
         
         image_response = self.vision.get_latest_response()[0]
         if image_response is None:
@@ -241,12 +241,39 @@ class PointCloud:
                 self.xyz = sensor_pcl
             return self.xyz
         
-    def process(self,seg_mask,target_frame):
-        """Process raw pointcloud: 1) Segment pointcloud from Lang-SAM"""
-        
-        return self.xyz
+    def process(self):
+        """Process raw pointcloud to downsample and remove noise"""
+        if self.xyz is None:
+            print("No point cloud data available for processing.")
+            return None
+
+        pcd = self.get_pcd()
+        self.filter_pcd(pcd)
     
-    def segment_xyz(self, seg_mask, target_frame = "body", min_dist=0,max_dist=10,to_body = False):
+    def filter_pcd(self, pcd):
+        """Filter the point cloud"""
+        if pcd is None:
+            return None
+
+        pcd = pcd.voxel_down_sample(voxel_size=0.01)
+
+        pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
+        pcd.orient_normals_consistent_tangent_plane(k=10)
+
+        # Poisson surface reconstruction
+        mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=9)
+        mesh.compute_vertex_normals()
+
+        # Remove low-density vertices
+        vertices_to_remove = densities < np.mean(densities)
+        mesh.remove_vertices_by_mask(vertices_to_remove)
+
+        # Convert mesh to pcd and to npy array
+        filtered_pcd = mesh.sample_points_uniformly(number_of_points=len(pcd.points))
+        self.xyz = np.asarray(filtered_pcd.points)
+        
+    
+    def segment_xyz(self, seg_mask, target_frame = BODY_FRAME_NAME, min_dist=0,max_dist=10,to_body = False):
         """Segment depth image and pointcloud"""
         # Get depth image (RGB-aligned)
         depth_image, _, _ = self.vision.get_latest_Depth()
@@ -275,11 +302,14 @@ class PointCloud:
             pcd.points = o3d.utility.Vector3dVector(self.xyz)
             return pcd
         
-    def save_pcd(self, path = PCD_PATH, file_name="live"):
+    def save_pcd(self, path = PCD_PATH, file_name="live",process=True):
         """Saves the current point cloud data to a PCD file."""
         start_time = time.time()
         if self.xyz is None:
             print("No point cloud data!")
+        if process:
+            self.process()
+            print("Finished processing point cloud")
         pcd_file_path = f"{path}{file_name}.pcd"
         with open(pcd_file_path, 'w') as pcd_file:
             # Write the PCD header

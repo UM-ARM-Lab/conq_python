@@ -12,7 +12,7 @@ from conq.cameras_utils import get_color_img
 from bosdyn.client.frame_helpers import get_a_tform_b,VISION_FRAME_NAME, HAND_FRAME_NAME,GRAV_ALIGNED_BODY_FRAME_NAME
 
 # BOSDYN
-from bosdyn.client.image import depth_image_data_to_numpy
+from bosdyn.client.image import _depth_image_data_to_numpy
 
 
 SOURCES =  [
