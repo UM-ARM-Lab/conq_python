@@ -142,21 +142,17 @@ def close_gripper(clients: Clients):
     except:
         return False
 
-def perform_grasp(clients: Clients, blocking=True):
+def perform_grasp(clients: Clients, Target_T_Source, blocking=True):
     """
     Perform grasp action
     """
     try:
         # Call Grasp detection Module
-        grasp_pose = get_best_grasp_pose()
-        modified_pose = list(grasp_pose)
-        # modified_pose[0]-=0.30
-        new_grasp_pose = tuple(modified_pose)
-
-        rotated_pose = rotate_quaternion(new_grasp_pose,-90,axis=(0,1,0))
-
+        grasp_pose = get_best_grasp_pose(Target_T_Source = Target_T_Source, to_body = False)
+        # TODO: Align to grasp approach axis
         # Execute grasp
-        status = move_gripper(clients, rotated_pose, blocking = True, duration = 1)
+        status = move_gripper(clients, rotate_quaternion(grasp_pose), blocking = blocking, duration = 1)
+        time.sleep(0.5)
         status = close_gripper(clients)
         return status
     except Exception as e:

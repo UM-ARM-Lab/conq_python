@@ -4,18 +4,20 @@ import time
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import open3d as o3d
+import os
 
-REPO_DIR = "/home/jemprem/Spot590/"
+REPO_DIR = os.getcwd()
 
 """
-docker run -it -e DISPLAY -v <REPO_DIR>conq_python/src/conq/manipulation_lib/gpd:/gpd -v /tmp/.X11-unix:/tmp/.X11-unix conq_gpd:stanley
+EXAMPLE USAGE:
+docker run -it -e DISPLAY -v <REPO_DIR>/src/conq/manipulation_lib/gpd:/gpd -v /tmp/.X11-unix:/tmp/.X11-unix conq_gpd:stanley
 """
 
 def get_grasp_candidates(file="live"):
     print("Starting Docker container...")
     docker_run_command = [
         "docker", "run", "-it",
-        "-v", REPO_DIR+"conq_python/src/conq/manipulation_lib/gpd:/gpd",
+        "-v", REPO_DIR+"/src/conq/manipulation_lib/gpd:/gpd",
         "conq_gpd:stanley",
         "/bin/bash",
         "-c",
@@ -74,11 +76,9 @@ def get_best_grasp_pose(Target_T_Source, file="live", to_body=False):
         grasp_quat_list.append(quat)
 
         pose_print = transform_grasp_pose(grasp,Target_T_Source)
-        print(pose_print)
         grasp_cand_list.append(pose_print)
 
     grasp_cand_array = np.hstack((grasp_pos_list,grasp_quat_list)) # nd.array: N x 7 (x,y,z,qw,qx,qy,qz)
-    print("Concatenated",grasp_cand_array)
     # Visualize grasp candidates in hand pose frame
     # Path to the point cloud file
     PCD_PATH = "src/conq/manipulation_lib/gpd/data/PCD/live.pcd"
@@ -96,7 +96,6 @@ def get_best_grasp_pose(Target_T_Source, file="live", to_body=False):
         # print("Final pose",pose_tuple)
         gaze_pose = (0.75, 0.0, 0.3, 0.7071, 0., 0.7071, 0.)
         pose_tuple = choose_best_grasp(grasp_cand_list, gaze_pose)
-        print("Final best pose",pose_tuple)
     return pose_tuple
 
 def transform_grasp_pose(grasp_candidate,Target_T_Source):
@@ -186,31 +185,13 @@ def viz_grasp_cand(point_cloud, grasp_candidates_array):
 
 
 def main():
-    file = "live"
-    # start_time = time.time()
-    # grasp_pose = get_best_grasp_pose(file)
-    # end_time = time.time()
-    # print(grasp_pose)
-    # print("Time: ", round((end_time - start_time), 2))
-#     Target_T_Source = np.array([[-0.12314594,  0.99110129, -0.05053028,  0.052     ],
-#  [-0.57408013, -0.02961206,  0.81826349 , 0.117     ],
-#  [ 0.80948569,  0.12977425,  0.57261816,  0.701 ,    ],
-#  [ 0. ,         0.    ,      0.     ,     1.        ]])
-#     grasp_pose = get_best_grasp_pose(Target_T_Source,file="live", type="M")
-#     print(grasp_pose)
-
-    # Example usage
-    grasp_candidates = [
-        (0.9641, 0.0336, -0.478, -0.5868, 0.6207, -0.52, -0.004),
-        (0.8132, 0.0193, -0.4601, -0.3543, 0.7104, -0.5819, 0.1764),
-        (0.958, 0.0077, -0.4221, 0.8782, -0.4151, 0.2091, -0.113),
-        (0.9163, -0.1334, -0.4438, 0.1368, 0.8821, 0.4268, -0.1451),
-        (1.012, -0.0484, -0.4972, 0.096, -0.3304, 0.386, 0.8559)
-    ]
-    gaze_pose = (0.75, 0.0, 0.3, 0.7071, 0., 0.7071, 0.)
-
-    best_grasp = choose_best_grasp(grasp_candidates, gaze_pose)
-    print("Best grasp:", best_grasp)
+    # Example usage   
+    Target_T_Source = np.array([[-0.12314594,  0.99110129, -0.05053028,  0.052     ],
+ [-0.57408013, -0.02961206,  0.81826349 , 0.117     ],
+ [ 0.80948569,  0.12977425,  0.57261816,  0.701 ,    ],
+ [ 0. ,         0.    ,      0.     ,     1.        ]])
+    grasp_pose = get_best_grasp_pose(Target_T_Source,file="live",to_body=False)
+    print(grasp_pose)
 
 if __name__ == "__main__":
     main()
