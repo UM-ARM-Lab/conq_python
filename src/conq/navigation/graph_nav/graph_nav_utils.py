@@ -328,8 +328,6 @@ class GraphNav:
         if self.use_gps:
             print(f'GPS info:\n{state.gps}')
 
-
-
     # This is a higher level function for localizing in an entire graph
     def localize(self):
         image_client = self.robot.ensure_client(ImageClient.default_service_name)
