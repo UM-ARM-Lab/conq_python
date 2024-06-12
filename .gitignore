@@ -33,3 +33,6 @@ scripts/gptv_testing.py
 scripts/navigation_labeller.py
 scripts/save_waypoint_pics.py
 scripts/vlm_declutter.py
+src/conq/manipulation_lib/gpd
+src/conq/perception_lib/weights_and_cfgs/
+src/conq/manipulation_lib/gpd
