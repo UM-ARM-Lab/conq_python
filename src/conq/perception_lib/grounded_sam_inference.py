@@ -105,7 +105,7 @@ class GroundedSAM:
             xyxy=best_box
         )
 
-        print(f'Found mask for {text} with shape {detections.mask.shape}..')
+        print(f'Found mask for {text} with shape {detections.mask.shape}')
 
         #Output numpy ndarray mask of shape (1, 480, 640)
         return detections.mask
@@ -124,6 +124,8 @@ class GroundedSAM:
         
         y_mean = indices[0].float().mean().item()
         x_mean = indices[1].float().mean().item()
+
+        print(f'Found mask centroid at {(x_mean, y_mean)}')
         
         return (x_mean, y_mean)
     
@@ -184,20 +186,19 @@ class GroundedSAM:
         ax.set_title(f"'{text_prompt}'")
 
         if centroid is not None:
-             circ = patches.Circle(centroid, radius=5)
+             circ = patches.Circle(centroid, radius=10)
              ax.add_patch(circ)
 
         plt.show()
 
-gds = GroundedSAM()
-img_path = "/Users/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/RGB/live.jpg"
-text = "hose attachment"
+# gds = GroundedSAM()
+# img_path = "/Users/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/RGB/live.jpg"
+# text = "red clippers"
 
 
-pred_mask = gds.predict_segmentation(img_path, text)
-pred_mask_centroid = gds.compute_mask_centroid(pred_mask)
-print(pred_mask_centroid)
-gds.plot_image_and_mask(image_path=img_path, mask=pred_mask, text_prompt=text, centroid=pred_mask_centroid)
+# pred_mask = gds.predict_segmentation(img_path, text)
+# pred_mask_centroid = gds.compute_mask_centroid(pred_mask)
+# gds.plot_image_and_mask(image_path=img_path, mask=pred_mask, text_prompt=text, centroid=pred_mask_centroid)
 
 
 
