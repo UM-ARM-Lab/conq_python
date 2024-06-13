@@ -21,6 +21,8 @@ import numpy as np
 import pdb
 import torch
 
+from google.protobuf import any_pb2, wrappers_pb2
+
 from conq.manipulation_lib.Manipulation import grasped_bool, open_gripper, close_gripper, move_gripper, move_gripper
 from conq.manipulation_lib.Perception3D import VisualPoseAcquirer, PointCloud, Vision
 
@@ -236,28 +238,29 @@ class SemanticGrasper:
         status = open_gripper(clients)
         status = move_gripper(clients=clients, pose=ORIENTATION_MAP['frontleft_fisheye_image'], blocking=True, duration = 0.3)
 
-    def capture_image(self):
-        sources = self.image_client.list_image_sources()
-        source_list = []
-        for source in sources:
-            if source.image_type == ImageSource.IMAGE_TYPE_VISUAL:
-                # only append if sensor has corresponding depth sensor
-                if source.name in VISUAL_SOURCE_TO_DEPTH_MAP_SOURCE:
-                    source_list.append(source.name)
-                    #source_list.append(VISUAL_SOURCE_TO_DEPTH_MAP_SOURCE[source.name])
-        image_list = []
-        for i in range(len(source_list)):
-            source_name = source_list[i]
-            img_req = None
-            if 'depth' not in source_name:
-                img_req = build_image_request(source_name, quality_percent=100,
-                                        image_format=image_pb2.Image.FORMAT_RAW,
-                                        pixel_format = image_pb2.Image.PIXEL_FORMAT_RGB_U8)
+    # def capture_image(self):
+    #     sources = self.image_client.list_image_sources()
+    #     source_list = []
+    #     for source in sources:
+    #         if source.image_type == ImageSource.IMAGE_TYPE_VISUAL:
+    #             # only append if sensor has corresponding depth sensor
+    #             if source.name in VISUAL_SOURCE_TO_DEPTH_MAP_SOURCE:
+    #                 source_list.append(source.name)
+    #                 #source_list.append(VISUAL_SOURCE_TO_DEPTH_MAP_SOURCE[source.name])
+    #     image_list = []
+    #     for i in range(len(source_list)):
+    #         source_name = source_list[i]
+    #         img_req = None
+    #         if 'depth' not in source_name:
+    #             img_req = build_image_request(source_name, quality_percent=100,
+    #                                     image_format=image_pb2.Image.FORMAT_RAW,
+    #                                     pixel_format = image_pb2.Image.PIXEL_FORMAT_RGB_U8)
 
-            image_response = self.image_client.get_image([img_req])
-            image_list.append(image_response[0])
+    #         image_response = self.image_client.get_image([img_req])
+    #         image_list.append(image_response[0])
         
-        return image_list
+        # return image_list
+
     def save_image_to_local(self, image, source_name):
         directory = os.getenv('MEMORY_IMAGE_PATH')
         if not os.path.exists(directory):
@@ -294,62 +297,62 @@ class SemanticGrasper:
     #         mobility_params = None
     #     return mobility_params
 
-    def go_to_object(self,text):
-        image_list = self.capture_image()
-        detector = GroundingDino()
-        best_score = 0
-        best_centroid = None
-        best_visual_response  = None
-        for i in range(len(image_list)):
-            visual_response = image_list[i]
-            cv_image = image_to_opencv(visual_response)
-            image_path = self.save_image_to_local(cv_image, source_name)
-            boxes,scores = detector.predict_box_score_with_text(image_path, text)
-            if boxes.any():
-                for box,score in zip(boxes,scores):
-                    if score>best_score:
-                        best_score = score
-                        best_centroid = detector.compute_box_centroid(box)
-                        best_visual_response = visual_response
-            else:
-                continue
+    # def go_to_object(self,text):
+    #     image_list = self.capture_image()
+    #     detector = GroundingDino()
+    #     best_score = 0
+    #     best_centroid = None
+    #     best_visual_response  = None
+    #     for i in range(len(image_list)):
+    #         visual_response = image_list[i]
+    #         cv_image = image_to_opencv(visual_response)
+    #         image_path = self.save_image_to_local(cv_image, source_name)
+    #         boxes,scores = detector.predict_box_score_with_text(image_path, text)
+    #         if boxes.any():
+    #             for box,score in zip(boxes,scores):
+    #                 if score>best_score:
+    #                     best_score = score
+    #                     best_centroid = detector.compute_box_centroid(box)
+    #                     best_visual_response = visual_response
+    #         else:
+    #             continue
         
-        if best_score!=0:
-            walk_x,walk_y = best_centroid
-            walk_vec = geometry_pb2.Vec2(x= walk_x, y=walk_y)
-            offset_distance = wrappers_pb2.FloatValue(value=0.5)
-            # Build the proto
-            walk_to = manipulation_api_pb2.WalkToObjectInImage(
-            pixel_xy=walk_vec, transforms_snapshot_for_camera=best_visual_response.shot.transforms_snapshot,
-            frame_name_image_sensor=best_visual_response.shot.frame_name_image_sensor,
-            camera_model=best_visual_response.source.pinhole, offset_distance=offset_distance)
+    #     if best_score!=0:
+    #         walk_x,walk_y = best_centroid
+    #         walk_vec = geometry_pb2.Vec2(x= walk_x, y=walk_y)
+    #         offset_distance = wrappers_pb2.FloatValue(value=0.5)
+    #         # Build the proto
+    #         walk_to = manipulation_api_pb2.WalkToObjectInImage(
+    #         pixel_xy=walk_vec, transforms_snapshot_for_camera=best_visual_response.shot.transforms_snapshot,
+    #         frame_name_image_sensor=best_visual_response.shot.frame_name_image_sensor,
+    #         camera_model=best_visual_response.source.pinhole, offset_distance=offset_distance)
 
-            # Ask the robot to pick up the object
-            walk_to_request = manipulation_api_pb2.ManipulationApiRequest(
-                walk_to_object_in_image=walk_to)
+    #         # Ask the robot to pick up the object
+    #         walk_to_request = manipulation_api_pb2.ManipulationApiRequest(
+    #             walk_to_object_in_image=walk_to)
 
-            # Send the request
-            cmd_response = self.manipulation_api_client.manipulation_api_command(
-                manipulation_api_request=walk_to_request)
+    #         # Send the request
+    #         cmd_response = self.manipulation_api_client.manipulation_api_command(
+    #             manipulation_api_request=walk_to_request)
 
-            # Get feedback from the robot
-            while True:
-                time.sleep(0.25)
-                feedback_request = manipulation_api_pb2.ManipulationApiFeedbackRequest(
-                    manipulation_cmd_id=cmd_response.manipulation_cmd_id)
+    #         # Get feedback from the robot
+    #         while True:
+    #             time.sleep(0.25)
+    #             feedback_request = manipulation_api_pb2.ManipulationApiFeedbackRequest(
+    #                 manipulation_cmd_id=cmd_response.manipulation_cmd_id)
 
-                # Send the request
-                response = self.manipulation_api_client.manipulation_api_feedback_command(
-                    manipulation_api_feedback_request=feedback_request)
+    #             # Send the request
+    #             response = self.manipulation_api_client.manipulation_api_feedback_command(
+    #                 manipulation_api_feedback_request=feedback_request)
 
-                print('Current state: ',
-                    manipulation_api_pb2.ManipulationFeedbackState.Name(response.current_state))
+    #             print('Current state: ',
+    #                 manipulation_api_pb2.ManipulationFeedbackState.Name(response.current_state))
 
-                if response.current_state == manipulation_api_pb2.MANIP_STATE_DONE:
-                    break
+    #             if response.current_state == manipulation_api_pb2.MANIP_STATE_DONE:
+    #                 break
 
-        else:
-            print("No object in sight!!!")
+    #     else:
+    #         print("No object in sight!!!")
 
     def relative_move(self, dx, dy, dyaw, frame_name, stairs=False):
         transforms = self.robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
@@ -386,6 +389,39 @@ class SemanticGrasper:
 
         return True
 
+    def walk_to_pixel(self, rgb_response, walk_x, walk_y):
+            walk_vec = geometry_pb2.Vec2(x= walk_x, y=walk_y)
+            offset_distance = wrappers_pb2.FloatValue(value=0.8)
+
+            # Build the proto
+            walk_to = manipulation_api_pb2.WalkToObjectInImage(
+                pixel_xy=walk_vec, transforms_snapshot_for_camera=rgb_response.shot.transforms_snapshot,
+                frame_name_image_sensor=rgb_response.shot.frame_name_image_sensor,
+                camera_model=rgb_response.source.pinhole, offset_distance=offset_distance)
+
+            # Ask the robot to pick up the object
+            walk_to_request = manipulation_api_pb2.ManipulationApiRequest(
+                walk_to_object_in_image=walk_to)
+
+            # Send the request
+            cmd_response = self.manipulation_api_client.manipulation_api_command(
+                manipulation_api_request=walk_to_request)
+
+            # Get feedback from the robot
+            while True:
+                time.sleep(0.25)
+                feedback_request = manipulation_api_pb2.ManipulationApiFeedbackRequest(
+                    manipulation_cmd_id=cmd_response.manipulation_cmd_id)
+
+                # Send the request
+                response = self.manipulation_api_client.manipulation_api_feedback_command(
+                    manipulation_api_feedback_request=feedback_request)
+
+                print('Current state: ',
+                    manipulation_api_pb2.ManipulationFeedbackState.Name(response.current_state))
+
+                if response.current_state == manipulation_api_pb2.MANIP_STATE_DONE:
+                    break    
 
     def search_object_with_gripper(self,text):
 
@@ -401,22 +437,10 @@ class SemanticGrasper:
 
 
         robot_state = self.robot_state_client.get_robot_state()
-        flat_body_T_pose = [
-            math_helpers.SE3Pose(x=0.0, y=0.0, z=0.0, rot=self.create_rotation_quat(0)),
-            math_helpers.SE3Pose(x=0.0, y=0.0, z=0.0, rot=self.create_rotation_quat(60)),
-            math_helpers.SE3Pose(x=0.0, y=0.0, z=0.0, rot=self.create_rotation_quat(120)),
-            math_helpers.SE3Pose(x=0.0, y=0.0, z=0.0, rot=self.create_rotation_quat(180)),
-            math_helpers.SE3Pose(x=0.0, y=0.0, z=0.0, rot=self.create_rotation_quat(240)),
-            math_helpers.SE3Pose(x=0.0, y=0.0, z=0.0, rot=self.create_rotation_quat(300))
-        ]
 
-        odom_T_flat_body = get_a_tform_b(robot_state.kinematic_state.transforms_snapshot,
-                                         ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
-
-
-        # detector = GroundingDino()
+        detector = GroundingDino()
         best_score = 0
-        best_box = None
+        best_angle_index = 0
 
         for i in range(6):
 
@@ -424,6 +448,7 @@ class SemanticGrasper:
             gaze_pose = ORIENTATION_MAP['hand_search']
             status = move_gripper(self.clients, gaze_pose, blocking=True, duration=0.5)
             time.sleep(0.5) 
+
             rgb_request = build_image_request(source_name, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
             rgb_response= self.image_client.get_image([rgb_request])[0]
             rgb_np = image_to_opencv(rgb_response, auto_rotate=True)
@@ -431,18 +456,44 @@ class SemanticGrasper:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             image_path = self.save_image_to_local(image, f'hand_search_{i}')
             
-            # boxes,scores = detector.predict_box_score_with_text(image_path, text)
-            # if boxes.any():
-            #     for box,score in zip(boxes,scores):
-            #         if score>best_score:
-            #             best_score = score
-            #             best_box = box
+            boxes,scores = detector.predict_box_score_with_text(image_path, text)
+            if boxes.any():
+                for box,score in zip(boxes,scores):
+                    if score>best_score:
+                        best_score = score
+                        best_angle_index = i
 
             #ROTATE BODY
             
             self.relative_move(0, 0,  math.radians(60), ODOM_FRAME_NAME)
-            
+        
+        #go back to the best view point
+        back_angel = [0,60,120,180,-120,-60]
+        self.relative_move(0, 0,  math.radians(back_angel[best_angle_index]), ODOM_FRAME_NAME)
+        time.sleep(1)
 
+        #go to the detected object in view
+        source_name = "hand_color_image"
+        rgb_request = build_image_request(source_name, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+        rgb_response= self.image_client.get_image([rgb_request])[0]
+        rgb_np = image_to_opencv(rgb_response, auto_rotate=True)
+        image = np.array(rgb_np,dtype=np.uint8)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image_path = self.save_image_to_local(image, f'hand_walk_found_object')
+        boxes,scores = detector.predict_box_score_with_text(image_path, text)
+        max_score_for_walk = 0
+        best_centroid_for_walk = None
+        if boxes.any():
+            for box,score in zip(boxes,scores):
+                if score>max_score_for_walk:
+                    max_score_for_walk = score
+                    best_centroid_for_walk =  detector.compute_box_centroid(box)
+            
+            walk_x, walk_y = best_centroid_for_walk
+            self.walk_to_pixel(rgb_response=rgb_response, walk_x=walk_x, walk_y=walk_y)
+            
+        else:
+            print("Nothing in view!!!")
 
     def create_rotation_quat(self,degrees):
         radians = math.radians(degrees)
@@ -539,6 +590,11 @@ lease_client.take()
 sg = SemanticGrasper(robot)
 
 sg.search_object_with_gripper("hose nozzle")
+
+sg.orient_and_grasp('frontleft_fisheye_image', 'drill')
+
+sg.put_down()
+
 
 # sg.orient_and_grasp(object_direction_name='frontleft_fisheye_image', object_name='hose nozzle')
 # sg.put_down()

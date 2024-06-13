@@ -42,7 +42,9 @@ class GroundingDino:
         print(f"Predicted box for '{text}' of shape {pred_boxes.shape}")
 
         return pred_boxes
-    def predict_box_score_with_text(self, image, text):
+    def predict_box_score_with_text(self, image_path, text):
+
+        image = Image.open(image_path)
 
         inputs = self.preprocessor(images=image, text=text, return_tensors="pt").to(self.device)
         with torch.no_grad():
@@ -51,15 +53,17 @@ class GroundingDino:
         results = self.preprocessor.post_process_grounded_object_detection(
             outputs,
             inputs.input_ids,
-            box_threshold=0.05,
-            text_threshold=0.05,
+            box_threshold=0.2,
+            text_threshold=0.2,
             target_sizes=[image.size[::-1]]
         )
 
         pred_boxes = results[0]['boxes']
         scores = results[0]['scores']
 
-        print(f"Predicted box for '{text}' of shape {pred_boxes.shape}")
+        print("Predictions:")
+        print(pred_boxes, scores)
+        print()
 
         return pred_boxes,scores
 
