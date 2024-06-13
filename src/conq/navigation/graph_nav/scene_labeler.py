@@ -16,7 +16,7 @@ class SceneLabeler:
 
         self.MY_API_KEY = os.getenv('GPT_KEY')
         self.ORG_KEY = os.getenv('ORG_KEY')
-        self.client = OpenAI(organization=self.ORG_KEY, api_key=self.MY_API_KEY)
+        # self.client = OpenAI(organization=self.ORG_KEY, api_key=self.MY_API_KEY)
         self.object_dict = {}
 
     def _encode_image(self, image_path):
@@ -44,7 +44,7 @@ class SceneLabeler:
                 "messages": [
                     {"role": "system", "content": 
                      """
-                     You are an expert tool/object identifier robot. You wil be given an image and will extract all the tools/object within that image. You will output the objects as a comma separated list and only that list. If you see no tools/objects in an image, just print None. You can ignore larger/static objects like tables/chairs/people.
+                     You are an expert tool/object identifier robot. You wil be given an image and will extract all the tools/object within that image. You will output the objects as a comma separated list and only that list. If you see no tools/objects in an image, just print None. You can ignore larger/static objects like trees/chairs/people. You will look for tools/objects like drills, hammers, metal bars, hand rakes, and other farm or garden equipment.
                      Example:
                      If you see an image of a table with a drill, shovel, potting soil and rake, you will output: drill, shovel, potting soil, rake
                      """},
@@ -66,8 +66,6 @@ class SceneLabeler:
                 ],
                 "max_tokens": 300
             }
-
-            os.remove(self.images_loc + image_paths[idx])
 
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
 

@@ -12,6 +12,20 @@ import numpy as np
 from dotenv import load_dotenv
 import time
 
+# import rerun as rr
+
+# from conq.conq_logging.logger import ConqLogger, get_blueprint
+
+from bosdyn.client.image import ImageClient
+from bosdyn.client.robot_command import (RobotCommandBuilder, RobotCommandClient,
+                                         block_until_arm_arrives, blocking_stand)
+from bosdyn.client.manipulation_api_client import ManipulationApiClient
+from bosdyn.client.robot_state import RobotStateClient
+from bosdyn.client.ray_cast import RayCastClient
+from bosdyn.client.lease import LeaseClient
+
+from conq.clients import Clients
+
 class WaypointPhotographer:
 
     def __init__(self, robot, is_debug=False):
@@ -24,6 +38,8 @@ class WaypointPhotographer:
         self._robot = robot
 
         self._graph_nav = GraphNav(self._robot, is_debug=is_debug)
+
+        # self._graph_nav._set_initial_localization_waypoint(0)
 
         self._image_client = self._robot.ensure_client(ImageClient.default_service_name)
 
@@ -108,8 +124,23 @@ class WaypointPhotographer:
 
     def take_photos_of_full_map(self):
 
+        # rr.init('Field Test', spawn=True)
+        # rr.connect()
+        # rr.send_blueprint(get_blueprint(root = "robot/"))
+
+        # lease_client = self.robot.ensure_client(LeaseClient.default_service_name)
+        # robot_state_client = self.robot.ensure_client(RobotStateClient.default_service_name)
+        # manipulation_api_client = self.robot.ensure_client(ManipulationApiClient.default_service_name)
+        # image_client = self.robot.ensure_client(ImageClient.default_service_name)
+        # rc_client = self.robot.ensure_client(RayCastClient.default_service_name)
+        # command_client = self.robot.ensure_client(RobotCommandClient.default_service_name)
+        # clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client,
+        #                     image=image_client, raycast=rc_client, command=command_client, robot=self.robot, graphnav=None)
+
         for waypoint_num in range(0, len(self._graph_nav._current_graph.waypoints)):
+            # logger = ConqLogger("/Users/adibalaji/Desktop/agrobots/conq_python/src/conq/conq_logging", clients)
             waypoint_name = f'waypoint_{waypoint_num}'
             self.go_to_waypoint_and_take_photos(waypoint_name=waypoint_name)
+            # logger.log()
         self._graph_nav.navigate_to(waypoint_number='waypoint_0')
         self._graph_nav.toggle_power(should_power_on=False)

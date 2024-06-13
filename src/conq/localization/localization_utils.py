@@ -181,4 +181,3 @@ class Localization:
                 maxIndex = i
 
         return maxIndex
-

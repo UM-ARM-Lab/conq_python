@@ -59,7 +59,7 @@ ORIENTATION_MAP = {
     'back_fisheye_image':               (-1.00,0.0,0.0, 0.7071,0.,0.7071,0),
     'frontleft_fisheye_image':          (0.75,0.0,0.0, 0.7071,0.,0.7071,0),
     'frontright_fisheye_image':         (0.75,0.0,0.1, 0.7071,0.,0.7071,0),
-    'left_fisheye_image':               (0,0.75,0.1, 0.7071,0.,0.7071,0),
+    'left_fisheye_image':               (0,0.65,0.1, 0.924,0.0,0.0,0.383),
     'right_fisheye_image':              (0,-0.65,0.1, 0.7071,0.,0.7071,0),
     'straight_up':                      (0.5,0,0.85, 1.0,0,0,0),
     'put_down':                         (0.75,0,-0.30, 0.7071,0.,0.7071,0)
@@ -76,8 +76,8 @@ class SemanticGrasper:
         self.ORG_KEY = os.getenv('ORG_KEY')
         self.client = OpenAI(organization=self.ORG_KEY, api_key=self.MY_API_KEY)
 
-        # self.waypoint_photographer = WaypointPhotographer(self.robot)
-        # self.waypoint_photographer._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image', 'frontleft_fisheye_image', 'frontright_fisheye_image']
+        self.waypoint_photographer = WaypointPhotographer(self.robot)
+        self.waypoint_photographer._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image', 'frontleft_fisheye_image', 'frontright_fisheye_image']
 
 
         self.images_loc = os.getenv('MEMORY_IMAGE_PATH')
@@ -162,6 +162,15 @@ class SemanticGrasper:
                             ' estop SDK example, to configure E-Stop.'
             self.robot.logger.error(error_message)
             raise Exception(error_message)
+        
+    def put_down(self):
+        clients = Clients(lease=self.lease_client, state=self.robot_state_client, manipulation=self.manipulation_api_client,
+                image=self.image_client, raycast=self.rc_client, command=self.command_client, robot=self.robot, graphnav=None)
+        status = move_gripper(clients=clients, pose=ORIENTATION_MAP['put_down'], blocking=True, duration = 2)
+        time.sleep(0.5)
+        status = open_gripper(clients)
+        status = move_gripper(clients=clients, pose=ORIENTATION_MAP['frontleft_fisheye_image'], blocking=True, duration = 0.3)
+
 
     #orient gripper along with object direction
     def orient_and_grasp(self, object_direction_name,object_name):
@@ -175,17 +184,17 @@ class SemanticGrasper:
         pointcloud = PointCloud(vision)
 
         with bosdyn.client.lease.LeaseKeepAlive(self.lease_client, must_acquire=True, return_at_exit=False):
-            robot.logger.info('Powering on robot... This may take a several seconds.')
-            robot.power_on(timeout_sec=20)
-            assert robot.is_powered_on(), 'Robot power on failed.'
-            robot.logger.info('Robot powered on.')
+            self.robot.logger.info('Powering on robot... This may take a several seconds.')
+            self.robot.power_on(timeout_sec=20)
+            assert self.robot.is_powered_on(), 'Robot power on failed.'
+            self.robot.logger.info('Robot powered on.')
             
             clients = Clients(lease=self.lease_client, state=self.robot_state_client, manipulation=self.manipulation_api_client,
                 image=self.image_client, raycast=self.rc_client, command=self.command_client, robot=self.robot, graphnav=None)
             
-            robot.logger.info('Commanding robot to stand...')
+            self.robot.logger.info('Commanding robot to stand...')
             blocking_stand(self.command_client, timeout_sec=10)
-            robot.logger.info('Robot standing.')
+            self.robot.logger.info('Robot standing.')
             
             # Deploy the arm
             robot_cmd = RobotCommandBuilder.arm_ready_command()
@@ -206,45 +215,44 @@ class SemanticGrasper:
 
 
                 # ------------------------------------- USING PIXEL GRASP -----------------------------------------------------------------------------------
-                # pred_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name)
-                # pred_centroid = gds.compute_mask_centroid(pred_mask)
+                pred_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name)
+                pred_centroid = gds.compute_mask_centroid(pred_mask)
 
 
-                # pix_x, pix_y = (pred_centroid[0],pred_centroid[1]) # Get from object detector
-                # pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
+                pix_x, pix_y = (pred_centroid[0],pred_centroid[1]) # Get from object detector
+                pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
 
-                # try:
-                #     grasp_result = grasp_point_in_image(clients,image_responses[0],pick_vec)
-                # except Exception as e:
-                #     print("Whoops")
-                #     close_gripper(clients=clients)
-                #     stow_arm(self.robot, self.command_client)
+                try:
+                    grasp_result = grasp_point_in_image(clients,image_responses[0],pick_vec)
+                except Exception as e:
+                    print("Whoops")
+                    close_gripper(clients=clients)
+                    stow_arm(self.robot, self.command_client)
                 # --------------------------------------------------------------------------------------------------------------------------------------------
 
                 # ------------------------------------- USING GPD --------------------------------------------------------------------------------------------
 
                 # depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True)
-                xyz = pointcloud.get_raw_point_cloud()
-                seg_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
-                print(f'Using mask found of shape {seg_mask.shape}')
-                pointcloud.segment_xyz(seg_mask.squeeze())
+                # xyz = pointcloud.get_raw_point_cloud()
+                # seg_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
+                # print(f'Using mask found of shape {seg_mask.shape}')
+                # pointcloud.segment_xyz(seg_mask.squeeze())
 
-                pointcloud.save_pcd(path = PCD_PATH)
-                pointcloud.save_npy(path = NPY_PATH)
+                # pointcloud.save_pcd(path = PCD_PATH)
+                # pointcloud.save_npy(path = NPY_PATH)
                 
-                # Call Grasp detection Module
-                grasp_pose = get_best_grasp_pose()
+                # # Call Grasp detection Module
+                # grasp_pose = get_best_grasp_pose()
                 
-                status = move_gripper(clients, rotate_quaternion(grasp_pose), blocking = True, duration = 1)
-                status = close_gripper(clients)
+                # status = move_gripper(clients, rotate_quaternion(grasp_pose), blocking = True, duration = 1)
+                # status = close_gripper(clients)
 
                 # --------------------------------------------------------------------------------------------------------------------------------------------
             
             status = move_gripper(clients, ORIENTATION_MAP[object_direction_name], blocking=True, duration=1)
-            time.sleep(3)
-            status = move_gripper(clients, ORIENTATION_MAP['put_down'], blocking=True, duration=1)
             time.sleep(1)
-            open_gripper(clients)
+            status = move_gripper(clients, ORIENTATION_MAP['straight_up'], blocking=True, duration=1)
+            time.sleep(1)
             
         return True
 
@@ -258,4 +266,5 @@ lease_client.take()
 
 sg = SemanticGrasper(robot)
 
-sg.orient_and_grasp(object_direction_name='frontleft_fisheye_image', object_name='hose attachment')
+sg.orient_and_grasp(object_direction_name='frontleft_fisheye_image', object_name='hose nozzle')
+sg.put_down()
