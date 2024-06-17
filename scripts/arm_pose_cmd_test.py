@@ -48,8 +48,7 @@ def main():
         time.sleep(1)
 
         clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client,
-                          image=image_client, raycast=rc_client, command=command_client, robot=robot,
-                          recorder=None)
+                          image=image_client, raycast=rc_client, command=command_client, robot=robot)
 
         # poses are relative to the base at the start of the program
         T = 500

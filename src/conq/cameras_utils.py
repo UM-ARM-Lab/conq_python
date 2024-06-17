@@ -11,7 +11,7 @@ ROTATION_ANGLE = {
     'frontright_fisheye_image':         -102,
     'frontleft_depth_in_visual_frame':  -78,
     'frontright_depth_in_visual_frame': -102,
-    'hand_depth_in_hand_color_frame':   0,
+    'hand_depth_in_hand_color_frame':   -90,
     'hand_depth':                       0,
     'hand_color_image':                 0,
     'left_fisheye_image':               0,
@@ -60,7 +60,7 @@ def image_to_opencv(image, auto_rotate=False):
 
 def rotate_image(img, angle):
     img = np.asarray(Image.fromarray(img).rotate(angle, expand=True))
-    return img
+    return imgrgb_np
 
 
 def get_color_img(image_client, src):
@@ -85,6 +85,17 @@ def get_depth_img(image_client, camera_src):
     depth_np = image_to_opencv(depth_res)
     return depth_np, depth_res
 
+def get_camera_intrinsics(image_proto):
+    """
+    Get camera instrinsics
+    """
+    focal_x = image_proto.source.pinhole.intrinsics.focal_length.x
+    principal_x = image_proto.source.pinhole.intrinsics.principal_point.x
+
+    focal_y = image_proto.source.pinhole.intrinsics.focal_length.y
+    principal_y = image_proto.source.pinhole.intrinsics.principal_point.y
+
+    return [focal_x,focal_y, principal_x, principal_y]
 
 def rotate_image_coordinates(pts, width, height, angle):
     """

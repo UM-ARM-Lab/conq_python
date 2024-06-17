@@ -1,5 +1,0 @@
-bosdyn-client==4.0.0
-openai==1.6.1
-python-dotenv==1.0.0
-numpy
-vtk
