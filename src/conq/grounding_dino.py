@@ -66,6 +66,29 @@ class GroundingDino:
         print()
 
         return pred_boxes,scores
+    
+    def predict_box_score_with_text_pil(self, image, text):
+
+        inputs = self.preprocessor(images=image, text=text, return_tensors="pt").to(self.device)
+        with torch.no_grad():
+            outputs = self.model(**inputs)   
+
+        results = self.preprocessor.post_process_grounded_object_detection(
+            outputs,
+            inputs.input_ids,
+            box_threshold=0.2,
+            text_threshold=0.2,
+            target_sizes=[image.size[::-1]]
+        )
+
+        pred_boxes = results[0]['boxes']
+        scores = results[0]['scores']
+
+        print("Predictions:")
+        print(pred_boxes, scores)
+        print()
+
+        return pred_boxes,scores
 
     
     def compute_box_centroid(self, box):
@@ -89,8 +112,23 @@ class GroundingDino:
 
         plt.show()
 
-# img = Image.open('/Users/adibalaji/Desktop/agrobots/conq_python/data/memory_images/IMG_2556.jpg')
-# gd = GroundingDino()
-# pred = gd.predict_box_score_with_text(img, "hose nozzle")
-# print(pred)
-# gd.plot_image_and_box(img, pred[0][0])
+    def predict_from_webcam(self):
+        cap = cv2.VideoCapture(1)
+        while cap.isOpened():
+            ret, frame = cap.read()
+            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            image = Image.fromarray(image)
+            pred_boxes, scores = self.predict_box_score_with_text_pil(image, "person")
+
+        cap.release()
+
+# if __name__ == "__main__":
+    # gd = GroundingDino()
+
+    # # gd.predict_from_webcam()
+
+    # img = Image.open('/Users/adibalaji/Desktop/agrobots/conq_python/data/memory_images/IMG_2556.jpg')
+    # gd = GroundingDino()
+    # pred = gd.predict_box_score_with_text(img, "hose nozzle")
+    # print(pred)
+    # gd.plot_image_and_box(img, pred[0][0])

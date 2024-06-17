@@ -269,90 +269,6 @@ class SemanticGrasper:
         cv2.imwrite(file_path, image)
         print(f"Image saved to {file_path}")
         return file_path
-    
-    # def set_mobility_params(self):
-    #     """Set robot mobility params to disable obstacle avoidance."""
-    #     obstacles = spot_command_pb2.ObstacleParams(disable_vision_body_obstacle_avoidance=True,
-    #                                                 disable_vision_foot_obstacle_avoidance=True,
-    #                                                 disable_vision_foot_constraint_avoidance=True,
-    #                                                 obstacle_avoidance_padding=.001)
-    #     body_control = self.set_default_body_control()
-    #     if self._limit_speed:
-    #         speed_limit = SE2VelocityLimit(max_vel=SE2Velocity(
-    #             linear=Vec2(x=self._max_x_vel, y=self._max_y_vel), angular=self._max_ang_vel))
-    #         if not self._avoid_obstacles:
-    #             mobility_params = spot_command_pb2.MobilityParams(
-    #                 obstacle_params=obstacles, vel_limit=speed_limit, body_control=body_control,
-    #                 locomotion_hint=spot_command_pb2.HINT_AUTO)
-    #         else:
-    #             mobility_params = spot_command_pb2.MobilityParams(
-    #                 vel_limit=speed_limit, body_control=body_control,
-    #                 locomotion_hint=spot_command_pb2.HINT_AUTO)
-    #     elif not self._avoid_obstacles:
-    #         mobility_params = spot_command_pb2.MobilityParams(
-    #             obstacle_params=obstacles, body_control=body_control,
-    #             locomotion_hint=spot_command_pb2.HINT_AUTO)
-    #     else:
-    #         #When set to none, RobotCommandBuilder populates with good default values
-    #         mobility_params = None
-    #     return mobility_params
-
-    # def go_to_object(self,text):
-    #     image_list = self.capture_image()
-    #     detector = GroundingDino()
-    #     best_score = 0
-    #     best_centroid = None
-    #     best_visual_response  = None
-    #     for i in range(len(image_list)):
-    #         visual_response = image_list[i]
-    #         cv_image = image_to_opencv(visual_response)
-    #         image_path = self.save_image_to_local(cv_image, source_name)
-    #         boxes,scores = detector.predict_box_score_with_text(image_path, text)
-    #         if boxes.any():
-    #             for box,score in zip(boxes,scores):
-    #                 if score>best_score:
-    #                     best_score = score
-    #                     best_centroid = detector.compute_box_centroid(box)
-    #                     best_visual_response = visual_response
-    #         else:
-    #             continue
-        
-    #     if best_score!=0:
-    #         walk_x,walk_y = best_centroid
-    #         walk_vec = geometry_pb2.Vec2(x= walk_x, y=walk_y)
-    #         offset_distance = wrappers_pb2.FloatValue(value=0.5)
-    #         # Build the proto
-    #         walk_to = manipulation_api_pb2.WalkToObjectInImage(
-    #         pixel_xy=walk_vec, transforms_snapshot_for_camera=best_visual_response.shot.transforms_snapshot,
-    #         frame_name_image_sensor=best_visual_response.shot.frame_name_image_sensor,
-    #         camera_model=best_visual_response.source.pinhole, offset_distance=offset_distance)
-
-    #         # Ask the robot to pick up the object
-    #         walk_to_request = manipulation_api_pb2.ManipulationApiRequest(
-    #             walk_to_object_in_image=walk_to)
-
-    #         # Send the request
-    #         cmd_response = self.manipulation_api_client.manipulation_api_command(
-    #             manipulation_api_request=walk_to_request)
-
-    #         # Get feedback from the robot
-    #         while True:
-    #             time.sleep(0.25)
-    #             feedback_request = manipulation_api_pb2.ManipulationApiFeedbackRequest(
-    #                 manipulation_cmd_id=cmd_response.manipulation_cmd_id)
-
-    #             # Send the request
-    #             response = self.manipulation_api_client.manipulation_api_feedback_command(
-    #                 manipulation_api_feedback_request=feedback_request)
-
-    #             print('Current state: ',
-    #                 manipulation_api_pb2.ManipulationFeedbackState.Name(response.current_state))
-
-    #             if response.current_state == manipulation_api_pb2.MANIP_STATE_DONE:
-    #                 break
-
-    #     else:
-    #         print("No object in sight!!!")
 
     def relative_move(self, dx, dy, dyaw, frame_name, stairs=False):
         transforms = self.robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
@@ -485,6 +401,12 @@ class SemanticGrasper:
         best_centroid_for_walk = None
         if boxes.any():
             for box,score in zip(boxes,scores):
+
+                #if confidence high enough, just break and walk to the object
+                if score > 0.41:
+                    best_centroid_for_walk =  detector.compute_box_centroid(box)
+                    break
+
                 if score>max_score_for_walk:
                     max_score_for_walk = score
                     best_centroid_for_walk =  detector.compute_box_centroid(box)
@@ -537,7 +459,7 @@ class SemanticGrasper:
                 rgb = vision.get_latest_RGB(path=self.images_loc, save=True, file_name='live_hand')
 
 
-                # ------------------------------------- USING PIXEL GRASP -----------------------------------------------------------------------------------
+                # ------------------------------------- USING BOSDYN STOCK PIXEL GRASP -----------------------------------------------------------------------------------
                 pred_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name)
                 pred_centroid = gds.compute_mask_centroid(pred_mask)
 
@@ -579,21 +501,21 @@ class SemanticGrasper:
             
         return True
 
-sdk = bosdyn.client.create_standard_sdk('VoicePromptNav')
-robot = sdk.create_robot('192.168.80.3')
-bosdyn.client.util.authenticate(robot) 
+# sdk = bosdyn.client.create_standard_sdk('VoicePromptNav')
+# robot = sdk.create_robot('192.168.80.3')
+# bosdyn.client.util.authenticate(robot) 
 
-lease_client = robot.ensure_client(LeaseClient.default_service_name)
+# lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-lease_client.take()
+# lease_client.take()
 
-sg = SemanticGrasper(robot)
+# sg = SemanticGrasper(robot)
 
-sg.search_object_with_gripper("hose nozzle")
+# sg.search_object_with_gripper("hose nozzle")
 
-sg.orient_and_grasp('frontleft_fisheye_image', 'drill')
+# sg.orient_and_grasp('frontleft_fisheye_image', 'drill')
 
-sg.put_down()
+# sg.put_down()
 
 
 # sg.orient_and_grasp(object_direction_name='frontleft_fisheye_image', object_name='hose nozzle')

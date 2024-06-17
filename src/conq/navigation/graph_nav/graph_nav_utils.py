@@ -431,7 +431,7 @@ class GraphNav:
 
 # with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
 #     gn = GraphNav(robot)
-#     gn.navigate_to('waypoint_0')
-#     gn.save_current_location()
+#     gn.navigate_to('waypoint_5')
+    # gn.save_current_location()
 
     

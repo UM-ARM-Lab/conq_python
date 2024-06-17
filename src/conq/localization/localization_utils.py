@@ -129,7 +129,7 @@ class Localization:
         image = np.array(rgb_np,dtype=np.uint8)
         right_fisheye_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         cv2.imwrite(self.MEMORY_IMAGE_PATH + "curr1.jpg", right_fisheye_image)    
-        curr_right_fisheye_image_embedding = self.get_image_embedding(self.MEMORY_IMAGE_PATH + "curr1.jpg")
+        curr_right_fisheye_image_embedding = self._get_image_embedding(self.MEMORY_IMAGE_PATH + "curr1.jpg")
 
         # Get left_fisheye_image
         rgb_request = build_image_request('left_fisheye_image', pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
@@ -138,7 +138,7 @@ class Localization:
         image = np.array(rgb_np,dtype=np.uint8)
         left_fisheye_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         cv2.imwrite(self.MEMORY_IMAGE_PATH + "curr2.jpg", left_fisheye_image)    
-        curr_left_fisheye_image_embedding = self.get_image_embedding(self.MEMORY_IMAGE_PATH + "curr2.jpg")
+        curr_left_fisheye_image_embedding = self._get_image_embedding(self.MEMORY_IMAGE_PATH + "curr2.jpg")
 
 
         # Get back_fisheye_image
@@ -148,7 +148,7 @@ class Localization:
         image = np.array(rgb_np,dtype=np.uint8)
         back_fisheye_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         cv2.imwrite(self.MEMORY_IMAGE_PATH + "curr3.jpg", back_fisheye_image)    
-        curr_back_fisheye_image_embedding = self.get_image_embedding(self.MEMORY_IMAGE_PATH + "curr3.jpg")
+        curr_back_fisheye_image_embedding = self._get_image_embedding(self.MEMORY_IMAGE_PATH + "curr3.jpg")
 
         scores = []
 
@@ -156,17 +156,17 @@ class Localization:
             print(f'Embedding waypoint_{waypoint_num}')
             # Get right_fisheye_image
             img_path_right_fisheye_image = self.MEMORY_IMAGE_PATH + 'right_fisheye_image' + f"_waypoint_{waypoint_num}_.jpg"
-            mem_right_fisheye_image_embedding = self.get_image_embedding(img_path_right_fisheye_image)    
+            mem_right_fisheye_image_embedding = self._get_image_embedding(img_path_right_fisheye_image)    
             cosine_sim_right_fisheye_image = cosine_similarity([mem_right_fisheye_image_embedding], [curr_right_fisheye_image_embedding])
 
             # Get left_fisheye_image
             img_path_left_fisheye_image = self.MEMORY_IMAGE_PATH + 'left_fisheye_image' + f"_waypoint_{waypoint_num}_.jpg"
-            mem_left_fisheye_image_embedding = self.get_image_embedding(img_path_left_fisheye_image)   
+            mem_left_fisheye_image_embedding = self._get_image_embedding(img_path_left_fisheye_image)   
             cosine_sim_left_fisheye_image = cosine_similarity([mem_left_fisheye_image_embedding], [curr_left_fisheye_image_embedding])
 
             # Get back_fisheye_image
             img_path_back_fisheye_image = self.MEMORY_IMAGE_PATH + 'back_fisheye_image' + f"_waypoint_{waypoint_num}_.jpg"
-            mem_back_fisheye_image_embedding = self.get_image_embedding(img_path_back_fisheye_image)   
+            mem_back_fisheye_image_embedding = self._get_image_embedding(img_path_back_fisheye_image)   
             cosine_sim_back_fisheye_image = cosine_similarity([mem_back_fisheye_image_embedding], [curr_back_fisheye_image_embedding])
 
             print(f'waypoint_{waypoint_num} has a score of {cosine_sim_right_fisheye_image + cosine_sim_left_fisheye_image + cosine_sim_back_fisheye_image}')

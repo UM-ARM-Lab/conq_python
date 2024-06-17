@@ -192,8 +192,8 @@ class GroundedSAM:
         plt.show()
 
 # gds = GroundedSAM()
-# img_path = "/Users/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/RGB/live.jpg"
-# text = "red clippers"
+# img_path = "/Users/adibalaji/Desktop/agrobots/conq_python/data/memory_images/PXL_20240204_224607656.jpg"
+# text = "grass"
 
 
 # pred_mask = gds.predict_segmentation(img_path, text)
