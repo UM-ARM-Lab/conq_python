@@ -32,8 +32,8 @@ class GroundingDino:
         results = self.preprocessor.post_process_grounded_object_detection(
             outputs,
             inputs.input_ids,
-            box_threshold=0.4,
-            text_threshold=0.3,
+            box_threshold=0.2,
+            text_threshold=0.2,
             target_sizes=[image.size[::-1]]
         )
 
@@ -53,8 +53,8 @@ class GroundingDino:
         results = self.preprocessor.post_process_grounded_object_detection(
             outputs,
             inputs.input_ids,
-            box_threshold=0.01,
-            text_threshold=0.01,
+            box_threshold=0.2,
+            text_threshold=0.2,
             target_sizes=[image.size[::-1]]
         )
 
@@ -131,10 +131,10 @@ class GroundingDino:
         cap.release()
         cv2.destroyAllWindows()
 
-if __name__ == "__main__":
-    gd = GroundingDino()
+# if __name__ == "__main__":
+#     gd = GroundingDino()
 
-    gd.predict_from_webcam()
+#     gd.predict_from_webcam()
 
     # img = Image.open('/Users/adibalaji/Desktop/agrobots/conq_python/data/memory_images/IMG_2556.jpg')
     # gd = GroundingDino()

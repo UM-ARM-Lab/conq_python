@@ -108,7 +108,9 @@ ORIENTATION_MAP = {
     'right_fisheye_image':              (0,-0.65,0.1, 0.7071,0.,0.7071,0),
     'straight_up':                      (0.5,0,0.85, 1.0,0,0,0),
     'put_down':                         (0.75,0,-0.30, 0.7071,0.,0.7071,0),
-    'hand_search':                       (0.55,0.0,0.55, 0.843,0.0,0.537,0.0),
+    'hand_search':                      (0.55,0.0,0.65, 0.819,0.0,0.574,0.0),
+    'hand_search_forward':              (0.8,0.0,0.15, 0.819,0.0,0.574,0.0),
+    'find_grasp_front':                 (0.75,0.0,0.25, 0.7071,0.,0.7071,0)
 }
 
 # Mapping from visual to depth data
@@ -238,28 +240,6 @@ class SemanticGrasper:
         status = open_gripper(clients)
         status = move_gripper(clients=clients, pose=ORIENTATION_MAP['frontleft_fisheye_image'], blocking=True, duration = 0.3)
 
-    # def capture_image(self):
-    #     sources = self.image_client.list_image_sources()
-    #     source_list = []
-    #     for source in sources:
-    #         if source.image_type == ImageSource.IMAGE_TYPE_VISUAL:
-    #             # only append if sensor has corresponding depth sensor
-    #             if source.name in VISUAL_SOURCE_TO_DEPTH_MAP_SOURCE:
-    #                 source_list.append(source.name)
-    #                 #source_list.append(VISUAL_SOURCE_TO_DEPTH_MAP_SOURCE[source.name])
-    #     image_list = []
-    #     for i in range(len(source_list)):
-    #         source_name = source_list[i]
-    #         img_req = None
-    #         if 'depth' not in source_name:
-    #             img_req = build_image_request(source_name, quality_percent=100,
-    #                                     image_format=image_pb2.Image.FORMAT_RAW,
-    #                                     pixel_format = image_pb2.Image.PIXEL_FORMAT_RGB_U8)
-
-    #         image_response = self.image_client.get_image([img_req])
-    #         image_list.append(image_response[0])
-        
-        # return image_list
 
     def save_image_to_local(self, image, source_name):
         directory = os.getenv('MEMORY_IMAGE_PATH')
@@ -301,13 +281,13 @@ class SemanticGrasper:
                     traj_feedback.body_movement_status == traj_feedback.BODY_STATUS_SETTLED):
                 print('Arrived at the goal.')
                 return True
-            time.sleep(1)
+            time.sleep(0.25)
 
         return True
 
     def walk_to_pixel(self, rgb_response, walk_x, walk_y):
             walk_vec = geometry_pb2.Vec2(x= walk_x, y=walk_y)
-            offset_distance = wrappers_pb2.FloatValue(value=0.8)
+            offset_distance = wrappers_pb2.FloatValue(value=0.75)
 
             # Build the proto
             walk_to = manipulation_api_pb2.WalkToObjectInImage(
@@ -358,13 +338,16 @@ class SemanticGrasper:
         best_score = 0
         best_angle_index = 0
 
-        for i in range(6):
+        gaze_pose = ORIENTATION_MAP['hand_search']
+        status = move_gripper(self.clients, gaze_pose, blocking=True, duration=0.5)
+        time.sleep(0.5) 
 
+
+        for i in range(12):
+
+            #upper view
             source_name = "hand_color_image"
-            gaze_pose = ORIENTATION_MAP['hand_search']
-            status = move_gripper(self.clients, gaze_pose, blocking=True, duration=0.5)
-            time.sleep(0.5) 
-
+            
             rgb_request = build_image_request(source_name, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
             rgb_response= self.image_client.get_image([rgb_request])[0]
             rgb_np = image_to_opencv(rgb_response, auto_rotate=True)
@@ -379,14 +362,37 @@ class SemanticGrasper:
                         best_score = score
                         best_angle_index = i
 
-            #ROTATE BODY
+            #lower forwards view
+            gaze_pose = ORIENTATION_MAP['hand_search_forward']
+            status = move_gripper(self.clients, gaze_pose, blocking=True, duration=0.25)
+            time.sleep(0.25) 
+
+            rgb_request = build_image_request(source_name, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+            rgb_response= self.image_client.get_image([rgb_request])[0]
+            rgb_np = image_to_opencv(rgb_response, auto_rotate=True)
+            image = np.array(rgb_np,dtype=np.uint8)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            image_path = self.save_image_to_local(image, f'hand_search_forward_{i}')
             
-            self.relative_move(0, 0,  math.radians(60), ODOM_FRAME_NAME)
+            boxes,scores = detector.predict_box_score_with_text(image_path, text)
+            if boxes.any():
+                for box,score in zip(boxes,scores):
+                    if score>best_score:
+                        best_score = score
+                        best_angle_index = i
+
+
+            #ROTATE BODY
+            gaze_pose = ORIENTATION_MAP['hand_search']
+            status = move_gripper(self.clients, gaze_pose, blocking=False, duration=0.5)
+            self.relative_move(0, 0,  math.radians(30), ODOM_FRAME_NAME)
+            time.sleep(0.25)
         
         #go back to the best view point
-        back_angel = [0,60,120,180,-120,-60]
+        back_angel = [0,30,60,90,120,150,180,-150,-120,-90,-60,-30]
         self.relative_move(0, 0,  math.radians(back_angel[best_angle_index]), ODOM_FRAME_NAME)
-        time.sleep(1)
+        move_gripper(self.clients, ORIENTATION_MAP["hand_search"], blocking=False, duration=0.5)
+        time.sleep(0.5)
 
         #go to the detected object in view
         source_name = "hand_color_image"
@@ -401,11 +407,6 @@ class SemanticGrasper:
         best_centroid_for_walk = None
         if boxes.any():
             for box,score in zip(boxes,scores):
-
-                #if confidence high enough, just break and walk to the object
-                if score > 0.41:
-                    best_centroid_for_walk =  detector.compute_box_centroid(box)
-                    break
 
                 if score>max_score_for_walk:
                     max_score_for_walk = score
@@ -501,22 +502,18 @@ class SemanticGrasper:
             
         return True
 
-# sdk = bosdyn.client.create_standard_sdk('VoicePromptNav')
-# robot = sdk.create_robot('192.168.80.3')
-# bosdyn.client.util.authenticate(robot) 
+sdk = bosdyn.client.create_standard_sdk('VoicePromptNav')
+robot = sdk.create_robot('192.168.80.3')
+bosdyn.client.util.authenticate(robot) 
 
-# lease_client = robot.ensure_client(LeaseClient.default_service_name)
+lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-# lease_client.take()
+lease_client.take()
 
-# sg = SemanticGrasper(robot)
+sg = SemanticGrasper(robot)
 
-# sg.search_object_with_gripper("hose nozzle")
+sg.search_object_with_gripper("sharpie marker")
 
-# sg.orient_and_grasp('frontleft_fisheye_image', 'drill')
+sg.orient_and_grasp('find_grasp_front', 'sharpie marker')
 
-# sg.put_down()
-
-
-# sg.orient_and_grasp(object_direction_name='frontleft_fisheye_image', object_name='hose nozzle')
-# sg.put_down()
+sg.put_down()

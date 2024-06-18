@@ -40,7 +40,7 @@ class WaypointPhotographer:
         self._graph_nav = GraphNav(self._robot, is_debug=is_debug)
 
         # enable before taking photos, disable before using SemanticGrasper
-        self._graph_nav._set_initial_localization(0)
+        # self._graph_nav._set_initial_localization(0)
 
         self._image_client = self._robot.ensure_client(ImageClient.default_service_name)
 
