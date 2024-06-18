@@ -18,7 +18,7 @@ class GroundingDino:
     def __init__(self):
         load_dotenv('.env.local')
         self.model_id = "IDEA-Research/grounding-dino-base"
-        self.device = "cpu"
+        self.device = "cuda"
 
         self.preprocessor = AutoProcessor.from_pretrained(self.model_id)
         self.model = AutoModelForZeroShotObjectDetection.from_pretrained(self.model_id).to(self.device)
@@ -53,8 +53,8 @@ class GroundingDino:
         results = self.preprocessor.post_process_grounded_object_detection(
             outputs,
             inputs.input_ids,
-            box_threshold=0.2,
-            text_threshold=0.2,
+            box_threshold=0.01,
+            text_threshold=0.01,
             target_sizes=[image.size[::-1]]
         )
 
@@ -113,19 +113,28 @@ class GroundingDino:
         plt.show()
 
     def predict_from_webcam(self):
-        cap = cv2.VideoCapture(1)
+        cap = cv2.VideoCapture("/home/adibalaji/Desktop/agrobots/conq_python/data/memory_images/IMG_2577.mov")
         while cap.isOpened():
             ret, frame = cap.read()
-            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            image = Image.fromarray(image)
-            pred_boxes, scores = self.predict_box_score_with_text_pil(image, "person")
+            image_cv2 = frame
+            image = Image.fromarray(image_cv2)
+            pred_boxes, scores = self.predict_box_score_with_text_pil(image, "hose attachment")
+
+            box = pred_boxes[0]
+            cv2.rectangle(image_cv2, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (0,255,0), 2)
+            cv2.putText(image_cv2, f'conf:{scores[0]}', (int(box[0]), int(box[1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.imshow("GroundingDINO detection from video/webcam", image_cv2)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to quit
+                break
 
         cap.release()
+        cv2.destroyAllWindows()
 
-# if __name__ == "__main__":
-    # gd = GroundingDino()
+if __name__ == "__main__":
+    gd = GroundingDino()
 
-    # # gd.predict_from_webcam()
+    gd.predict_from_webcam()
 
     # img = Image.open('/Users/adibalaji/Desktop/agrobots/conq_python/data/memory_images/IMG_2556.jpg')
     # gd = GroundingDino()

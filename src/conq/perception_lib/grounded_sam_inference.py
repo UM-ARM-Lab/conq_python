@@ -9,6 +9,8 @@ import os
 from dotenv import load_dotenv
 import torch.nn.functional as F
 
+import time
+
 from groundingdino.util.inference import Model
 from segment_anything import sam_model_registry, SamPredictor
 
@@ -26,6 +28,7 @@ class GroundedSAM:
 
         # Building GroundingDINO inference model
         self.grounding_dino_model = Model(model_config_path=GROUNDING_DINO_CONFIG_PATH, model_checkpoint_path=GROUNDING_DINO_CHECKPOINT_PATH)
+        self.grounding_dino_model.device = 'cuda'
 
         # Building SAM Model and SAM Predictor
         self.sam = sam_model_registry[SAM_ENCODER_VERSION](checkpoint=SAM_CHECKPOINT_PATH)
@@ -109,6 +112,51 @@ class GroundedSAM:
 
         #Output numpy ndarray mask of shape (1, 480, 640)
         return detections.mask
+
+    def predict_boxes(self, image, text):
+        CLASSES = [text]
+        BOX_THRESHOLD = 0.25
+        TEXT_THRESHOLD = 0.25
+        NMS_THRESHOLD = 0.8
+
+        # detect objects
+        detections = self.grounding_dino_model.predict_with_classes(
+            image=image,
+            classes=CLASSES,
+            box_threshold=BOX_THRESHOLD,
+            text_threshold=TEXT_THRESHOLD
+        )
+
+        # NMS post process
+        # print(f"Before NMS: {len(detections.xyxy)} boxes")
+        # nms_idx = torchvision.ops.nms(
+        #     torch.from_numpy(detections.xyxy), 
+        #     torch.from_numpy(detections.confidence), 
+        #     NMS_THRESHOLD
+        # ).numpy().tolist()
+
+        # detections.xyxy = detections.xyxy[nms_idx]
+        # detections.confidence = detections.confidence[nms_idx]
+        # detections.class_id = detections.class_id[nms_idx]
+
+        # print(f"After NMS: {len(detections.xyxy)} boxes")
+
+        #sort boxes by confidence to choose only best one
+        sorted_indices = np.argsort(-detections.confidence)  # Sort in descending order
+        detections.xyxy = detections.xyxy[sorted_indices]
+        detections.confidence = detections.confidence[sorted_indices]
+        detections.class_id = detections.class_id[sorted_indices]
+
+        # choose best box
+        best_box = detections.xyxy[0].reshape(1,4).squeeze()
+        best_score = detections.confidence[0]
+
+        return best_box, best_score
+
+    def compute_box_centroid(self, box):
+        box = box.squeeze()
+        box_center = (box[0] + (box[2]-box[0])/2, box[1] + (box[3]-box[1])/2)
+        return box_center
     
     def compute_mask_centroid(self, mask):
 
@@ -193,12 +241,29 @@ class GroundedSAM:
 
 # gds = GroundedSAM()
 # img_path = "/home/adibalaji/Desktop/agrobots/conq_python/data/memory_images/test_drill.JPG"
-# text = "clippers"
+# text = "drill"
 
 
 # pred_mask = gds.predict_segmentation(img_path, text)
 # pred_mask_centroid = gds.compute_mask_centroid(pred_mask)
 # gds.plot_image_and_mask(image_path=img_path, mask=pred_mask, text_prompt=text, centroid=pred_mask_centroid)
+
+# gds = GroundedSAM()
+# cap = cv2.VideoCapture("/home/adibalaji/Desktop/agrobots/conq_python/data/memory_images/IMG_2577.mov")
+# while cap.isOpened():
+#     ret, frame = cap.read()
+#     image_cv2 = frame
+#     box, score = gds.predict_boxes(image_cv2, "hose nozzle")
+
+#     cv2.rectangle(image_cv2, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (0,255,0), 2)
+#     cv2.putText(image_cv2, f'conf:{score}', (int(box[0]), int(box[1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+#     cv2.imshow("GroundingDINO detection from video/webcam", image_cv2)
+
+#     if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to quit
+#         break
+
+# cap.release()
+# cv2.destroyAllWindows()
 
 
 
