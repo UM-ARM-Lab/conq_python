@@ -143,10 +143,6 @@ class SemanticGrasper:
         self.ORG_KEY = os.getenv('ORG_KEY')
         self.client = OpenAI(organization=self.ORG_KEY, api_key=self.MY_API_KEY)
 
-        self.waypoint_photographer = WaypointPhotographer(self.robot)
-        self.waypoint_photographer._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image', 'frontleft_fisheye_image', 'frontright_fisheye_image']
-
-
         self.images_loc = os.getenv('MEMORY_IMAGE_PATH')
 
         self.lease_client = robot.ensure_client(LeaseClient.default_service_name)
@@ -162,64 +158,6 @@ class SemanticGrasper:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
         
-
-    def take_photos(self):
-        self.waypoint_photographer._take_photos_at_waypoint(waypoint_str='grasp_waypoint')
-
-    def find_object_in_photos(self, object):
-        image_paths = os.listdir(self.images_loc)
-        images = [self._encode_image(self.images_loc + path) for path in image_paths]
-
-        for idx, image in enumerate(images):
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.MY_API_KEY}"
-            }
-
-            payload = {
-                "model": "gpt-4o",
-                "messages": [
-                    {"role": "system", "content": 
-                     """
-                     You are an expert tool/object identifier robot. User will give you an image and ask if an tool/object is present in the image. You will ONLY respond 'yes' or 'no' all lowercase, and you must respond one or the other.
-                     Example:
-                     If you see an image of a table with a drill, potting soil and rake, with the prompt 'Do you see shovel?', you will output: no
-                     If you see an image of a table with a remote, teddy bear and pruners, with the prompt 'Do you see pruners?', you will output: yes
-                     """},
-                    {
-                    "role": "user",
-                    "content": [
-                        {
-                        "type": "text",
-                        "text": f"Do you see {object}?"
-                        },
-                        {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{image}"
-                        }
-                        }
-                    ]
-                    }
-                ],
-                "max_tokens": 300
-            }
-
-            response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-
-            os.remove(self.images_loc + image_paths[idx])
-
-            found_obj = True if response.json()['choices'][0]['message']['content'] == 'yes' else False
-
-            if found_obj:
-                found_obj_img_path = image_paths[idx]
-                found_camera_frame = found_obj_img_path.split('_')[0:3] #
-                print(f'Frame of found obj: {found_camera_frame}')
-                return f'{found_camera_frame[0]}_{found_camera_frame[1]}_{found_camera_frame[2]}'
-            
-        
-        #fail to find object
-        return 'back_fisheye_image'
 
     #verify estop
     def verify_estop(self):
@@ -502,18 +440,18 @@ class SemanticGrasper:
             
         return True
 
-sdk = bosdyn.client.create_standard_sdk('VoicePromptNav')
-robot = sdk.create_robot('192.168.80.3')
-bosdyn.client.util.authenticate(robot) 
+# sdk = bosdyn.client.create_standard_sdk('VoicePromptNav')
+# robot = sdk.create_robot('192.168.80.3')
+# bosdyn.client.util.authenticate(robot) 
 
-lease_client = robot.ensure_client(LeaseClient.default_service_name)
+# lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-lease_client.take()
+# lease_client.take()
 
-sg = SemanticGrasper(robot)
+# sg = SemanticGrasper(robot)
 
-sg.search_object_with_gripper("sharpie marker")
+# sg.search_object_with_gripper("red clippers")
 
-sg.orient_and_grasp('find_grasp_front', 'sharpie marker')
+# sg.orient_and_grasp('find_grasp_front', 'red clippers')
 
-sg.put_down()
+# sg.put_down()

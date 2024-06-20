@@ -113,12 +113,12 @@ class GroundingDino:
         plt.show()
 
     def predict_from_webcam(self):
-        cap = cv2.VideoCapture("/home/adibalaji/Desktop/agrobots/conq_python/data/memory_images/IMG_2577.mov")
+        cap = cv2.VideoCapture("/home/adibalaji/Desktop/agrobots/conq_python/data/memory_images/IMG_2585.MOV")
         while cap.isOpened():
             ret, frame = cap.read()
             image_cv2 = frame
             image = Image.fromarray(image_cv2)
-            pred_boxes, scores = self.predict_box_score_with_text_pil(image, "hose attachment")
+            pred_boxes, scores = self.predict_box_score_with_text_pil(image, "hand")
 
             box = pred_boxes[0]
             cv2.rectangle(image_cv2, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (0,255,0), 2)

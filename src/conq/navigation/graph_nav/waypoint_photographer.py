@@ -6,6 +6,7 @@ import os
 import cv2
 
 from conq.navigation.graph_nav.graph_nav_utils import GraphNav
+from conq.manipulation_lib.Manipulation import open_gripper, close_gripper, move_gripper
 
 from PIL import Image
 import numpy as np
@@ -40,11 +41,24 @@ class WaypointPhotographer:
         self._graph_nav = GraphNav(self._robot, is_debug=is_debug)
 
         # enable before taking photos, disable before using SemanticGrasper
-        # self._graph_nav._set_initial_localization(0)
+        # self._graph_nav._set_initial_localization_waypoint(0)
 
-        self._image_client = self._robot.ensure_client(ImageClient.default_service_name)
+        self.lease_client = self._robot.ensure_client(LeaseClient.default_service_name)
+        self.robot_state_client = self._robot.ensure_client(RobotStateClient.default_service_name)
+        self.manipulation_api_client = self._robot.ensure_client(ManipulationApiClient.default_service_name)
+        self.image_client = self._robot.ensure_client(ImageClient.default_service_name)
+        self.rc_client = self._robot.ensure_client(RayCastClient.default_service_name)
+        self.command_client = self._robot.ensure_client(RobotCommandClient.default_service_name)
 
-        self._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image']
+        self.clients = Clients(lease=self.lease_client, state=self.robot_state_client, manipulation=self.manipulation_api_client, image=self.image_client, raycast=self.rc_client, command=self.command_client, robot=self._robot)
+
+        self._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image', 'hand_color_image']
+
+        self._robot.power_on(timeout_sec=20)
+        assert self._robot.is_powered_on(), 'Robot power on failed.'
+
+        open_gripper(self.clients)
+        move_gripper(self.clients, (0.55,0.0,0.75, 0.819,0.0,0.574,0.0), blocking=True)
 
         self.ROTATION_ANGLE = {
                                 'back_fisheye_image':               0,
@@ -57,7 +71,9 @@ class WaypointPhotographer:
                                 'hand_color_image':                 0,
                                 'left_fisheye_image':               0,
                                 'right_fisheye_image':              180
-                            }        
+                            }
+
+                
 
     def _rotate_image(self, img, angle):
         img = np.asarray(Image.fromarray(img).rotate(angle, expand=True))
@@ -105,7 +121,7 @@ class WaypointPhotographer:
 
         for src in self._img_sources:
             rgb_request = build_image_request(src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
-            rgb_response= self._image_client.get_image([rgb_request])[0]
+            rgb_response= self.image_client.get_image([rgb_request])[0]
             rgb_np = self._image_to_opencv(rgb_response, auto_rotate=True)
             image = np.array(rgb_np,dtype=np.uint8)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -120,6 +136,7 @@ class WaypointPhotographer:
     def go_to_waypoint_and_take_photos(self, waypoint_name):
 
         self._graph_nav.navigate_to(waypoint_number=waypoint_name, sit_down_after_reached=False)
+        move_gripper(self.clients, (0.55,0.0,0.65, 0.819,0.0,0.574,0.0), blocking=True, duration=0.3)
         self._take_photos_at_waypoint(waypoint_name)
         # self._graph_nav.toggle_power(should_power_on=False)
 
