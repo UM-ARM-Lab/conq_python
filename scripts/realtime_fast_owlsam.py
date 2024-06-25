@@ -22,9 +22,6 @@ import torch
 from transformers import OwlViTProcessor, OwlViTForObjectDetection
 from ultralytics import SAM
 
-# import rerun as rr
-
-# from conq.conq_logging.logger import ConqLogger, get_blueprint
 
 from bosdyn.client.image import ImageClient
 from bosdyn.client.robot_command import (RobotCommandBuilder, RobotCommandClient,
@@ -116,28 +113,22 @@ def create_gaussian_kernel(radius, sigma=1):
     g = np.exp(-(d ** 2 / (2.0 * sigma ** 2)))
     return g
 
-def update_heatmap(heatmap, centroid, score, img_shape, kernel):
-    x, y = centroid
-    x, y = int(x), int(y)
-    
-    # Get the size of the kernel
-    k_size = kernel.shape[0]
-    k_radius = k_size // 2
+def update_heatmap(heatmap, mask, score, kernel):
+    kernel_radius = kernel.shape[0] // 2
+    kernel_center = kernel_radius, kernel_radius
 
-    # Define the region of interest (ROI) in the heatmap
-    x_min = max(x - k_radius, 0)
-    x_max = min(x + k_radius + 1, img_shape[1])
-    y_min = max(y - k_radius, 0)
-    y_max = min(y + k_radius + 1, img_shape[0])
+    for y, x in np.argwhere(mask):
+        x_min = max(x - kernel_radius, 0)
+        x_max = min(x + kernel_radius + 1, heatmap.shape[1])
+        y_min = max(y - kernel_radius, 0)
+        y_max = min(y + kernel_radius + 1, heatmap.shape[0])
 
-    # Define the ROI in the kernel
-    k_x_min = k_radius - (x - x_min)
-    k_x_max = k_radius + (x_max - x)
-    k_y_min = k_radius - (y - y_min)
-    k_y_max = k_radius + (y_max - y)
+        k_x_min = kernel_center[0] - (x - x_min)
+        k_x_max = kernel_center[0] + (x_max - x)
+        k_y_min = kernel_center[1] - (y - y_min)
+        k_y_max = kernel_center[1] + (y_max - y)
 
-    # Update the heatmap with the weighted kernel
-    heatmap[y_min:y_max, x_min:x_max] += 0.25 * score * kernel[k_y_min:k_y_max, k_x_min:k_x_max]
+        heatmap[y_min:y_max, x_min:x_max] += 0.25 * score * kernel[k_y_min:k_y_max, k_x_min:k_x_max]
 
 def normalize_heatmap(heatmap):
     normalized_heatmap = cv2.normalize(heatmap, None, 0, 255, cv2.NORM_MINMAX)
@@ -177,27 +168,19 @@ pointcloud = PointCloud(vision)
 
 processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
 model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32").to('cuda')
+mobilesam = SAM("/home/adibalaji/Desktop/agrobots/weights_cfgs/mobile_sam.pt").to('cuda')
 
-texts = [["a photo of a hose nozzle"]]
+texts = [["a photo of a drill"]]
 heatmap = np.zeros((480, 640), dtype=np.float32)
 
 # Create a Gaussian kernel
-kernel_radius = 50  # Adjust the radius as needed
-sigma = 25  # Adjust the sigma as needed
+kernel_radius = 30  # Adjust the radius as needed
+sigma = 15  # Adjust the sigma as needed
 gaussian_kernel = create_gaussian_kernel(kernel_radius, sigma)
-decay_factor = 0.95
+decay_factor = 0.70
 
 while True:
     img_rgb, rgb_np = vision.get_latest_RGB(path="", save=False)
-
-    # cv_depth = np.frombuffer(vision.get_latest_response()[0].shot.image.data,dtype=np.uint16)
-    # cv_depth = cv_depth.reshape(vision.get_latest_response()[0].shot.image.rows, vision.get_latest_response()[0].shot.image.cols)
-    # min_val = np.min(cv_depth)
-    # max_val = np.max(cv_depth)
-    # depth_range = max_val - min_val
-    # depth8 = (255.0 / depth_range * (cv_depth - min_val)).astype('uint8')
-    # # depth8_rgb = cv2.cvtColor(depth8, cv2.COLOR_GRAY2RGB)
-    # cv2.imshow("Robot hand depth live", depth8_rgb)
 
     image = Image.fromarray(img_rgb)
     inputs = processor(text=texts, images=image, return_tensors="pt").to("cuda")
@@ -208,22 +191,26 @@ while True:
     i = 0
     text = texts[i]
     boxes, scores, labels = results[i]["boxes"], results[i]["scores"], results[i]["labels"]
-    for box, score, label in zip(boxes, scores, labels):
+
+    try:
+        max_score_index = scores.argmax()
+        box = boxes[max_score_index]
         box = [int(i) for i in box.tolist()]
-        box_center = (box[0] + (box[2] - box[0]) // 2, box[1] + (box[3] - box[1]) // 2)
-        update_heatmap(heatmap, box_center, score.item(), image.size[::-1], gaussian_kernel)
-        # cv2.rectangle(img_rgb, (box[0], box[1]), (box[2], boxq[3]), (0, 255, 0), 2)
-        # cv2.putText(img_rgb, f'{text[label]}:{round(score.item(), 3)}', (box[0], box[1] - 10),
-        #             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        mask = mobilesam.predict(img_rgb, bboxes=box)[0].masks.data[0].to(torch.uint8).squeeze().cpu().numpy()
+        
+        update_heatmap(heatmap, mask, scores[0].item(), gaussian_kernel)
+        heatmap = decay_factor * heatmap
 
-    heatmap *= decay_factor
+        heatmap_colored = normalize_heatmap(heatmap)
 
-    heatmap_colored = normalize_heatmap(heatmap)
-    overlay = cv2.addWeighted(img_rgb, 0.6, heatmap_colored, 0.4, 0)
-    
-    cv2.imshow("Realtime OWL-ViT on Spot", overlay)
+        overlay = cv2.addWeighted(img_rgb, 0.6, heatmap_colored, 0.4, 0)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to quit
-        break
+        cv2.imshow("Fast OWL-SAM Heatmap", overlay)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to quit
+            break
+
+    except Exception as e:
+        print(f"Problem with OWL-ViT box output: \n{e}")
 
 cv2.destroyAllWindows()
