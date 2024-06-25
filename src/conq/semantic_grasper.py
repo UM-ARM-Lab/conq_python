@@ -443,6 +443,7 @@ class SemanticGrasper:
 # sdk = bosdyn.client.create_standard_sdk('VoicePromptNav')
 # robot = sdk.create_robot('192.168.80.3')
 # bosdyn.client.util.authenticate(robot) 
+# robot.time_sync.wait_for_sync()
 
 # lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
@@ -450,8 +451,8 @@ class SemanticGrasper:
 
 # sg = SemanticGrasper(robot)
 
-# sg.search_object_with_gripper("red clippers")
+# sg.search_object_with_gripper("hose nozzle")
 
-# sg.orient_and_grasp('find_grasp_front', 'red clippers')
+# sg.orient_and_grasp('find_grasp_front', 'hose nozzle')
 
 # sg.put_down()
