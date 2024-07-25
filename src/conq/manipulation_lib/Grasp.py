@@ -74,11 +74,11 @@ def get_best_grasp_pose(Target_T_Source, file="live", to_body=False):
 
         grasp_pos_list.append(pos)
         grasp_quat_list.append(quat)
-
         pose_print = transform_grasp_pose(grasp,Target_T_Source)
         grasp_cand_list.append(pose_print)
 
     grasp_cand_array = np.hstack((grasp_pos_list,grasp_quat_list)) # nd.array: N x 7 (x,y,z,qw,qx,qy,qz)
+    print(f"Found total {grasp_cand_array.shape[0]} grasp candidates.")
     # Visualize grasp candidates in hand pose frame
     # Path to the point cloud file
     PCD_PATH = "src/conq/manipulation_lib/gpd/data/PCD/live.pcd"
@@ -100,7 +100,8 @@ def get_best_grasp_pose(Target_T_Source, file="live", to_body=False):
 
 def transform_grasp_pose(grasp_candidate,Target_T_Source):
     "Transform grasp pose from sensor frame to Body frame given transformation matrix"
-    position = np.array(grasp_candidate["position"]) #
+
+    position = np.array(grasp_candidate["position"])
     quat = list(tuple(dict_to_tuple_scipy(grasp_candidate["orientation"]))) # [qx, qy, qz, qw]
     # convert quat to rot
     rot = R.from_quat(quat).as_matrix() # 3 x 3
@@ -122,6 +123,7 @@ def transform_grasp_pose(grasp_candidate,Target_T_Source):
 def quaternion_dot(q1, q2):
     return np.dot(q1, q2)
 
+#Either filter grasps by approach axis or Z-height
 def choose_best_grasp(grasp_candidates, gaze_pose):
     # Extract the quaternion part of the gaze pose
     gaze_quaternion = gaze_pose[3:]
@@ -131,7 +133,12 @@ def choose_best_grasp(grasp_candidates, gaze_pose):
     
     for grasp in grasp_candidates:
         grasp_quaternion = grasp[3:]
-        similarity = quaternion_dot(gaze_quaternion, grasp_quaternion)
+
+        #filter by approach axis
+        # similarity = quaternion_dot(gaze_quaternion, grasp_quaternion)
+
+        #filter by choosing highest z value
+        similarity = grasp[2]
         
         if similarity > best_similarity:
             best_similarity = similarity

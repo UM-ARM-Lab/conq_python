@@ -20,6 +20,7 @@ import time
 import numpy as np
 import pdb
 import torch
+from PIL import Image
 
 from google.protobuf import any_pb2, wrappers_pb2
 
@@ -53,6 +54,7 @@ from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
 
 from conq.manipulation_lib.Manipulation import grasped_bool, open_gripper, close_gripper, move_gripper, move_gripper
 from conq.manipulation_lib.Perception3D import VisualPoseAcquirer, PointCloud, Vision
+from conq.perception_lib.fast_owlsam import FastOwlsam
 
 import bosdyn.client.estop
 import bosdyn.client.lease
@@ -94,11 +96,11 @@ from conq.manipulation_lib.utils import stow_arm
 from conq.perception_lib.grounded_sam_inference import GroundedSAM
 from conq.cameras_utils import image_to_opencv
 
-PCD_PATH = "/Users/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/PCD/"
-NPY_PATH = "/Users/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/NPY/"
-RGB_PATH = "/Users/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/RGB/"
-DEPTH_PATH = "/Users/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/DEPTH/"
-MASK_PATH = "/Users/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/MASK/"
+PCD_PATH = "/home/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/PCD/"
+NPY_PATH = "/home/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/NPY/"
+RGB_PATH = "/home/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/RGB/"
+DEPTH_PATH = "/home/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/DEPTH/"
+MASK_PATH = "/home/adibalaji/Desktop/agrobots/conq_python/src/conq/manipulation_lib/gpd/data/MASK/"
 
 ORIENTATION_MAP = {
     'back_fisheye_image':               (-1.00,0.0,0.0, 0.7071,0.,0.7071,0),
@@ -110,7 +112,7 @@ ORIENTATION_MAP = {
     'put_down':                         (0.75,0,-0.30, 0.7071,0.,0.7071,0),
     'hand_search':                      (0.55,0.0,0.65, 0.819,0.0,0.574,0.0),
     'hand_search_forward':              (0.8,0.0,0.15, 0.819,0.0,0.574,0.0),
-    'find_grasp_front':                 (0.75,0.0,0.25, 0.7071,0.,0.7071,0)
+    'find_grasp_front':                 (0.75,0.0,-0.10, 0.7071,0.,0.7071,0)
 }
 
 # Mapping from visual to depth data
@@ -365,7 +367,8 @@ class SemanticGrasper:
         assert self.robot.has_arm(), 'Robot requires an arm to run this example.'
         self.verify_estop()
         self.lease_client.take()
-        gds = GroundedSAM()
+        # gds = GroundedSAM()
+        fos = FastOwlsam()
 
         sources = ["hand_depth_in_hand_color_frame", "hand_color_image"]
         vision = Vision(self.image_client, sources)
@@ -392,44 +395,82 @@ class SemanticGrasper:
                 gaze_pose = ORIENTATION_MAP[object_direction_name]
                 status = move_gripper(clients, gaze_pose, blocking=False, duration = 0.5)
                 status = open_gripper(clients)
-                time.sleep(3)
+                time.sleep(0.3)
 
                 image_responses = self.image_client.get_image_from_sources(sources)
                 rgb = vision.get_latest_RGB(path=self.images_loc, save=True, file_name='live_hand')
+                img_transforms = image_responses[1].shot.transforms_snapshot
+                body_T_hand = get_a_tform_b(img_transforms, BODY_FRAME_NAME, image_responses[1].shot.frame_name_image_sensor).to_matrix()
 
 
                 # ------------------------------------- USING BOSDYN STOCK PIXEL GRASP -----------------------------------------------------------------------------------
-                pred_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name)
-                pred_centroid = gds.compute_mask_centroid(pred_mask)
+                
+                # #Using GroundedSAM
+                # # pred_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name)
+                # # pred_centroid = gds.compute_mask_centroid(pred_mask)
+
+                # #Using FastOwlsam
+                # image = Image.open(self.images_loc+'live_hand.jpg')
+                # pred_mask, _ = fos.predict_segmentation(image_pil=image, object_name =object_name)
+                # pred_centroid = fos.compute_mask_centroid(pred_mask)
 
 
-                pix_x, pix_y = (pred_centroid[0],pred_centroid[1]) # Get from object detector
-                pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
+                # pix_x, pix_y = (pred_centroid[0],pred_centroid[1]) # Get from object detector
+                # pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
 
-                try:
-                    grasp_result = grasp_point_in_image(clients,image_responses[0],pick_vec)
-                except Exception as e:
-                    print("Whoops")
-                    close_gripper(clients=clients)
-                    stow_arm(self.robot, self.command_client)
+                # try:
+                #     grasp_result = grasp_point_in_image(clients,image_responses[0],pick_vec)
+                #     if grasp_result:
+                #         print("Grasp Succeeded!")
+                #     else:
+                #         print("Grasp Failed. Retrying..")
+                # except Exception as e:
+                #     print("Whoops")
+                #     close_gripper(clients=clients)
+                #     stow_arm(self.robot, self.command_client)
                 # --------------------------------------------------------------------------------------------------------------------------------------------
 
                 # ------------------------------------- USING GPD --------------------------------------------------------------------------------------------
 
-                # depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True)
-                # xyz = pointcloud.get_raw_point_cloud()
-                # seg_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
-                # print(f'Using mask found of shape {seg_mask.shape}')
-                # pointcloud.segment_xyz(seg_mask.squeeze())
+                depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True)
+                xyz = pointcloud.get_raw_point_cloud()
 
-                # pointcloud.save_pcd(path = PCD_PATH)
-                # pointcloud.save_npy(path = NPY_PATH)
+                #Using GroundedSAM
+                # seg_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
+
+                #Using FastOwlsam
+                image = Image.open(self.images_loc+'live_hand.jpg')
+                seg_mask,_ = fos.predict_segmentation(image_pil=image, object_name =object_name)
+
+                print(f'Using mask found of shape {seg_mask.shape}')
+                pointcloud.segment_xyz(seg_mask.squeeze())
+
+                pointcloud.save_pcd(path = PCD_PATH)
+                pointcloud.save_npy(path = NPY_PATH)
                 
-                # # Call Grasp detection Module
-                # grasp_pose = get_best_grasp_pose()
+                # Call Grasp detection Module
+                grasp_pose = get_best_grasp_pose(body_T_hand)
+
+                #constant Z offset, might need to remove later!!!!!!!!!!!!!!!!!!!!!
+                # grasp_pose = list(grasp_pose)
+                # grasp_pose[2] = grasp_pose[2]
+                # grasp_pose = tuple(grasp_pose)
+
+                grasp_pose = rotate_quaternion(grasp_pose)
+
+                print(f"Final grasp pose: {grasp_pose}")
                 
-                # status = move_gripper(clients, rotate_quaternion(grasp_pose), blocking = True, duration = 1)
-                # status = close_gripper(clients)
+                status = move_gripper(clients, grasp_pose, blocking = True, duration = 1)
+                time.sleep(0.25)
+                status = close_gripper(clients)
+                time.sleep(1)
+
+                grasp_result = True
+
+                if grasp_result:
+                    print("Grasp Succeeded!")
+                else:
+                    print("Grasp Failed. Retrying..")
 
                 # --------------------------------------------------------------------------------------------------------------------------------------------
             
@@ -440,19 +481,19 @@ class SemanticGrasper:
             
         return True
 
-# sdk = bosdyn.client.create_standard_sdk('VoicePromptNav')
-# robot = sdk.create_robot('192.168.80.3')
-# bosdyn.client.util.authenticate(robot) 
-# robot.time_sync.wait_for_sync()
+sdk = bosdyn.client.create_standard_sdk('VoicePromptNav')
+robot = sdk.create_robot('192.168.80.3')
+bosdyn.client.util.authenticate(robot) 
+robot.time_sync.wait_for_sync()
 
-# lease_client = robot.ensure_client(LeaseClient.default_service_name)
+lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-# lease_client.take()
+lease_client.take()
 
-# sg = SemanticGrasper(robot)
+sg = SemanticGrasper(robot)
 
 # sg.search_object_with_gripper("hose nozzle")
 
-# sg.orient_and_grasp('find_grasp_front', 'hose nozzle')
+sg.orient_and_grasp('find_grasp_front', 'hose nozzle')
 
-# sg.put_down()
+sg.put_down()
