@@ -55,6 +55,7 @@ from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
 from conq.manipulation_lib.Manipulation import grasped_bool, open_gripper, close_gripper, move_gripper, move_gripper
 from conq.manipulation_lib.Perception3D import VisualPoseAcquirer, PointCloud, Vision
 from conq.perception_lib.fast_owlsam import FastOwlsam
+from conq.perception_lib.fast_grounded_sam import FastGroundedSAM
 
 import bosdyn.client.estop
 import bosdyn.client.lease
@@ -89,7 +90,7 @@ from conq.grounding_dino import GroundingDino
 from conq.cameras_utils import image_to_opencv
 
 from conq.manipulation import grasp_point_in_image
-from conq.manipulation_lib.Grasp import get_grasp_candidates, get_best_grasp_pose
+from conq.manipulation_lib.Grasp import get_grasp_candidates, get_best_grasp_pose, compute_grass_z_range, transform_grasp_pose
 from conq.manipulation_lib.utils import rotate_quaternion
 from conq.clients import Clients
 from conq.manipulation_lib.utils import stow_arm
@@ -367,8 +368,9 @@ class SemanticGrasper:
         assert self.robot.has_arm(), 'Robot requires an arm to run this example.'
         self.verify_estop()
         self.lease_client.take()
-        # gds = GroundedSAM()
-        fos = FastOwlsam()
+        gds = GroundedSAM()
+        # fos = FastOwlsam()
+        fgs = FastGroundedSAM()
 
         sources = ["hand_depth_in_hand_color_frame", "hand_color_image"]
         vision = Vision(self.image_client, sources)
@@ -435,14 +437,9 @@ class SemanticGrasper:
                 depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True)
                 xyz = pointcloud.get_raw_point_cloud()
 
-                #Using GroundedSAM
-                # seg_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
+                #Using FastGroundedSAM
+                seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
 
-                #Using FastOwlsam
-                image = Image.open(self.images_loc+'live_hand.jpg')
-                seg_mask,_ = fos.predict_segmentation(image_pil=image, object_name =object_name)
-
-                print(f'Using mask found of shape {seg_mask.shape}')
                 pointcloud.segment_xyz(seg_mask.squeeze())
 
                 pointcloud.save_pcd(path = PCD_PATH)
@@ -452,9 +449,9 @@ class SemanticGrasper:
                 grasp_pose = get_best_grasp_pose(body_T_hand)
 
                 #constant Z offset, might need to remove later!!!!!!!!!!!!!!!!!!!!!
-                # grasp_pose = list(grasp_pose)
-                # grasp_pose[2] = grasp_pose[2]
-                # grasp_pose = tuple(grasp_pose)
+                grasp_pose = list(grasp_pose)
+                grasp_pose[2] = grasp_pose[2] + 0.03
+                grasp_pose = tuple(grasp_pose)
 
                 grasp_pose = rotate_quaternion(grasp_pose)
 
@@ -471,6 +468,61 @@ class SemanticGrasper:
                     print("Grasp Succeeded!")
                 else:
                     print("Grasp Failed. Retrying..")
+
+                # --------------------------------------------------------------------------------------------------------------------------------------------
+
+                # ---------------------------------------------- USING GPD WITH GRASS FILTERING --------------------------------------------------------------
+
+                # depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True)
+                # xyz = pointcloud.get_raw_point_cloud()
+
+                # min_grass_point, _ = compute_grass_z_range(point_cloud_file=PCD_PATH+"live.pcd")
+                # min_grass_point = np.array([min_grass_point[0], min_grass_point[1], min_grass_point[2], 0, 0, 0, 1]) # x,y,z,qx,qy,qz,qw
+
+                # min_grass_point_body = transform_grasp_pose(min_grass_point, body_T_hand, raw_grasp_pose=True)
+
+                # print(f"Highest grass point {min_grass_point_body}")
+
+                # #Using GroundedSAM
+                # # seg_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
+
+                # #Using FastOwlsam
+                # image = Image.open(self.images_loc+'live_hand.jpg')
+                # seg_mask,_ = fos.predict_segmentation(image_pil=image, object_name =object_name)
+
+                # print(f'Using mask found of shape {seg_mask.shape}')
+                # pointcloud.segment_xyz(seg_mask.squeeze())
+
+                # pointcloud.save_pcd(path = PCD_PATH)
+                # pointcloud.save_npy(path = NPY_PATH)
+                
+                # # Call Grasp detection Module
+                # found_grasp_candidates = False
+                # grasp_pose = None
+                # while not found_grasp_candidates:
+                #     try:
+                #         grasp_pose = get_best_grasp_pose(body_T_hand)
+                #         if grasp_pose is not None:
+                #             found_grasp_candidates = True
+                #     except Exception as e:
+                #         print(f"No grasps found, trying again: {e}")
+
+
+                # grasp_pose = rotate_quaternion(grasp_pose)
+
+                # print(f"Final grasp pose: {grasp_pose}")
+                
+                # status = move_gripper(clients, grasp_pose, blocking = True, duration = 1)
+                # time.sleep(0.25)
+                # status = close_gripper(clients)
+                # time.sleep(0.5)
+
+                # grasp_result = True
+
+                # if grasp_result:
+                #     print("Grasp Succeeded!")
+                # else:
+                #     print("Grasp Failed. Retrying..")
 
                 # --------------------------------------------------------------------------------------------------------------------------------------------
             
@@ -494,6 +546,6 @@ sg = SemanticGrasper(robot)
 
 # sg.search_object_with_gripper("hose nozzle")
 
-sg.orient_and_grasp('find_grasp_front', 'hose nozzle')
+sg.orient_and_grasp('find_grasp_front', 'empty bottle')
 
 sg.put_down()

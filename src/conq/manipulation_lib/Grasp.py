@@ -84,7 +84,7 @@ def get_best_grasp_pose(Target_T_Source, file="live", to_body=False):
     PCD_PATH = "src/conq/manipulation_lib/gpd/data/PCD/live.pcd"
     # Load the point cloud
     point_cloud = o3d.io.read_point_cloud(PCD_PATH)
-    # viz_grasp_cand(point_cloud, grasp_cand_array)
+    viz_grasp_cand(point_cloud, grasp_cand_array)
     
     if to_body:
         print("Grasp from target frame")
@@ -94,17 +94,25 @@ def get_best_grasp_pose(Target_T_Source, file="live", to_body=False):
     else:
         # pose_tuple = transform_grasp_pose(grasp_candidates[0],Target_T_Source)
         # print("Final pose",pose_tuple)
-        gaze_pose = (0.75, 0.0, 0.3, 0.7071, 0., 0.7071, 0.)
+        gaze_pose = (0.75, 0.0, -0.1, 0.7071, 0., 0.7071, 0.)
         pose_tuple = choose_best_grasp(grasp_cand_list, gaze_pose)
     return pose_tuple
 
-def transform_grasp_pose(grasp_candidate,Target_T_Source):
+def transform_grasp_pose(grasp_candidate,Target_T_Source, raw_grasp_pose=False):
     "Transform grasp pose from sensor frame to Body frame given transformation matrix"
 
-    position = np.array(grasp_candidate["position"])
-    quat = list(tuple(dict_to_tuple_scipy(grasp_candidate["orientation"]))) # [qx, qy, qz, qw]
-    # convert quat to rot
-    rot = R.from_quat(quat).as_matrix() # 3 x 3
+    position = None
+    rot = None
+
+    if raw_grasp_pose:
+        position = grasp_candidate[:3]
+        quat = grasp_candidate[3:]
+        rot = R.from_quat(quat).as_matrix() # 3 x 3
+    else:
+        position = np.array(grasp_candidate["position"])
+        quat = list(tuple(dict_to_tuple_scipy(grasp_candidate["orientation"]))) # [qx, qy, qz, qw]
+        # convert quat to rot
+        rot = R.from_quat(quat).as_matrix() # 3 x 3
 
     Hand_T_Grasp = np.eye(4)
     Hand_T_Grasp[:3, :3] = rot
@@ -135,10 +143,10 @@ def choose_best_grasp(grasp_candidates, gaze_pose):
         grasp_quaternion = grasp[3:]
 
         #filter by approach axis
-        # similarity = quaternion_dot(gaze_quaternion, grasp_quaternion)
+        similarity = quaternion_dot(gaze_quaternion, grasp_quaternion)
 
         #filter by choosing highest z value
-        similarity = grasp[2]
+        # similarity = grasp[2]
         
         if similarity > best_similarity:
             best_similarity = similarity
@@ -189,6 +197,40 @@ def viz_grasp_cand(point_cloud, grasp_candidates_array):
 
     # Visualize the point cloud along with the grasp points and their orientations
     o3d.visualization.draw_geometries(geometries)
+
+def compute_grass_z_range(point_cloud_file):
+    # Load the point cloud
+    pcd = o3d.io.read_point_cloud(point_cloud_file)
+
+    # Segment the largest plane in the point cloud using RANSAC
+    plane_model, inliers = pcd.segment_plane(distance_threshold=0.01, ransac_n=5, num_iterations=1000)
+
+    [a, b, c, d] = plane_model
+    # print(f"Plane equation: {a:.2f}x + {b:.2f}y + {c:.2f}z + {d:.2f} = 0")
+
+    # Extract inlier points (the plane)
+    inlier_cloud = pcd.select_by_index(inliers)
+    inlier_cloud.paint_uniform_color([1.0, 0, 0])  # Paint the plane points red
+
+    # Extract outlier points (the rest of the point cloud)
+    outlier_cloud = pcd.select_by_index(inliers, invert=True)
+
+    # Find the inlier point with the highest Z value
+    inlier_points = np.asarray(inlier_cloud.points)
+
+    min_z_index = np.argmin(inlier_points[:, 2])
+    min_z_point = inlier_points[min_z_index]
+
+    max_z_index = np.argmax(inlier_points[:, 2])
+    max_z_point = inlier_points[max_z_index]
+
+    print(f"The grass point with the min Z value in hand frame is: {min_z_point}")
+    print(f"The grass point with the max Z value in hand frame is: {max_z_point}")
+
+    # Visualize the original point cloud with the fitted plane
+    # o3d.visualization.draw_geometries([inlier_cloud, outlier_cloud])
+
+    return min_z_point, max_z_point
 
 
 def main():

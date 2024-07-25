@@ -65,7 +65,7 @@ class FastOwlsam:
         box = boxes[max_score_index]
         box = [int(i) for i in box.tolist()]
 
-        mask = self.mobilesam.predict(image, bboxes=box)[0].masks.data[0].to(torch.uint8).squeeze().cpu().numpy()
+        mask = self.mobilesam.predict(image, bboxes=box)[0].masks.data[0].to(torch.uint8).cpu().numpy()
 
         return mask, scores[max_score_index]
 
