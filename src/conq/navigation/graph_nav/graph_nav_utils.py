@@ -1,22 +1,26 @@
 from bosdyn.api import robot_state_pb2
+from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
 from bosdyn.api.graph_nav import map_pb2, graph_nav_pb2, nav_pb2
 from bosdyn.client.graph_nav import GraphNavClient
 from bosdyn.client.image import ImageClient
 from bosdyn.client.power import power_on_motors, safe_power_off_motors, PowerClient
 from bosdyn.client.exceptions import ResponseError
-from bosdyn.client.robot_command import RobotCommandClient
+from bosdyn.client.robot_command import RobotCommandClient, RobotCommandBuilder
 from bosdyn.client.robot_state import RobotStateClient
 import bosdyn.client.util
 import bosdyn.client.lease
 from bosdyn.client.lease import LeaseClient
-from bosdyn.client.frame_helpers import get_odom_tform_body
+from bosdyn.client.frame_helpers import get_odom_tform_body, get_se2_a_tform_b, BODY_FRAME_NAME, ODOM_FRAME_NAME
+from bosdyn.client import math_helpers as client_math_helpers
+
 
 # misc
 import os
 import time
 import math
 from dotenv import load_dotenv
-from conq.localization.localization_utils import Localization
+import socket
+import json
 
 class GraphNav:
     # Constructor that will initialize everything that is needed for navigating to waypoints
@@ -46,7 +50,7 @@ class GraphNav:
         # Create the power client to ensure that all motors are functioning accordingly
         self._power_client = self._robot.ensure_client(PowerClient.default_service_name)
 
-        # Update the robot's power state
+        # Update the robot’s power state
         power_state = self._robot_state_client.get_robot_state().power_state
         self._started_powered_on = (power_state.motor_power_state == power_state.STATE_ON)
         self._powered_on = self._started_powered_on
@@ -60,7 +64,14 @@ class GraphNav:
         self._current_annotation_name_to_wp_id = dict()
 
         # Init the graph for spot to use
-        self._init_graph()        
+        self._init_graph()
+
+        self._waypoint_gps_dict = {} 
+        self.JETSON_IP_ADDRESS = '192.168.80.101'
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client_socket.connect((self.JETSON_IP_ADDRESS, 8000))       
+        # self.start_gps = self.get_curr_gps_location()
+
 
     #### PRIVATE UTILITY FUNCTIONS
 
@@ -141,7 +152,7 @@ class GraphNav:
         if len(short_code) != 2:
             # Not a short code, check if it is an annotation name (instead of the waypoint id).
             if short_code in name_to_id:
-                # Short code is a waypoint's annotation name. Check if it is paired with a unique waypoint id.
+                # Short code is a waypoint’s annotation name. Check if it is paired with a unique waypoint id.
                 if name_to_id[short_code] is not None:
                     # Has an associated waypoint id!
                     return name_to_id[short_code]
@@ -228,7 +239,7 @@ class GraphNav:
             # Navigation command is not complete yet.
             return False
         
-    # This function connects the list of waypoint "names" to their unique IDs
+    # This function connects the list of waypoint “names” to their unique IDs
     def _list_graph_waypoint_and_edge_ids(self):
         # Download current graph
         graph = self._graph_nav_client.download_graph()
@@ -308,7 +319,7 @@ class GraphNav:
     def _pretty_print_waypoints(self, waypoint_id, waypoint_name, short_code_to_count, localization_id):
         short_code = self._id_to_short_code(waypoint_id)
         if short_code is None or short_code_to_count[short_code] != 1:
-            short_code = '  '  # If the short code is not valid/unique, don't show it.
+            short_code = ' '  # If the short code is not valid/unique, don’t show it.
 
         waypoint_symbol = '->' if localization_id == waypoint_id else '  '
         if(self._is_debug):
@@ -316,7 +327,7 @@ class GraphNav:
                 f'{waypoint_symbol} Waypoint name: {waypoint_name} id: {waypoint_id} short code: {short_code}'
             )
 
-    # This function "should" update the robots pose while having turned the robot on and off
+    # This function “should” update the robots pose while having turned the robot on and off
     def _get_localization_state(self):
         """Get the current localization and state of the robot."""
         state = self._graph_nav_client.get_localization_state(request_gps_state=self.use_gps)
@@ -339,8 +350,8 @@ class GraphNav:
     # This uses the Scan Match algorithm that the spok sdk has for using slam to find an estimated localization
     # This happens because in the set_localization function the argument FIDUCIAL_INIT_NO_FIDUCIAL is passed which signals that spot should use slam to help localize itself
     def _set_initial_localization_waypoint(self, waypoint_id):
-        print("Localizing to waypoint: " + str(waypoint_id))
-        name = "waypoint_" + str(waypoint_id)
+        print('Localizing to waypoint: ' + str(waypoint_id))
+        name = 'waypoint_' + str(waypoint_id)
         # Take the first argument as the localization waypoint.
         destination_waypoint = self._find_unique_waypoint_id(
             name, self._current_graph, self._current_annotation_name_to_wp_id)
@@ -358,14 +369,14 @@ class GraphNav:
         try:    
             self._graph_nav_client.set_localization(
                 initial_guess_localization=localization,
-                # It's hard to get the pose perfect, search +/-20 deg and +/-20cm (0.2m).
+                # It’s hard to get the pose perfect, search +/-20 deg and +/-20cm (0.2m).
                 max_distance=4.0,
                 max_yaw=180.0 * math.pi / 180.0,
                 fiducial_init=graph_nav_pb2.SetLocalizationRequest.FIDUCIAL_INIT_NO_FIDUCIAL,
                 ko_tform_body=current_odom_tform_body)
             return True
         except bosdyn.client.exceptions.TimedOutError:
-            print("Localizing to waypoint: " + str(waypoint_id) + " Failed")
+            print('Localizing to waypoint: ' + str(waypoint_id) + ' Failed')
             return False
 
     #### PUBLIC MEMBER FUNCTIONS ####
@@ -405,11 +416,165 @@ class GraphNav:
             # Sit the robot down + power off after the navigation command is complete.
             self.toggle_power(should_power_on=False)
 
+    def get_curr_gps_location(self):
+        x = None
+        y = None
+
+        while x is None and y is None:
+            try:
+                data = self.client_socket.recv(1024).decode()
+                x, y = data.strip().split('','')
+                x, y = float(x), float(y)
+            except Exception as e:
+                print(f'Connection error: {e}')
+
+        return x, y
+
+    def drop_gps_anchors_at_waypoints(self):
+
+        for waypoint_num in range(0, len(self._current_graph.waypoints)):
+            waypoint_name = f'waypoint_{waypoint_num}'
+            self.navigate_to(waypoint_name, sit_down_after_reached=False)
+            time.sleep(30)
+            waypoint_x, waypoint_y = self.get_curr_gps_location()
+            self._waypoint_gps_dict[waypoint_name] = (waypoint_x, waypoint_y)
+            print(f'Anchored {waypoint_name} at {self._waypoint_gps_dict[waypoint_name]}')
+
+        print(self._waypoint_gps_dict)
+
+        with open('/Users/adibalaji/Desktop/agrobots/conq_python/data/json/waypoint_gps_dict.json', 'w') as json_file:
+            json.dump(self._waypoint_gps_dict, json_file, indent=4)
+    
+    def relative_move(self, dx, dy, dyaw, frame_name, stairs=False):
+        transforms = self._robot_state_client.get_robot_state().kinematic_state.transforms_snapshot
+
+        # Build the transform for where we want the robot to be relative to where the body currently is.
+        body_tform_goal = client_math_helpers.SE2Pose(x=dx, y=dy, angle=dyaw)
+        # We do not want to command this goal in body frame because the body will move, thus shifting
+        # our goal. Instead, we transform this offset to get the goal position in the output frame
+        # (which will be either odom or vision).
+        out_tform_body = get_se2_a_tform_b(transforms, frame_name, BODY_FRAME_NAME)
+        out_tform_goal = out_tform_body * body_tform_goal
+
+        # Command the robot to go to the goal point in the specified frame. The command will stop at the
+        # new position.
+        robot_cmd = RobotCommandBuilder.synchro_se2_trajectory_point_command(
+            goal_x=out_tform_goal.x, goal_y=out_tform_goal.y, goal_heading=out_tform_goal.angle,
+            frame_name=frame_name, params=RobotCommandBuilder.mobility_params(stair_hint=stairs))
+        end_time = 10.0
+        cmd_id = self._robot_command_client.robot_command(lease=None, command=robot_cmd,
+                                                    end_time_secs=time.time() + end_time)
+        # Wait until the robot has reached the goal.
+        while True:
+            feedback = self._robot_command_client.robot_command_feedback(cmd_id)
+            mobility_feedback = feedback.feedback.synchronized_feedback.mobility_command_feedback
+            if mobility_feedback.status != RobotCommandFeedbackStatus.STATUS_PROCESSING:
+                print('Failed to reach the goal')
+                return False
+            traj_feedback = mobility_feedback.se2_trajectory_feedback
+            if (traj_feedback.status == traj_feedback.STATUS_AT_GOAL and
+                    traj_feedback.body_movement_status == traj_feedback.BODY_STATUS_SETTLED):
+                print('Arrived at the goal.')
+                return True
+            time.sleep(0.25)
+
+        return True
+    
+    def relocalize_with_gps(self):
+
+        print('Calculating relocalization..')
+
+        curr_x, curr_y = self.get_curr_gps_location()
+
+        min_distance = float('inf')
+        nearest_waypoint_id = None
+
+        for waypoint_id, (x, y) in self._waypoint_gps_dict.items():
+            distance = math.sqrt((x - curr_x)**2 + (y - curr_y)**2)
+            
+            # Check if this distance is the smallest one found so far
+            if distance < min_distance:
+                min_distance = distance
+                nearest_waypoint_id = waypoint_id
+
+        #move body to nearest wp
+        dx = curr_x - self._waypoint_gps_dict[nearest_waypoint_id][0]
+        dy = curr_y - self._waypoint_gps_dict[nearest_waypoint_id][1]
+
+        print(f'Moving body dx: {dx} dy: {dy}')
+
+        time.sleep(10)
+
+        self.relative_move(dx, dy, 0, ODOM_FRAME_NAME)
+
+        print(f'Relocalizing to {nearest_waypoint_id}')
+
+        #relocalize to that wp
+        self._set_initial_localization_waypoint(int(nearest_waypoint_id[9]))
+
+        self.navigate_to(int(nearest_waypoint_id[9]))
+
+    # !!!!!!!!!!!!!!!!!! RECURSIVE FUNCTION    
+    def navigate_to_with_gps_relocalize(self, waypoint_number, sit_down_after_reached=True):
+        print(f'Navigating to {waypoint_number}...')
+        destination_waypoint = self._find_unique_waypoint_id(
+            waypoint_number, self._current_graph, self._current_annotation_name_to_wp_id)
+        if not destination_waypoint:
+            # Failed to find the appropriate unique waypoint id for the navigation command.
+            return
+        if not self.toggle_power(should_power_on=True):
+            if(self._is_debug):
+                print('Failed to power on the robot, and cannot complete navigate to request.')
+            return
+
+        nav_to_cmd_id = None
+        # Navigate to the destination waypoint.
+        is_finished = False
+        while not is_finished:
+            # Issue the navigation command about twice a second such that it is easy to terminate the
+            # navigation command (with estop or killing the program).
+            try:
+                nav_to_cmd_id = self._graph_nav_client.navigate_to(destination_waypoint, 1.0,
+                                                                command_id=nav_to_cmd_id)
+            except ResponseError as e:
+                print(f'Error while navigating {e}')
+                break
+            time.sleep(.5)  # Sleep for half a second to allow for command execution.
+            # Poll the robot for feedback to determine if the navigation command is complete. Then sit
+            # the robot down once it is finished.
+
+            status = self._graph_nav_client.navigation_feedback(nav_to_cmd_id)
+
+            if status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_REACHED_GOAL:
+                is_finished = True
+            elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_LOST:
+                if(self._is_debug):
+                    print('Robot got lost when navigating the route. Relocalizing with GPS..')
+                    self.relocalize_with_gps()
+                    is_finished = self.navigate_to_with_gps_relocalize(waypoint_number, sit_down_after_reached=False)
+            elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_STUCK:
+                if(self._is_debug):
+                    print('Robot got stuck when navigating the route,. Relocalizing with GPS..')
+                    self.relocalize_with_gps()
+                    is_finished = self.navigate_to_with_gps_relocalize(waypoint_number, sit_down_after_reached=False)                    
+            elif status.status == graph_nav_pb2.NavigationFeedbackResponse.STATUS_ROBOT_IMPAIRED:
+                if(self._is_debug):
+                    print('Robot is impaired.')
+                is_finished = True
+            else:
+                is_finished = False
+
+        # Power off the robot if appropriate.
+        if self._powered_on and not self._started_powered_on and sit_down_after_reached:
+            # Sit the robot down + power off after the navigation command is complete.
+            self.toggle_power(should_power_on=False)
+
+        return is_finished
+
     # This function saves the current location so that spot can localize again on startup
     def save_current_location(self):
         print(self.location_cache)
         with open(self.location_cache, 'w') as cache:
-            print("instide")
             state = self._graph_nav_client.get_localization_state()
             name = list(self._current_annotation_name_to_wp_id.keys())[list(self._current_annotation_name_to_wp_id.values()).index(state.localization.waypoint_id)]
             print(f'Got waypoint: \n{name}')
@@ -420,18 +585,32 @@ class GraphNav:
         return len(self._current_annotation_name_to_wp_id)
         
 
-# #Setup and authenticate the robot.
-# sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
-# robot = sdk.create_robot('192.168.80.3')
-# bosdyn.client.util.authenticate(robot) 
+#Setup and authenticate the robot.
+sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
+robot = sdk.create_robot('192.168.80.3')
+bosdyn.client.util.authenticate(robot) 
 
-# lease_client = robot.ensure_client(LeaseClient.default_service_name)
+lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-# lease_client.take()
+lease_client.take()
 
-# with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-#     gn = GraphNav(robot)
-#     gn.navigate_to('waypoint_5')
-    # gn.save_current_location()
+with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
+    gn = GraphNav(robot)
+    # gn._set_initial_localization_waypoint(0)
 
+    # gn.drop_gps_anchors_at_waypoints()
+
+    # # gn.navigate_to('waypoint_3')
+
+    wp_dict = {}
+
+    with open('/Users/adibalaji/Desktop/agrobots/conq_python/data/json/waypoint_gps_dict.json', 'r') as file:
+        wp_dict = json.load(file)
+
+    gn._waypoint_gps_dict = wp_dict
     
+    print('gps catching up')
+    time.sleep(7)
+    gn.relocalize_with_gps()
+    print('All done')
+    gn.client_socket.close()
