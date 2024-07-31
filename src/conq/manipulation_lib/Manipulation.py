@@ -126,9 +126,9 @@ def move_gripper(clients: Clients, pose, blocking = True, frame_name = BODY_FRAM
         print(e)
         return False
     
-def open_gripper(clients: Clients):
+def open_gripper(clients: Clients, open_percentage=100):
     try:
-        clients.command.robot_command(RobotCommandBuilder.claw_gripper_open_command())
+        clients.command.robot_command(RobotCommandBuilder.claw_gripper_open_fraction_command(open_fraction=open_percentage/100.0))
         time.sleep(1)  # FIXME: how to block on a gripper command?
         return True
     except:

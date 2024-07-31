@@ -60,7 +60,7 @@ def get_grasp_candidates(file="live"):
     return grasp_candidates
 
 
-def get_best_grasp_pose(Target_T_Source, file="live", to_body=False):
+def get_best_grasp_pose(Target_T_Source, min_grass_z=None, file="live", to_body=False):
     "Returns best grasp pose as tuple"
     grasp_candidates = get_grasp_candidates(file) # Grasp candidates from hand_sensor_frame
     
@@ -95,7 +95,7 @@ def get_best_grasp_pose(Target_T_Source, file="live", to_body=False):
         # pose_tuple = transform_grasp_pose(grasp_candidates[0],Target_T_Source)
         # print("Final pose",pose_tuple)
         gaze_pose = (0.75, 0.0, -0.1, 0.7071, 0., 0.7071, 0.)
-        pose_tuple = choose_best_grasp(grasp_cand_list, gaze_pose)
+        pose_tuple = choose_best_grasp(grasp_cand_list, gaze_pose, min_grass_z=min_grass_z)
     return pose_tuple
 
 def transform_grasp_pose(grasp_candidate,Target_T_Source, raw_grasp_pose=False):
@@ -132,7 +132,7 @@ def quaternion_dot(q1, q2):
     return np.dot(q1, q2)
 
 #Either filter grasps by approach axis or Z-height
-def choose_best_grasp(grasp_candidates, gaze_pose):
+def choose_best_grasp(grasp_candidates, gaze_pose, min_grass_z=None):
     # Extract the quaternion part of the gaze pose
     gaze_quaternion = gaze_pose[3:]
     
@@ -142,15 +142,20 @@ def choose_best_grasp(grasp_candidates, gaze_pose):
     for grasp in grasp_candidates:
         grasp_quaternion = grasp[3:]
 
-        #filter by approach axis
-        similarity = quaternion_dot(gaze_quaternion, grasp_quaternion)
+        if min_grass_z is not None and grasp[2] < min_grass_z:
+            print(f'Eliminated low grasp: {grasp}')
+            continue
+        else:
 
-        #filter by choosing highest z value
-        # similarity = grasp[2]
-        
-        if similarity > best_similarity:
-            best_similarity = similarity
-            best_grasp = grasp
+            #filter by approach axis
+            similarity = quaternion_dot(gaze_quaternion, grasp_quaternion)
+
+            #filter by choosing highest z value
+            # similarity = grasp[2]
+            
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_grasp = grasp
     return best_grasp
 
 def dict_to_tuple_wxyz(orientation_dict):
@@ -203,7 +208,7 @@ def compute_grass_z_range(point_cloud_file):
     pcd = o3d.io.read_point_cloud(point_cloud_file)
 
     # Segment the largest plane in the point cloud using RANSAC
-    plane_model, inliers = pcd.segment_plane(distance_threshold=0.01, ransac_n=5, num_iterations=1000)
+    plane_model, inliers = pcd.segment_plane(distance_threshold=0.015, ransac_n=5, num_iterations=1000)
 
     [a, b, c, d] = plane_model
     # print(f"Plane equation: {a:.2f}x + {b:.2f}y + {c:.2f}z + {d:.2f} = 0")
@@ -228,7 +233,7 @@ def compute_grass_z_range(point_cloud_file):
     print(f"The grass point with the max Z value in hand frame is: {max_z_point}")
 
     # Visualize the original point cloud with the fitted plane
-    # o3d.visualization.draw_geometries([inlier_cloud, outlier_cloud])
+    o3d.visualization.draw_geometries([inlier_cloud, outlier_cloud])
 
     return min_z_point, max_z_point
 

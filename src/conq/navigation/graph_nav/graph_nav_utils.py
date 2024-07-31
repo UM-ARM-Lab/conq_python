@@ -420,7 +420,7 @@ class GraphNav:
         return len(self._current_annotation_name_to_wp_id)
         
 
-# #Setup and authenticate the robot.
+#Setup and authenticate the robot.
 # sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
 # robot = sdk.create_robot('192.168.80.3')
 # bosdyn.client.util.authenticate(robot) 
@@ -431,7 +431,7 @@ class GraphNav:
 
 # with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
 #     gn = GraphNav(robot)
-#     gn.navigate_to('waypoint_5')
+#     gn.navigate_to('waypoint_0')
     # gn.save_current_location()
 
     
