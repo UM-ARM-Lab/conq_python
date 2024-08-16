@@ -66,10 +66,10 @@ class GraphNav:
         # Init the graph for spot to use
         self._init_graph()
 
-        self._waypoint_gps_dict = {} 
-        self.JETSON_IP_ADDRESS = '192.168.80.101'
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client_socket.connect((self.JETSON_IP_ADDRESS, 8000))       
+        # self._waypoint_gps_dict = {} 
+        # self.JETSON_IP_ADDRESS = '192.168.80.101'
+        # self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self.client_socket.connect((self.JETSON_IP_ADDRESS, 8000))       
         # self.start_gps = self.get_curr_gps_location()
 
 
@@ -584,33 +584,33 @@ class GraphNav:
     def get_graph_size(self):
         return len(self._current_annotation_name_to_wp_id)
         
+if __name__ == "__main__":
+    #Setup and authenticate the robot.
+    sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
+    robot = sdk.create_robot('192.168.80.3')
+    bosdyn.client.util.authenticate(robot) 
 
-#Setup and authenticate the robot.
-sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
-robot = sdk.create_robot('192.168.80.3')
-bosdyn.client.util.authenticate(robot) 
+    lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-lease_client = robot.ensure_client(LeaseClient.default_service_name)
+    lease_client.take()
 
-lease_client.take()
+    with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
+        gn = GraphNav(robot)
+        # gn._set_initial_localization_waypoint(0)
 
-with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-    gn = GraphNav(robot)
-    # gn._set_initial_localization_waypoint(0)
+        # gn.drop_gps_anchors_at_waypoints()
 
-    # gn.drop_gps_anchors_at_waypoints()
+        # # gn.navigate_to('waypoint_3')
 
-    # # gn.navigate_to('waypoint_3')
+        wp_dict = {}
 
-    wp_dict = {}
+        with open('/Users/adibalaji/Desktop/agrobots/conq_python/data/json/waypoint_gps_dict.json', 'r') as file:
+            wp_dict = json.load(file)
 
-    with open('/Users/adibalaji/Desktop/agrobots/conq_python/data/json/waypoint_gps_dict.json', 'r') as file:
-        wp_dict = json.load(file)
-
-    gn._waypoint_gps_dict = wp_dict
-    
-    print('gps catching up')
-    time.sleep(7)
-    gn.relocalize_with_gps()
-    print('All done')
-    gn.client_socket.close()
+        gn._waypoint_gps_dict = wp_dict
+        
+        print('gps catching up')
+        time.sleep(7)
+        gn.relocalize_with_gps()
+        print('All done')
+        gn.client_socket.close()
