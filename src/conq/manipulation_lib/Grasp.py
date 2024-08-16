@@ -3,6 +3,7 @@ import subprocess
 import time
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+from scipy.spatial.distance import pdist
 import open3d as o3d
 import os
 
@@ -67,6 +68,12 @@ def get_best_grasp_pose(Target_T_Source, min_grass_z=None, file="live", to_body=
     grasp_cand_list = []
     grasp_pos_list = []
     grasp_quat_list = []
+
+    # print("Grasps in hand frame:")
+    # for grasp in grasp_candidates:
+    #     print(grasp)
+    # print()
+
     for grasp in grasp_candidates:
         
         pos = np.array(grasp["position"]) #
@@ -84,7 +91,7 @@ def get_best_grasp_pose(Target_T_Source, min_grass_z=None, file="live", to_body=
     PCD_PATH = "src/conq/manipulation_lib/gpd/data/PCD/live.pcd"
     # Load the point cloud
     point_cloud = o3d.io.read_point_cloud(PCD_PATH)
-    viz_grasp_cand(point_cloud, grasp_cand_array)
+    # viz_grasp_cand(point_cloud, grasp_cand_array)
     
     if to_body:
         print("Grasp from target frame")
@@ -127,6 +134,116 @@ def transform_grasp_pose(grasp_candidate,Target_T_Source, raw_grasp_pose=False):
     pose_tuple = tuple(round(elem, 4) for elem in position.tolist() + quat)
 
     return pose_tuple
+
+def transform_pose_body_to_hand(grasp_pose_body, Body_T_Hand, raw_grasp_pose=False):
+    """
+    Transform grasp pose from Body frame to Hand frame given the transformation matrix.
+    
+    :param grasp_pose_body: The grasp pose in the body frame (either raw or as a dictionary)
+    :param Body_T_Hand: The transformation matrix from the Body frame to the Hand frame (inverse of Target_T_Source)
+    :param raw_grasp_pose: Boolean indicating if the grasp pose is provided as raw values (True) or as a dictionary (False)
+    :return: Transformed grasp pose in the hand frame as a tuple
+    """
+    position = None
+    rot = None
+
+    if raw_grasp_pose:
+        position = grasp_pose_body[:3]
+        quat = grasp_pose_body[3:]
+        rot = R.from_quat(quat).as_matrix()  # 3 x 3
+    else:
+        position = np.array(grasp_pose_body["position"])
+        quat = list(tuple(dict_to_tuple_scipy(grasp_pose_body["orientation"])))  # [qx, qy, qz, qw]
+        rot = R.from_quat(quat).as_matrix()  # 3 x 3
+
+    Body_T_Grasp = np.eye(4)
+    Body_T_Grasp[:3, :3] = rot
+    Body_T_Grasp[:3, 3] = position
+
+    # Convert from Body to Hand
+    pose = np.dot(Body_T_Hand, Body_T_Grasp)  # 4 x 4
+    position, rot = pose[:3, 3], pose[:3, :3]
+    rot = R.from_matrix(rot)
+    quat = rot.as_quat()  # (qx, qy, qz, qw)
+    quat = [quat[3], quat[0], quat[1], quat[2]]  # (qw, qx, qy, qz)
+    pose_tuple = tuple(round(elem, 4) for elem in position.tolist() + quat)
+
+    return pose_tuple
+
+def get_object_width_at_grasp(grasp_pose_body, Body_T_Hand):
+
+    PCD_PATH = "src/conq/manipulation_lib/gpd/data/PCD/live.pcd"
+
+    pcd = o3d.io.read_point_cloud(PCD_PATH)
+    points = np.asarray(pcd.points)
+
+    #grasp pose in robot hand frame (x, y, z, qw, qx, qy, qz)
+    Hand_T_Body = np.linalg.inv(Body_T_Hand)
+    grasp_pose_hand = transform_grasp_pose(list(grasp_pose_body), Hand_T_Body, raw_grasp_pose=True)
+    grasp_pose = np.array(grasp_pose_hand)
+
+    #convert quaternion to rotation matrix
+    rotation_matrix = R.from_quat(grasp_pose[3:]).as_matrix()
+
+    # extract z axis from grasp pose
+    z_axis = rotation_matrix[:, 2]
+
+    # step size and a range for searching along the z axis
+    step_size = .001  # in meters
+    num_steps = 70  #number of steps up and down
+
+    collected_points = []
+    z_axis_points = []
+
+    for i in range(-num_steps, num_steps):
+        point_on_z = grasp_pose[:3] + i * step_size * z_axis
+        z_axis_points.append(point_on_z)
+        
+        # Compute distances to all points in the cloud
+        distances = np.linalg.norm(points - point_on_z, axis=1)
+        
+        # Threshold to determine if a point is on the Z-axis
+        threshold = 0.015  # in meters
+        mask = distances < threshold
+        
+        # Collect points that are close to the current Z-axis position
+        collected_points.extend(points[mask])
+
+    collected_points = np.array(collected_points)
+    z_axis_points = np.array(z_axis_points)
+
+
+    local_object_width = 1
+    if len(collected_points) < 2:
+        print("Not enough points were collected to compute the distance.")
+    else:
+        # visualize pcd, z axis points, and local grasp points
+        collected_pcd = o3d.geometry.PointCloud()
+        collected_pcd.points = o3d.utility.Vector3dVector(collected_points)
+        collected_pcd.paint_uniform_color([0, 1, 0])  # Green for collected points
+        z_axis_pcd = o3d.geometry.PointCloud()
+        z_axis_pcd.points = o3d.utility.Vector3dVector(z_axis_points)
+        z_axis_pcd.paint_uniform_color([0, 0, 1])  # Blue for Z-axis points
+        pcd.paint_uniform_color([1, 0, 0])  # Red
+        o3d.visualization.draw_geometries([pcd, z_axis_pcd, collected_pcd])
+        
+        pairwise_distances = pdist(collected_points) #compute the pairwise distances between all collected points
+        local_object_width = np.max(pairwise_distances) #get maximum distance, which is the estimated width of the grasp location
+        print(f"The local object width is: {local_object_width} meters")
+
+    return local_object_width
+
+def grasp_width_to_gripper_open_percent(object_width):
+
+    open_percent = 556.0617 * object_width - 3.7339 # obtained from linear regression of width vs open percent
+
+    if open_percent > 100.0:
+        open_percent = 100.0
+    elif open_percent < 6.0:
+        open_percent = 0.0
+
+    return open_percent
+
 
 def quaternion_dot(q1, q2):
     return np.dot(q1, q2)
