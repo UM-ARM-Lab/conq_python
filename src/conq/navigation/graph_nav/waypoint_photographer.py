@@ -52,7 +52,7 @@ class WaypointPhotographer:
 
         self.clients = Clients(lease=self.lease_client, state=self.robot_state_client, manipulation=self.manipulation_api_client, image=self.image_client, raycast=self.rc_client, command=self.command_client, robot=self._robot)
 
-        self._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image', 'hand_color_image']
+        self._img_sources = ['right_fisheye_image', 'left_fisheye_image', 'back_fisheye_image']
 
         self._robot.power_on(timeout_sec=20)
         assert self._robot.is_powered_on(), 'Robot power on failed.'
@@ -117,7 +117,7 @@ class WaypointPhotographer:
 
         return img
 
-    def _take_photos_at_waypoint(self, waypoint_str):
+    def _take_body_photos_at_waypoint(self, waypoint_str):
 
         for src in self._img_sources:
             rgb_request = build_image_request(src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
@@ -133,27 +133,54 @@ class WaypointPhotographer:
             # Save the image
             cv2.imwrite(self.MEMORY_IMAGE_PATH + src + f"_{waypoint_str}_.jpg", image)    
 
+    def _take_hand_photo_at_waypoint(self, char_hand_pose, waypoint_str):
+
+        src = 'hand_color_image'
+        rgb_request = build_image_request(src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+        rgb_response= self.image_client.get_image([rgb_request])[0]
+        rgb_np = self._image_to_opencv(rgb_response, auto_rotate=True)
+        image = np.array(rgb_np,dtype=np.uint8)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        dims = np.shape(image)
+        print(f"Saving an image of size: {dims[0]} {dims[1]} {dims[2]} from source {src}")
+                
+            # Save the image
+        cv2.imwrite(self.MEMORY_IMAGE_PATH + src + f"_{char_hand_pose}_{waypoint_str}_.jpg", image)    
+        
+
+
     def go_to_waypoint_and_take_photos(self, waypoint_name):
 
         self._graph_nav.navigate_to(waypoint_number=waypoint_name, sit_down_after_reached=False)
-        move_gripper(self.clients, (0.55,0.0,0.65, 0.819,0.0,0.574,0.0), blocking=True, duration=0.3)
-        self._take_photos_at_waypoint(waypoint_name)
-        # self._graph_nav.toggle_power(should_power_on=False)
+        time.sleep(0.5)
+
+        move_gripper(self.clients, (0.40,0.25,0.8,  0.653,-0.271,0.271, 0.653), blocking=True, duration=0.3)
+        self._take_hand_photo_at_waypoint(char_hand_pose='l', waypoint_str=waypoint_name)
+        time.sleep(0.3)
+
+        move_gripper(self.clients, (0.50,0.15,0.8, 0.854, -0.146, 0.354, 0.354), blocking=True, duration=0.3)
+        self._take_hand_photo_at_waypoint(char_hand_pose='cl', waypoint_str=waypoint_name)
+        time.sleep(0.3)
+
+        move_gripper(self.clients, (0.55,0.0,0.8, 0.924,0.0,0.383,0.0), blocking=True, duration=0.3)
+        self._take_hand_photo_at_waypoint(char_hand_pose='c', waypoint_str=waypoint_name)
+        time.sleep(0.3)
+
+        move_gripper(self.clients, (0.50,-0.15,0.8,  0.854, 0.146, 0.354, -0.354), blocking=True, duration=0.3)
+        self._take_hand_photo_at_waypoint(char_hand_pose='cr', waypoint_str=waypoint_name)
+        time.sleep(0.3)
+
+        move_gripper(self.clients, (0.40, -0.25,0.8,  0.653,0.271,0.271, -0.653), blocking=True, duration=0.3)
+        self._take_hand_photo_at_waypoint(char_hand_pose='r', waypoint_str=waypoint_name)
+        time.sleep(0.3)
+
+        move_gripper(self.clients, (0.55,0.0,0.8, 0.924,0.0,0.383,0.0), blocking=True, duration=0.3)
+
+        # self._take_body_photos_at_waypoint(waypoint_str=waypoint_name)
+        
 
     def take_photos_of_full_map(self):
-
-        # rr.init('Field Test', spawn=True)
-        # rr.connect()
-        # rr.send_blueprint(get_blueprint(root = "robot/"))
-
-        # lease_client = self.robot.ensure_client(LeaseClient.default_service_name)
-        # robot_state_client = self.robot.ensure_client(RobotStateClient.default_service_name)
-        # manipulation_api_client = self.robot.ensure_client(ManipulationApiClient.default_service_name)
-        # image_client = self.robot.ensure_client(ImageClient.default_service_name)
-        # rc_client = self.robot.ensure_client(RayCastClient.default_service_name)
-        # command_client = self.robot.ensure_client(RobotCommandClient.default_service_name)
-        # clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client,
-        #                     image=image_client, raycast=rc_client, command=command_client, robot=self.robot, graphnav=None)
 
         for waypoint_num in range(0, len(self._graph_nav._current_graph.waypoints)):
             # logger = ConqLogger("/Users/adibalaji/Desktop/agrobots/conq_python/src/conq/conq_logging", clients)

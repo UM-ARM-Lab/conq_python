@@ -27,7 +27,14 @@ class SceneLabeler:
         image_paths = os.listdir(self.images_loc)
         images = [self._encode_image(self.images_loc + path) for path in image_paths]
 
-        img_waypoint_ids = [path.split('_')[4] for path in image_paths]
+        img_waypoint_ids = []
+        for path in image_paths:
+             
+            start_index = path.find("waypoint_")
+            end_index = path.find("_", start_index + len("waypoint_"))
+            waypoint = path[start_index:end_index]
+            img_waypoint_ids.append(waypoint)
+
 
         for idx, image in enumerate(images):
 
@@ -44,16 +51,16 @@ class SceneLabeler:
                 "messages": [
                     {"role": "system", "content": 
                      """
-                     You are an expert tool/object identifier robot. You wil be given an image and will extract all the tools/object within that image. You will output the objects as a comma separated list and only that list. If you see no tools/objects in an image, just print None. You can ignore larger/static objects like trees/chairs/people. You will look for tools/objects like drills, hammers, metal bars, hand rakes, and other farm or garden equipment.
+                     You are an expert object identifier robot. You wil be given an image and will extract the objects within that image. You must ONLY output the 2 most prominent things in that image. You will output the objects as a comma separated list and only that list. The object labels you output may be a single word or a short phrase, but ensure each label is rich in semantic meaning. If you see no objects in an image, just print None. You can ignore larger/static objects like floor, wall, door, person etc.
                      Example:
-                     If you see an image of a table with a drill, shovel, potting soil and rake, you will output: drill, shovel, potting soil, rake
+                     If you see an image of a table with a drill, shovel, and hammer, you will output: table with tools, power drill, hammer, shovel.
                      """},
                     {
                     "role": "user",
                     "content": [
                         {
                         "type": "text",
-                        "text": "Identify tools/objects in this image."
+                        "text": "Identify objects in this image."
                         },
                         {
                         "type": "image_url",
@@ -75,7 +82,7 @@ class SceneLabeler:
                 
                 for obj_name in image_objects:
                     if obj_name != 'None':
-                        curr_img_waypoint_id = f"waypoint_{img_waypoint_ids[idx]}"
+                        curr_img_waypoint_id = img_waypoint_ids[idx]
                         self.object_dict[obj_name] = curr_img_waypoint_id
             except:
                 print('Issue with GPT output..')

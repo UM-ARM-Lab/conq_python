@@ -10,7 +10,7 @@ from bosdyn.client.robot_state import RobotStateClient
 import bosdyn.client.util
 import bosdyn.client.lease
 from bosdyn.client.lease import LeaseClient
-from bosdyn.client.frame_helpers import get_odom_tform_body, get_se2_a_tform_b, BODY_FRAME_NAME, ODOM_FRAME_NAME
+from bosdyn.client.frame_helpers import get_odom_tform_body, get_se2_a_tform_b, BODY_FRAME_NAME, ODOM_FRAME_NAME, VISION_FRAME_NAME
 from bosdyn.client import math_helpers as client_math_helpers
 
 
@@ -21,6 +21,9 @@ import math
 from dotenv import load_dotenv
 import socket
 import json
+from pyproj import Geod
+import math
+import matplotlib.pyplot as plt
 
 class GraphNav:
     # Constructor that will initialize everything that is needed for navigating to waypoints
@@ -66,10 +69,10 @@ class GraphNav:
         # Init the graph for spot to use
         self._init_graph()
 
-        self._waypoint_gps_dict = {} 
-        self.JETSON_IP_ADDRESS = '192.168.80.101'
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client_socket.connect((self.JETSON_IP_ADDRESS, 8000))       
+        # self._waypoint_gps_dict = {} 
+        # self.JETSON_IP_ADDRESS = '192.168.80.100'
+        # self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self.client_socket.connect((self.JETSON_IP_ADDRESS, 2222))       
         # self.start_gps = self.get_curr_gps_location()
 
 
@@ -102,6 +105,7 @@ class GraphNav:
                 waypoint_snapshot = map_pb2.WaypointSnapshot()
                 waypoint_snapshot.ParseFromString(snapshot_file.read())
                 self._current_waypoint_snapshots[waypoint_snapshot.id] = waypoint_snapshot
+
         for edge in self._current_graph.edges:
             if len(edge.snapshot_id) == 0:
                 continue
@@ -378,6 +382,18 @@ class GraphNav:
         except bosdyn.client.exceptions.TimedOutError:
             print('Localizing to waypoint: ' + str(waypoint_id) + ' Failed')
             return False
+        
+    def print_anchorings(self):
+        xs = []
+        ys = [] 
+        for anchor in self._current_graph.anchoring.anchors:
+            pos = anchor.seed_tform_waypoint.position
+            xs.append(pos.x)
+            ys.append(pos.y)
+            print("id: {} x: {} y: {} z: {}".format(anchor.id, pos.x, pos.y, pos.z))
+
+        plt.scatter(xs,ys)
+        plt.show()
 
     #### PUBLIC MEMBER FUNCTIONS ####
 
@@ -419,24 +435,34 @@ class GraphNav:
     def get_curr_gps_location(self):
         x = None
         y = None
+        cog = None
 
-        while x is None and y is None:
+        while x is None and y is None and cog is None:
             try:
                 data = self.client_socket.recv(1024).decode()
-                x, y = data.strip().split('','')
-                x, y = float(x), float(y)
+                x, y, cog = data.strip().split(',')
+                x, y, cog = float(x), float(y), float(cog)
             except Exception as e:
                 print(f'Connection error: {e}')
 
-        return x, y
+        return x, y, cog
+    
+    def latlon_to_dxdy(self, lat1, lon1, lat2, lon2):
+
+        geod = Geod(ellps="WGS84")
+        az12, az21, distance = geod.inv(lon1, lat1, lon2, lat2)
+        delta_x = distance * math.cos(math.radians(az12))
+        delta_y = distance * math.sin(math.radians(az12))
+
+        return delta_x, delta_y #dx is NS dy is EW
 
     def drop_gps_anchors_at_waypoints(self):
 
         for waypoint_num in range(0, len(self._current_graph.waypoints)):
             waypoint_name = f'waypoint_{waypoint_num}'
             self.navigate_to(waypoint_name, sit_down_after_reached=False)
-            time.sleep(30)
-            waypoint_x, waypoint_y = self.get_curr_gps_location()
+            time.sleep(3)
+            waypoint_x, waypoint_y, _ = self.get_curr_gps_location()
             self._waypoint_gps_dict[waypoint_name] = (waypoint_x, waypoint_y)
             print(f'Anchored {waypoint_name} at {self._waypoint_gps_dict[waypoint_name]}')
 
@@ -483,36 +509,46 @@ class GraphNav:
     def relocalize_with_gps(self):
 
         print('Calculating relocalization..')
+        geod = Geod(ellps="WGS84")
 
-        curr_x, curr_y = self.get_curr_gps_location()
+        curr_lat, curr_lon, curr_cog = self.get_curr_gps_location()
 
         min_distance = float('inf')
         nearest_waypoint_id = None
+        closest_lat, closest_lon = (None, None)
 
-        for waypoint_id, (x, y) in self._waypoint_gps_dict.items():
-            distance = math.sqrt((x - curr_x)**2 + (y - curr_y)**2)
+        for waypoint_id, (lat, lon) in self._waypoint_gps_dict.items():
+
+            _, _, distance = geod.inv(lon, lat, curr_lon, curr_lat)
             
             # Check if this distance is the smallest one found so far
             if distance < min_distance:
                 min_distance = distance
                 nearest_waypoint_id = waypoint_id
+                closest_lat = lat
+                closest_lon = lon
 
-        #move body to nearest wp
-        dx = curr_x - self._waypoint_gps_dict[nearest_waypoint_id][0]
-        dy = curr_y - self._waypoint_gps_dict[nearest_waypoint_id][1]
+        dx, dy = self.latlon_to_dxdy(closest_lat, closest_lon, curr_lat, curr_lon)
 
-        print(f'Moving body dx: {dx} dy: {dy}')
+        print(f'Moving body dx: {dx} dy: {dy} to wp {nearest_waypoint_id}')
 
         time.sleep(10)
 
+        #move body to nearest wp
+        print(f'Turning body North from current heading {curr_cog}')
+        self.relative_move(0, 0, -(math.radians(360)-math.radians(curr_cog)), ODOM_FRAME_NAME)
+        time.sleep(1)
+
+        print(f'Moving to waypoint')
         self.relative_move(dx, dy, 0, ODOM_FRAME_NAME)
+        time.sleep(1)
+
+        self.relative_move(0, 0, math.radians(-curr_cog), ODOM_FRAME_NAME)
+        time.sleep(1)
 
         print(f'Relocalizing to {nearest_waypoint_id}')
-
-        #relocalize to that wp
-        self._set_initial_localization_waypoint(int(nearest_waypoint_id[9]))
-
-        self.navigate_to(int(nearest_waypoint_id[9]))
+        self._set_initial_localization_waypoint(int(nearest_waypoint_id[9:]))
+        self.navigate_to(nearest_waypoint_id, sit_down_after_reached=False)
 
     # !!!!!!!!!!!!!!!!!! RECURSIVE FUNCTION    
     def navigate_to_with_gps_relocalize(self, waypoint_number, sit_down_after_reached=True):
@@ -586,31 +622,30 @@ class GraphNav:
         
 
 #Setup and authenticate the robot.
-sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
-robot = sdk.create_robot('192.168.80.3')
-bosdyn.client.util.authenticate(robot) 
+# sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
+# robot = sdk.create_robot('192.168.80.3')
+# bosdyn.client.util.authenticate(robot) 
 
-lease_client = robot.ensure_client(LeaseClient.default_service_name)
+# lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-lease_client.take()
+# lease_client.take()
 
-with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-    gn = GraphNav(robot)
+# with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
+#     gn = GraphNav(robot)
+
+#     gn.print_anchorings()
+
     # gn._set_initial_localization_waypoint(0)
-
+    # gn.navigate_to('waypoint_0', sit_down_after_reached=False)
     # gn.drop_gps_anchors_at_waypoints()
 
-    # # gn.navigate_to('waypoint_3')
-
-    wp_dict = {}
-
-    with open('/Users/adibalaji/Desktop/agrobots/conq_python/data/json/waypoint_gps_dict.json', 'r') as file:
-        wp_dict = json.load(file)
-
-    gn._waypoint_gps_dict = wp_dict
+    # wp_dict = {}
+    # with open('/Users/adibalaji/Desktop/agrobots/conq_python/data/json/waypoint_gps_dict.json', 'r') as file:
+    #     wp_dict = json.load(file)
+    # gn._waypoint_gps_dict = wp_dict
     
-    print('gps catching up')
-    time.sleep(7)
-    gn.relocalize_with_gps()
-    print('All done')
-    gn.client_socket.close()
+    # print('gps catching up')
+    # time.sleep(10)
+    # gn.relocalize_with_gps()
+    # print('All done')
+    # gn.client_socket.close()
