@@ -368,7 +368,7 @@ class SemanticGrasper:
         assert self.robot.has_arm(), 'Robot requires an arm to run this example.'
         self.verify_estop()
         self.lease_client.take()
-        gds = GroundedSAM()
+        # gds = GroundedSAM()
         # fos = FastOwlsam()
         fgs = FastGroundedSAM()
 
@@ -407,106 +407,45 @@ class SemanticGrasper:
 
                 # ------------------------------------- USING BOSDYN STOCK PIXEL GRASP -----------------------------------------------------------------------------------
                 
-                # #Using GroundedSAM
-                # # pred_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name)
-                # # pred_centroid = gds.compute_mask_centroid(pred_mask)
+                # #Using FastGroundedSAM
+                seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
+                pred_centroid = fgs.compute_mask_centroid(seg_mask)
 
-                # #Using FastOwlsam
-                # image = Image.open(self.images_loc+'live_hand.jpg')
-                # pred_mask, _ = fos.predict_segmentation(image_pil=image, object_name =object_name)
-                # pred_centroid = fos.compute_mask_centroid(pred_mask)
+                pix_x, pix_y = (pred_centroid[0],pred_centroid[1]) # Get from object detector
+                pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
 
-
-                # pix_x, pix_y = (pred_centroid[0],pred_centroid[1]) # Get from object detector
-                # pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
-
-                # try:
-                #     grasp_result = grasp_point_in_image(clients,image_responses[0],pick_vec)
-                #     if grasp_result:
-                #         print("Grasp Succeeded!")
-                #     else:
-                #         print("Grasp Failed. Retrying..")
-                # except Exception as e:
-                #     print("Whoops")
-                #     close_gripper(clients=clients)
-                #     stow_arm(self.robot, self.command_client)
+                try:
+                    grasp_result = grasp_point_in_image(clients,image_responses[0],pick_vec)
+                    if grasp_result:
+                        print("Grasp Succeeded!")
+                    else:
+                        print("Grasp Failed. Retrying..")
+                except Exception as e:
+                    print("Whoops")
+                    close_gripper(clients=clients)
+                    stow_arm(self.robot, self.command_client)
                 # --------------------------------------------------------------------------------------------------------------------------------------------
 
                 # ------------------------------------- USING GPD --------------------------------------------------------------------------------------------
 
-                depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True)
-                xyz = pointcloud.get_raw_point_cloud()
-
-                #Using FastGroundedSAM
-                seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
-
-                pointcloud.segment_xyz(seg_mask.squeeze())
-
-                pointcloud.save_pcd(path = PCD_PATH)
-                pointcloud.save_npy(path = NPY_PATH)
-                
-                # Call Grasp detection Module
-                grasp_pose = get_best_grasp_pose(body_T_hand)
-
-                #constant Z offset, might need to remove later!!!!!!!!!!!!!!!!!!!!!
-                grasp_pose = list(grasp_pose)
-                grasp_pose[2] = grasp_pose[2] + 0.03
-                grasp_pose = tuple(grasp_pose)
-
-                grasp_pose = rotate_quaternion(grasp_pose)
-
-                print(f"Final grasp pose: {grasp_pose}")
-                
-                status = move_gripper(clients, grasp_pose, blocking = True, duration = 1)
-                time.sleep(0.25)
-                status = close_gripper(clients)
-                time.sleep(1)
-
-                grasp_result = True
-
-                if grasp_result:
-                    print("Grasp Succeeded!")
-                else:
-                    print("Grasp Failed. Retrying..")
-
-                # --------------------------------------------------------------------------------------------------------------------------------------------
-
-                # ---------------------------------------------- USING GPD WITH GRASS FILTERING --------------------------------------------------------------
-
                 # depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True)
                 # xyz = pointcloud.get_raw_point_cloud()
 
-                # min_grass_point, _ = compute_grass_z_range(point_cloud_file=PCD_PATH+"live.pcd")
-                # min_grass_point = np.array([min_grass_point[0], min_grass_point[1], min_grass_point[2], 0, 0, 0, 1]) # x,y,z,qx,qy,qz,qw
+                # #Using FastGroundedSAM
+                # seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
 
-                # min_grass_point_body = transform_grasp_pose(min_grass_point, body_T_hand, raw_grasp_pose=True)
-
-                # print(f"Highest grass point {min_grass_point_body}")
-
-                # #Using GroundedSAM
-                # # seg_mask = gds.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
-
-                # #Using FastOwlsam
-                # image = Image.open(self.images_loc+'live_hand.jpg')
-                # seg_mask,_ = fos.predict_segmentation(image_pil=image, object_name =object_name)
-
-                # print(f'Using mask found of shape {seg_mask.shape}')
                 # pointcloud.segment_xyz(seg_mask.squeeze())
 
                 # pointcloud.save_pcd(path = PCD_PATH)
                 # pointcloud.save_npy(path = NPY_PATH)
                 
                 # # Call Grasp detection Module
-                # found_grasp_candidates = False
-                # grasp_pose = None
-                # while not found_grasp_candidates:
-                #     try:
-                #         grasp_pose = get_best_grasp_pose(body_T_hand)
-                #         if grasp_pose is not None:
-                #             found_grasp_candidates = True
-                #     except Exception as e:
-                #         print(f"No grasps found, trying again: {e}")
+                # grasp_pose = get_best_grasp_pose(body_T_hand)
 
+                # #constant Z offset, might need to remove later!!!!!!!!!!!!!!!!!!!!!
+                # grasp_pose = list(grasp_pose)
+                # grasp_pose[2] = grasp_pose[2] + 0.03
+                # grasp_pose = tuple(grasp_pose)
 
                 # grasp_pose = rotate_quaternion(grasp_pose)
 
@@ -515,7 +454,58 @@ class SemanticGrasper:
                 # status = move_gripper(clients, grasp_pose, blocking = True, duration = 1)
                 # time.sleep(0.25)
                 # status = close_gripper(clients)
+                # time.sleep(1)
+
+                # grasp_result = True
+
+                # if grasp_result:
+                #     print("Grasp Succeeded!")
+                # else:
+                #     print("Grasp Failed. Retrying..")
+
+                # --------------------------------------------------------------------------------------------------------------------------------------------
+
+                # ---------------------------------------------- USING GPD WITH GRASS FILTERING --------------------------------------------------------------
+
+                # depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True)
+                # xyz = pointcloud.get_raw_point_cloud()
+                # pointcloud.save_pcd(path = PCD_PATH)
+
+                # min_grass_point, _ = compute_grass_z_range(point_cloud_file=PCD_PATH+"live.pcd")
+                # min_grass_point = np.array([min_grass_point[0], min_grass_point[1], min_grass_point[2], 0, 0, 0, 1]) # x,y,z,qx,qy,qz,qw
+
+                # min_grass_point_body = transform_grasp_pose(min_grass_point, body_T_hand, raw_grasp_pose=True)
+
+                # print(f"Highest grass point {min_grass_point_body}")
+
+                # #Using FastGroundedSAM
+                # seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
+
+                # pointcloud.segment_xyz(seg_mask.squeeze())
+
+                # pointcloud.save_pcd(path = PCD_PATH)
+                # pointcloud.save_npy(path = NPY_PATH)
+
+                # status = close_gripper(clients)
                 # time.sleep(0.5)
+                
+                # # Call Grasp detection Module
+                # grasp_pose = get_best_grasp_pose(body_T_hand, min_grass_z=min_grass_point_body[2])
+
+                # #constant Z offset, might need to remove later!!!!!!!!!!!!!!!!!!!!!
+                # grasp_pose = list(grasp_pose)
+                # grasp_pose[2] = grasp_pose[2] + 0.025
+                # grasp_pose = tuple(grasp_pose)
+
+                # grasp_pose = rotate_quaternion(grasp_pose)
+
+                # print(f"Final grasp pose: {grasp_pose}")
+                
+                # status = open_gripper(clients, open_percentage=100)
+                # status = move_gripper(clients, grasp_pose, blocking = True, duration = 1)
+                # time.sleep(1)
+                # status = close_gripper(clients)
+                # time.sleep(1)
 
                 # grasp_result = True
 
@@ -533,7 +523,7 @@ class SemanticGrasper:
             
         return True
 
-sdk = bosdyn.client.create_standard_sdk('VoicePromptNav')
+sdk = bosdyn.client.create_standard_sdk('SemanticGrasperTest')
 robot = sdk.create_robot('192.168.80.3')
 bosdyn.client.util.authenticate(robot) 
 robot.time_sync.wait_for_sync()
@@ -546,6 +536,6 @@ sg = SemanticGrasper(robot)
 
 # sg.search_object_with_gripper("hose nozzle")
 
-sg.orient_and_grasp('find_grasp_front', 'empty bottle')
+sg.orient_and_grasp('find_grasp_front', 'hose nozzle')
 
 sg.put_down()

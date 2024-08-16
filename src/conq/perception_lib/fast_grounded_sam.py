@@ -27,7 +27,7 @@ class FastGroundedSAM:
 
         self.mobilesam = SAM("/home/adibalaji/Desktop/agrobots/weights_cfgs/mobile_sam.pt").to('cuda')
 
-    def predict_segmentation(self, image_path, text):
+    def predict_segmentation(self, image_path, text, vis_mask=False):
 
         CLASSES = [text]
         BOX_THRESHOLD = 0.25
@@ -76,13 +76,14 @@ class FastGroundedSAM:
         mask = self.mobilesam.predict(image, bboxes=box)[0].masks.data[0].to(torch.bool).cpu().numpy()
 
         # Visualize the mask
-        color_mask = np.zeros_like(image)
-        color_mask[:, :, 2] = mask * 255  # Apply mask to the red channel
-        overlay = cv2.addWeighted(image, 1, color_mask, 0.5, 0)
+        if vis_mask:
+            color_mask = np.zeros_like(image)
+            color_mask[:, :, 2] = mask * 255  # Apply mask to the red channel
+            overlay = cv2.addWeighted(image, 1, color_mask, 0.5, 0)
 
-        cv2.imshow('Overlay', overlay)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+            cv2.imshow('Overlay', overlay)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
         return mask
 
