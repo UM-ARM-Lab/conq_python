@@ -620,32 +620,32 @@ class GraphNav:
     def get_graph_size(self):
         return len(self._current_annotation_name_to_wp_id)
         
+if __name__ == "__main__":
 
-#Setup and authenticate the robot.
-# sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
-# robot = sdk.create_robot('192.168.80.3')
-# bosdyn.client.util.authenticate(robot) 
+    sdk = bosdyn.client.create_standard_sdk('GraphNavClient')
+    robot = sdk.create_robot('192.168.80.3')
+    bosdyn.client.util.authenticate(robot) 
 
-# lease_client = robot.ensure_client(LeaseClient.default_service_name)
+    lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-# lease_client.take()
+    lease_client.take()
 
-# with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
-#     gn = GraphNav(robot)
+    with bosdyn.client.lease.LeaseKeepAlive(lease_client, must_acquire=True, return_at_exit=True):
+        gn = GraphNav(robot)
 
-#     gn.print_anchorings()
+        gn.print_anchorings()
 
-    # gn._set_initial_localization_waypoint(0)
-    # gn.navigate_to('waypoint_0', sit_down_after_reached=False)
-    # gn.drop_gps_anchors_at_waypoints()
+        gn._set_initial_localization_waypoint(0)
+        gn.navigate_to('waypoint_0', sit_down_after_reached=False)
+        gn.drop_gps_anchors_at_waypoints()
 
-    # wp_dict = {}
-    # with open('/Users/adibalaji/Desktop/agrobots/conq_python/data/json/waypoint_gps_dict.json', 'r') as file:
-    #     wp_dict = json.load(file)
-    # gn._waypoint_gps_dict = wp_dict
-    
-    # print('gps catching up')
-    # time.sleep(10)
-    # gn.relocalize_with_gps()
-    # print('All done')
-    # gn.client_socket.close()
+        wp_dict = {}
+        with open('/Users/adibalaji/Desktop/agrobots/conq_python/data/json/waypoint_gps_dict.json', 'r') as file:
+            wp_dict = json.load(file)
+        gn._waypoint_gps_dict = wp_dict
+        
+        print('gps catching up')
+        time.sleep(10)
+        gn.relocalize_with_gps()
+        print('All done')
+        gn.client_socket.close()

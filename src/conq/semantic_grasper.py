@@ -90,7 +90,7 @@ from conq.grounding_dino import GroundingDino
 from conq.cameras_utils import image_to_opencv
 
 from conq.manipulation import grasp_point_in_image
-from conq.manipulation_lib.Grasp import get_grasp_candidates, get_best_grasp_pose, compute_grass_z_range, transform_grasp_pose
+from conq.manipulation_lib.Grasp import get_grasp_candidates, get_best_grasp_pose, compute_grass_z_range, transform_grasp_pose, transform_pose_body_to_hand, get_object_width_at_grasp, grasp_width_to_gripper_open_percent
 from conq.manipulation_lib.utils import rotate_quaternion
 from conq.clients import Clients
 from conq.manipulation_lib.utils import stow_arm
@@ -304,23 +304,23 @@ class SemanticGrasper:
                         best_angle_index = i
 
             #lower forwards view
-            gaze_pose = ORIENTATION_MAP['hand_search_forward']
-            status = move_gripper(self.clients, gaze_pose, blocking=True, duration=0.25)
-            time.sleep(0.25) 
+            # gaze_pose = ORIENTATION_MAP['hand_search_forward']
+            # status = move_gripper(self.clients, gaze_pose, blocking=True, duration=0.25)
+            # time.sleep(0.25) 
 
-            rgb_request = build_image_request(source_name, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
-            rgb_response= self.image_client.get_image([rgb_request])[0]
-            rgb_np = image_to_opencv(rgb_response, auto_rotate=True)
-            image = np.array(rgb_np,dtype=np.uint8)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            image_path = self.save_image_to_local(image, f'hand_search_forward_{i}')
+            # rgb_request = build_image_request(source_name, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
+            # rgb_response= self.image_client.get_image([rgb_request])[0]
+            # rgb_np = image_to_opencv(rgb_response, auto_rotate=True)
+            # image = np.array(rgb_np,dtype=np.uint8)
+            # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            # image_path = self.save_image_to_local(image, f'hand_search_forward_{i}')
             
-            boxes,scores = detector.predict_box_score_with_text(image_path, text)
-            if boxes.any():
-                for box,score in zip(boxes,scores):
-                    if score>best_score:
-                        best_score = score
-                        best_angle_index = i
+            # boxes,scores = detector.predict_box_score_with_text(image_path, text)
+            # if boxes.any():
+            #     for box,score in zip(boxes,scores):
+            #         if score>best_score:
+            #             best_score = score
+            #             best_angle_index = i
 
 
             #ROTATE BODY
@@ -408,60 +408,64 @@ class SemanticGrasper:
                 # ------------------------------------- USING BOSDYN STOCK PIXEL GRASP -----------------------------------------------------------------------------------
                 
                 # #Using FastGroundedSAM
-                seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
-                pred_centroid = fgs.compute_mask_centroid(seg_mask)
+                # seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
+                # pred_centroid = fgs.compute_mask_centroid(seg_mask)
 
-                pix_x, pix_y = (pred_centroid[0],pred_centroid[1]) # Get from object detector
-                pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
+                # pix_x, pix_y = (pred_centroid[0],pred_centroid[1]) # Get from object detector
+                # pick_vec = geometry_pb2.Vec2(x=pix_x, y=pix_y)
 
-                try:
-                    grasp_result = grasp_point_in_image(clients,image_responses[0],pick_vec)
-                    if grasp_result:
-                        print("Grasp Succeeded!")
-                    else:
-                        print("Grasp Failed. Retrying..")
-                except Exception as e:
-                    print("Whoops")
-                    close_gripper(clients=clients)
-                    stow_arm(self.robot, self.command_client)
+                # try:
+                #     grasp_result = grasp_point_in_image(clients,image_responses[0],pick_vec)
+                #     if grasp_result:
+                #         print("Grasp Succeeded!")
+                #     else:
+                #         print("Grasp Failed. Retrying..")
+                # except Exception as e:
+                #     print("Whoops")
+                #     close_gripper(clients=clients)
+                #     stow_arm(self.robot, self.command_client)
                 # --------------------------------------------------------------------------------------------------------------------------------------------
 
                 # ------------------------------------- USING GPD --------------------------------------------------------------------------------------------
 
-                # depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True)
-                # xyz = pointcloud.get_raw_point_cloud()
+                depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True)
+                xyz = pointcloud.get_raw_point_cloud()
 
-                # #Using FastGroundedSAM
-                # seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
+                #Using FastGroundedSAM
+                seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
 
-                # pointcloud.segment_xyz(seg_mask.squeeze())
+                pointcloud.segment_xyz(seg_mask.squeeze())
 
-                # pointcloud.save_pcd(path = PCD_PATH)
-                # pointcloud.save_npy(path = NPY_PATH)
+                pointcloud.save_pcd(path = PCD_PATH)
+                pointcloud.save_npy(path = NPY_PATH)
                 
-                # # Call Grasp detection Module
-                # grasp_pose = get_best_grasp_pose(body_T_hand)
+                # Call Grasp detection Module
+                grasp_pose = get_best_grasp_pose(body_T_hand)
 
-                # #constant Z offset, might need to remove later!!!!!!!!!!!!!!!!!!!!!
-                # grasp_pose = list(grasp_pose)
-                # grasp_pose[2] = grasp_pose[2] + 0.03
-                # grasp_pose = tuple(grasp_pose)
+                #constant Z offset, might need to remove later!!!!!!!!!!!!!!!!!!!!!
+                grasp_pose = list(grasp_pose)
+                grasp_pose[2] = grasp_pose[2] + 0.01
+                grasp_pose = tuple(grasp_pose)
 
-                # grasp_pose = rotate_quaternion(grasp_pose)
+                grasp_pose = rotate_quaternion(grasp_pose)
 
-                # print(f"Final grasp pose: {grasp_pose}")
-                
-                # status = move_gripper(clients, grasp_pose, blocking = True, duration = 1)
-                # time.sleep(0.25)
-                # status = close_gripper(clients)
-                # time.sleep(1)
+                print(f"Final grasp pose: {grasp_pose}")
 
-                # grasp_result = True
+                local_grasp_width = get_object_width_at_grasp(grasp_pose, body_T_hand)
+                gripper_open_percent = grasp_width_to_gripper_open_percent(local_grasp_width)
+                status = open_gripper(clients, open_percentage=gripper_open_percent + 15)
+                time.sleep(0.25)
+                status = move_gripper(clients, grasp_pose, blocking = True, duration = 1)
+                time.sleep(0.25)
+                status = close_gripper(clients)
+                time.sleep(1)
 
-                # if grasp_result:
-                #     print("Grasp Succeeded!")
-                # else:
-                #     print("Grasp Failed. Retrying..")
+                grasp_result = True
+
+                if grasp_result:
+                    print("Grasp Succeeded!")
+                else:
+                    print("Grasp Failed. Retrying..")
 
                 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -487,21 +491,21 @@ class SemanticGrasper:
                 # pointcloud.save_npy(path = NPY_PATH)
 
                 # status = close_gripper(clients)
-                # time.sleep(0.5)
                 
                 # # Call Grasp detection Module
                 # grasp_pose = get_best_grasp_pose(body_T_hand, min_grass_z=min_grass_point_body[2])
 
                 # #constant Z offset, might need to remove later!!!!!!!!!!!!!!!!!!!!!
                 # grasp_pose = list(grasp_pose)
-                # grasp_pose[2] = grasp_pose[2] + 0.025
+                # grasp_pose[0] = grasp_pose[0] + 0.025
+                # # grasp_pose[2] = grasp_pose[2] + 0.025
                 # grasp_pose = tuple(grasp_pose)
 
                 # grasp_pose = rotate_quaternion(grasp_pose)
 
                 # print(f"Final grasp pose: {grasp_pose}")
                 
-                # status = open_gripper(clients, open_percentage=100)
+                # status = open_gripper(clients, open_percentage=50)
                 # status = move_gripper(clients, grasp_pose, blocking = True, duration = 1)
                 # time.sleep(1)
                 # status = close_gripper(clients)
@@ -523,19 +527,20 @@ class SemanticGrasper:
             
         return True
 
-sdk = bosdyn.client.create_standard_sdk('SemanticGrasperTest')
-robot = sdk.create_robot('192.168.80.3')
-bosdyn.client.util.authenticate(robot) 
-robot.time_sync.wait_for_sync()
+if __name__ == "__main__":
+    sdk = bosdyn.client.create_standard_sdk('SemanticGrasperTest')
+    robot = sdk.create_robot('192.168.80.3')
+    bosdyn.client.util.authenticate(robot) 
+    robot.time_sync.wait_for_sync()
 
-lease_client = robot.ensure_client(LeaseClient.default_service_name)
+    lease_client = robot.ensure_client(LeaseClient.default_service_name)
 
-lease_client.take()
+    lease_client.take()
 
-sg = SemanticGrasper(robot)
+    sg = SemanticGrasper(robot)
 
-# sg.search_object_with_gripper("hose nozzle")
+    # sg.search_object_with_gripper("hose nozzle")
 
-sg.orient_and_grasp('find_grasp_front', 'hose nozzle')
+    sg.orient_and_grasp('find_grasp_front', 'watering can')
 
-sg.put_down()
+    sg.put_down()
