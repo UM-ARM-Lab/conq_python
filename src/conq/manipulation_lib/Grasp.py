@@ -216,6 +216,7 @@ def get_object_width_at_grasp(grasp_pose_body, Body_T_Hand):
     local_object_width = 1
     if len(collected_points) < 2:
         print("Not enough points were collected to compute the distance.")
+        local_object_width = 0.078649 #open exactly 40% instead of all the way to make it more parallel jaw-like 
     else:
         # visualize pcd, z axis points, and local grasp points
         collected_pcd = o3d.geometry.PointCloud()

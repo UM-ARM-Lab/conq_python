@@ -407,7 +407,7 @@ class SemanticGrasper:
 
                 # ------------------------------------- USING BOSDYN STOCK PIXEL GRASP -----------------------------------------------------------------------------------
                 
-                # # #Using FastGroundedSAM
+                # #Using FastGroundedSAM
                 # seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
                 # pred_centroid = fgs.compute_mask_centroid(seg_mask)
 
@@ -443,9 +443,9 @@ class SemanticGrasper:
                 grasp_pose = get_best_grasp_pose(body_T_hand)
 
                 #constant Z offset, might need to remove later!!!!!!!!!!!!!!!!!!!!!
-                # grasp_pose = list(grasp_pose)
-                # grasp_pose[2] = grasp_pose[2] + 0.01
-                # grasp_pose = tuple(grasp_pose)
+                grasp_pose = list(grasp_pose)
+                grasp_pose[2] = grasp_pose[2] + 0.01
+                grasp_pose = tuple(grasp_pose)
 
                 grasp_pose = rotate_quaternion(grasp_pose)
 
@@ -453,7 +453,7 @@ class SemanticGrasper:
 
                 local_grasp_width = get_object_width_at_grasp(grasp_pose, body_T_hand)
                 gripper_open_percent = grasp_width_to_gripper_open_percent(local_grasp_width)
-                status = open_gripper(clients, open_percentage=gripper_open_percent + 10)
+                status = open_gripper(clients, open_percentage=gripper_open_percent + 15)
                 time.sleep(0.25)
                 status = move_gripper(clients, grasp_pose, blocking = True, duration = 1)
                 time.sleep(0.25)
@@ -541,6 +541,6 @@ if __name__ == "__main__":
 
     # sg.search_object_with_gripper("hose nozzle")
 
-    sg.orient_and_grasp('find_grasp_front', 'hand rake')
+    sg.orient_and_grasp('find_grasp_front', 'watering can')
 
     sg.put_down()
