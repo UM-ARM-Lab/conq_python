@@ -11,6 +11,9 @@ import json
 from decimal import Decimal, getcontext
 from dotenv import load_dotenv
 import os 
+import numpy as np
+
+from conq.perception_lib.custom_yolo import YOLOFarm
 
 def update_chatgpt_log(input_tokens, output_tokens):
     
@@ -36,8 +39,21 @@ class SemanticMemory:
         
         load_dotenv('.env.local')
 
+        self.images_loc = os.getenv('MEMORY_IMAGE_PATH')
+        self.depth_loc = os.getenv('MEMORY_DEPTH_IMAGE_PATH')
+        self.memory_loc = os.getenv('OBJECT_MEMORY_JSON_PATH')
+
         self.memory = {} # stored as a dict with key object_name and value [waypoint, body_x, body_y, body_yaw]
-        self.text_memory = [] # also directly store the object names as strings for easy access
+
+        self.handcam_K = np.array([
+            [552.02910122, 0.0, 320],
+            [0.0, 552.02910122, 240],
+            [0.0, 0.0, 1.0]
+            ])
+        
+        self.handcam_K_inv = np.linalg.inv(self.handcam_K)
+
+
 
     def add_object(self, object_name, waypoint_str, body_x, body_y, body_yaw):
 
@@ -55,7 +71,7 @@ class SemanticMemory:
 
         headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {os.getenv('GPY_KEY')}"
+                "Authorization": f"Bearer {os.getenv('GPT_KEY')}"
             }
 
         payload = {
@@ -124,6 +140,100 @@ class SemanticMemory:
 
         return sorted_objects_in_text # returns a list of object name strings sorted by confidence high to low for the specified target object
     
+    def rotate_se2_from_view_to_body(self, se2, view):
+        # Unpack the SE2 pose
+        x, y, yaw = se2
+        
+        # Define rotations in radians
+        rotate_90_deg_clockwise = -90
+        rotate_45_deg_clockwise = -45
+        rotate_45_deg_anticlockwise = -45
+        rotate_90_deg_anticlockwise = 90
+        
+        # Apply transformations based on the view
+        if view == "l":
+            # Rotate 90 degrees clockwise and translate
+            yaw -= rotate_90_deg_clockwise
+            x += 0.4
+            y += 0.25
+        elif view == "cl":
+            # Rotate 45 degrees clockwise and translate
+            yaw -= rotate_45_deg_clockwise
+            x += 0.5
+            y += 0.15
+        elif view == "c":
+            # No rotation, just translate
+            x += 0.55
+            # No change in y
+        elif view == "cr":
+            # Rotate 45 degrees anticlockwise and translate
+            yaw += rotate_45_deg_anticlockwise
+            x += 0.5
+            y -= 0.15
+        elif view == "r":
+            # Rotate 90 degrees anticlockwise and translate
+            yaw += rotate_90_deg_anticlockwise
+            x += 0.4
+            y -= 0.25
+
+        # Return the transformed SE2 pose
+        return [x, y, yaw]
+
+
+    
+    def dream(self):
+
+        yolo_farm = YOLOFarm(model_path=os.getenv('YOLO_FARM'), device='cuda')
+        print("Loaded YOLOFarm. Begin dreaming...\n")
+
+        self.images_loc = '/home/adibalaji/Desktop/agrobots/conq_python/data/memory_images/'
+        for img_path in os.listdir(self.images_loc):
+
+            start_index = img_path.find("waypoint_")
+            end_index = img_path.find("_", start_index + len("waypoint_"))
+            waypoint_str = img_path[start_index:end_index]
+
+            viewpoint_str = img_path.split("/")[-1].split("_")[3]
+
+            objects = yolo_farm.get_object_centroids(image_path=f'{self.images_loc}/{img_path}')
+
+            for obj_item in objects:
+
+                obj, cam_x, cam_y = obj_item
+
+                #Calculate object SE2 Pose from centroid, depth and intrinsics
+                se2 = [0, 0, 0]
+                
+                current_depth = np.load(f"{self.depth_loc}/{img_path.split('.')[0]}depth.npy")
+                cam_z = current_depth[cam_y, cam_x]
+
+                cam_homogenous = np.array([cam_x, cam_y, 1])
+                world_homogenous = np.matmul(self.handcam_K_inv, cam_homogenous)
+                world_homogenous[2] = cam_z * 0.001 # set z from depth to make true depth and convert mm to m
+                world_pose_cam = world_homogenous
+                se2_cam = [
+                            world_pose_cam[2], 
+                           -world_pose_cam[1], 
+                           math.degrees(math.atan2((cam_x - self.handcam_K[0,2]), self.handcam_K[0,0]))
+                           ]
+                
+                # !!!!!!!!!!! Needs work !!!!!!!!!!!!!!!!!
+                se2 = self.rotate_se2_from_view_to_body(se2_cam, viewpoint_str)
+
+                waypoint_and_se2 = [waypoint_str, se2[0], se2[1], se2[2]]
+
+                #Add to memory
+                if obj not in self.memory:
+                    self.memory[obj] = waypoint_and_se2
+                    print(f'se2 cam: {se2_cam}')
+                    print(f'Added {obj} at body frame pose {waypoint_and_se2}..\n')
+
+        with open(self.memory_loc, 'w') as memory_json_file:
+            json.dump(self.memory, memory_json_file, indent=4)
+
+        print(f"Written json memory to {self.memory_loc}. All done!")    
 
 if __name__ == "__main__":
-    print("SemanticMemory test")
+
+    semantic_memory = SemanticMemory()
+    semantic_memory.dream()

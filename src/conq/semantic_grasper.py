@@ -455,7 +455,7 @@ class SemanticGrasper:
                 gripper_open_percent = grasp_width_to_gripper_open_percent(local_grasp_width)
                 status = open_gripper(clients, open_percentage=gripper_open_percent + 15)
                 time.sleep(0.25)
-                status = move_gripper(clients, grasp_pose, blocking = True, duration = 1)
+                status = move_gripper(clients, grasp_pose, blocking = True, duration = 5, with_body=True)
                 time.sleep(0.25)
                 status = close_gripper(clients)
                 time.sleep(1)

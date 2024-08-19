@@ -9,7 +9,7 @@ load_dotenv('.env.local')
 class YOLOFarm:
     def __init__(self, model_path, device='cpu'):
 
-        self.model = YOLO(model_path)
+        self.model = YOLO(model_path, verbose=False)
         self.device = device
 
     def load_image(self, image_path):
@@ -54,6 +54,7 @@ class YOLOFarm:
     def get_object_centroids(self, image_path, results = None):
 
         image_objects = []
+        ignore_these_classes = ['person', 'chair', 'bench', 'couch', 'dining table']
 
         if results is None:
             result = self.run_inference(image_path=image_path)
@@ -63,13 +64,14 @@ class YOLOFarm:
             x1, y1, x2, y2 = box
             cls = result[0].boxes.cls[i]
             conf = result[0].boxes.conf[i]
+            cls_name = self.model.names[int(cls)]
 
-            if conf < 0.6:
+            if conf < 0.6 or cls_name in ignore_these_classes:
                 continue
 
             centroid = int(x1 + (x2 - x1)/2), int(y1 + (y2 - y1)/2)
 
-            obj_item = {f'{self.model.names[int(cls)]}' : centroid}
+            obj_item = f'{cls_name}', centroid[0], centroid[1]
 
             image_objects.append(obj_item)
 
