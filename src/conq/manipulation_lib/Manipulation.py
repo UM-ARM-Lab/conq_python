@@ -26,6 +26,7 @@ from bosdyn.client.frame_helpers import (
     HAND_FRAME_NAME,
     VISION_FRAME_NAME,
     WR1_FRAME_NAME,
+    ODOM_FRAME_NAME,
     get_a_tform_b,
 )
 from bosdyn.client.math_helpers import Quat, SE3Pose
@@ -77,7 +78,7 @@ def grasped_bool(clients: Clients):
     is_grasping = get_is_grasping(clients)
     return is_grasping
     
-def move_gripper(clients: Clients, pose, blocking = True, frame_name = BODY_FRAME_NAME, duration = 1, follow=False):
+def move_gripper(clients: Clients, pose, blocking = True, frame_name = BODY_FRAME_NAME, duration = 1, follow=False, with_body=False):
     """
     Arm Move command to a pose relative to the frame name
 
@@ -98,9 +99,10 @@ def move_gripper(clients: Clients, pose, blocking = True, frame_name = BODY_FRAM
         duration   : duration in seconds
         follow     : Calculates reachability based on Inverse kinematics
                     default -> False
+        with_body  : Move arm pose along with body follow
 
     FUTURE:
-    - Body assist 
+    - Body assist with yaw and IK
 
     """
     
@@ -108,19 +110,37 @@ def move_gripper(clients: Clients, pose, blocking = True, frame_name = BODY_FRAM
         x,y,z,qw,qx,qy,qz = pose
         arm_command = RobotCommandBuilder.arm_pose_command(
             x, y, z, qw, qx,qy, qz, frame_name, duration,False)
-        
-        if blocking:
-            cmd_id = clients.command.robot_command(command=arm_command,end_time_secs=duration, timesync_endpoint=duration+0.25,lease=None)
-            status = block_until_arm_arrives(clients.command,cmd_id)
+
+        follow_arm_command = RobotCommandBuilder.follow_arm_command()
+
+        if with_body:
+            hand_pos_rt_body = geometry_pb2.Vec3(x=x,y=y,z=z)
+            body_Q_hand = geometry_pb2.Quaternion(w=qw,x=qx,y=qy,z=qz)
+            body_T_hand = geometry_pb2.SE3Pose(position=hand_pos_rt_body, rotation=body_Q_hand)
+            robot_state = clients.state.get_robot_state()
+            odom_T_body = get_a_tform_b(robot_state.kinematic_state.transforms_snapshot, ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
+            odom_T_hand = odom_T_body * SE3Pose.from_proto(body_T_hand)
+            duration += 5
+
+            arm_command = RobotCommandBuilder.arm_pose_command(odom_T_hand.x, odom_T_hand.y, odom_T_hand.z, odom_T_hand.rot.w, odom_T_hand.rot.x, odom_T_hand.rot.y, odom_T_hand.rot.z, ODOM_FRAME_NAME, duration)
+            follow_arm_command = RobotCommandBuilder.follow_arm_command()
+            arm_body_sync_command = RobotCommandBuilder.build_synchro_command(follow_arm_command, arm_command)
+            cmd_id = clients.command.robot_command(arm_body_sync_command)
+            status = block_until_arm_arrives(clients.command, cmd_id, 6.0)
+
         else:
-            cmd_id = clients.command.robot_command_async(command = arm_command, end_time_secs=duration, timesync_endpoint=duration+0.25, lease=None)
-            # TODO: Get feedback
-            status = True
-        
-        # TODO: Check for reachability
-        # if follow: 
-        #     #TODO: determmined by reachability
-        #     arm_cmd = add_follow_with_body(arm_cmd)
+            if blocking:
+                cmd_id = clients.command.robot_command(command=arm_command,end_time_secs=duration, timesync_endpoint=duration+0.25,lease=None)
+                status = block_until_arm_arrives(clients.command,cmd_id)
+            else:
+                cmd_id = clients.command.robot_command_async(command = arm_command, end_time_secs=duration, timesync_endpoint=duration+0.25, lease=None)
+                # TODO: Get feedback
+                status = True
+            
+            # TODO: Check for reachability
+            # if follow: 
+            #     #TODO: determmined by reachability
+            #     arm_cmd = add_follow_with_body(arm_cmd)
         return status
     except Exception as e:
         print(e)
