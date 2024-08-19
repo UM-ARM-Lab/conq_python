@@ -26,6 +26,7 @@ from bosdyn.client.ray_cast import RayCastClient
 from bosdyn.client.lease import LeaseClient
 
 from conq.clients import Clients
+from conq.manipulation_lib.Perception3D import Vision
 
 class WaypointPhotographer:
 
@@ -135,18 +136,21 @@ class WaypointPhotographer:
 
     def _take_hand_photo_at_waypoint(self, char_hand_pose, waypoint_str):
 
+        DEPTH_PATH = "/home/adibalaji/Desktop/agrobots/conq_python/data/memory_depth_images/"
+
         src = 'hand_color_image'
         rgb_request = build_image_request(src, pixel_format=image_pb2.Image.PixelFormat.PIXEL_FORMAT_RGB_U8)
         rgb_response= self.image_client.get_image([rgb_request])[0]
         rgb_np = self._image_to_opencv(rgb_response, auto_rotate=True)
         image = np.array(rgb_np,dtype=np.uint8)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-        dims = np.shape(image)
-        print(f"Saving an image of size: {dims[0]} {dims[1]} {dims[2]} from source {src}")
                 
-            # Save the image
+        # Save the image
         cv2.imwrite(self.MEMORY_IMAGE_PATH + src + f"_{char_hand_pose}_{waypoint_str}_.jpg", image)    
+
+        # Save depth
+        vision = Vision(image_client=self.image_client, sources=["hand_depth_in_hand_color_frame"])
+        depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True, file_name=f"_{char_hand_pose}_{waypoint_str}_depth")
         
 
 

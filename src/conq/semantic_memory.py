@@ -14,7 +14,8 @@ import os
 
 def update_chatgpt_log(input_tokens, output_tokens):
     
-    file_path = "/Users/adibalaji/Desktop/agrobots/playground/chatgpt_calls.json"
+    # file_path = "/Users/adibalaji/Desktop/agrobots/playground/chatgpt_calls.json"
+    file_path = "/home/adibalaji/Desktop/agrobots/chatgpt_calls.json"
     
     with open(file_path, 'r') as file:
             data = json.load(file)
