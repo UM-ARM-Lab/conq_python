@@ -17,8 +17,8 @@ from conq.perception_lib.custom_yolo import YOLOFarm
 
 def update_chatgpt_log(input_tokens, output_tokens):
     
-    # file_path = "/Users/adibalaji/Desktop/agrobots/playground/chatgpt_calls.json"
-    file_path = "/home/adibalaji/Desktop/agrobots/chatgpt_calls.json"
+    file_path = "/Users/adibalaji/Desktop/agrobots/playground/chatgpt_calls.json"
+    # file_path = "/home/adibalaji/Desktop/agrobots/chatgpt_calls.json"
     
     with open(file_path, 'r') as file:
             data = json.load(file)
@@ -109,6 +109,8 @@ class SemanticMemory:
         output_token_count = response["usage"]["completion_tokens"]
         update_chatgpt_log(input_tokens=input_token_count, output_tokens=output_token_count)
 
+        response = response["choices"][0]
+
         token_logprobs = []
 
         for chunk in response["logprobs"]["content"]:
@@ -127,7 +129,7 @@ class SemanticMemory:
 
         lang_score_dict = {}
 
-        for i, seen in enumerate(self.object_language_memory):
+        for seen, loc in self.memory.items():
 
             language_prob = Decimal(self.get_average_language_logprob(seen, target_obj)) 
 
@@ -183,10 +185,9 @@ class SemanticMemory:
     
     def dream(self):
 
-        yolo_farm = YOLOFarm(model_path=os.getenv('YOLO_FARM'), device='cuda')
+        yolo_farm = YOLOFarm(model_path=os.getenv('YOLO_FARM'), device='cpu')
         print("Loaded YOLOFarm. Begin dreaming...\n")
 
-        self.images_loc = '/home/adibalaji/Desktop/agrobots/conq_python/data/memory_images/'
         for img_path in os.listdir(self.images_loc):
 
             start_index = img_path.find("waypoint_")
@@ -236,4 +237,13 @@ class SemanticMemory:
 if __name__ == "__main__":
 
     semantic_memory = SemanticMemory()
-    semantic_memory.dream()
+    with open('/Users/adibalaji/Desktop/agrobots/conq_python/data/json/spot_object_memory.json', 'r') as file:
+        semantic_memory.memory = json.load(file)
+    # semantic_memory.dream()
+    hierarchy = semantic_memory.construct_semantic_search_ranking("book")
+    print(hierarchy)
+    print()
+
+    for obj in hierarchy:
+        print(f"{obj} : {semantic_memory.memory[obj]}")
+
