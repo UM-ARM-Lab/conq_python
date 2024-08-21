@@ -61,20 +61,20 @@ if __name__ == "__main__":
     clients = Clients(lease=lease_client, state=robot_state_client, manipulation=manipulation_api_client, image=image_client, raycast=rc_client, command=command_client, robot=robot)
     
     picture_poses = {
-        # "top" : (0.85,0.0, -0.010, 0.7071, 0.0, 0.7071, 0.0),
-        # "top_right" : (0.85,-0.10, -0.010, 0.683, 0.183, 0.683, 0.183),
-        # "top_left" : (0.85,0.10, -0.010, 0.683, -0.183, 0.683, -0.183),
-        # "top_front" : (0.95,0.0, -0.010, -0.500, 0.0, -0.866, 0.0),
-        # "top_back" : (0.75,0.0, -0.010, 0.866, 0.0, 0.500, 0.0),
-        "front" : (0.85, 0.0, 0.10, 1.0, 0.0, 0.0, 0.0),
-        "front_left" : (0.85, 0.10, 0.30, 0.966, 0.0, 0.0, -0.259),
-        "front_right" : (0.85, -0.10, 0.30, 0.966, 0.0, 0.0, 0.259),
-        "front_back" : (0.75, 0.0, 0.30, 1.0, 0.0, 0.0, 0.0),
-        "front_left_back" : (0.75, 0.10, 0.30, 0.966, 0.0, 0.0, -0.259),
-        "front_left_right" : (0.75, -0.10, 0.30, 0.966, 0.0, 0.0, 0.259),
+        "top" :         (0.75,0.0, 0.6, 0.7071, 0.0, 0.7071, 0.0),
+        "top_right" :   (0.75,-0.10, 0.6, 0.683, 0.183, 0.683, 0.183),
+        "top_left" :    (0.75,0.10, 0.6, 0.683, -0.183, 0.683, -0.183),
+        "top_front" :   (0.75,0.0, 0.6, -0.500, 0.0, -0.866, 0.0),
+        "top_back" :    (0.75,0.0, 0.6, 0.866, 0.0, 0.500, 0.0),
+        # "front" :               (0.75, 0.0, 0.4, 1.0, 0.0, 0.0, 0.0),
+        # "front_left" :          (0.75, 0.10, 0.4, 0.966, 0.0, 0.0, -0.259),
+        # "front_right" :         (0.75, -0.10, 0.4, 0.966, 0.0, 0.0, 0.259),
+        # "front_back" :          (0.75, 0.0, 0.4, 1.0, 0.0, 0.0, 0.0),
+        # "front_left_back" :     (0.75, 0.10, 0.4, 0.966, 0.0, 0.0, -0.259),
+        # "front_left_right" :    (0.75, -0.10, 0.4, 0.966, 0.0, 0.0, 0.259),
     }
 
-    object = "drill"
+    object = "justtruck3"
 
     default_pose = (0.50,0.0, 0.45, 1, 0, 0, 0)
     status = open_gripper(clients)
@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
         status = move_gripper(clients, pose=pose, blocking=True, duration=0.75)
         print(f"Taking pic from {viewpoint}..")
-        time.sleep(0.5)
+        time.sleep(1)
         spot_hand_click(object_str=object, viewpoint_str=viewpoint)
 
     status = move_gripper(clients, pose=default_pose, blocking=False, duration=1)

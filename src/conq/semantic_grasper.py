@@ -114,6 +114,7 @@ ORIENTATION_MAP = {
     'hand_search':                      (0.55,0.0,0.65, 0.819,0.0,0.574,0.0),
     'hand_search_forward':              (0.8,0.0,0.15, 0.819,0.0,0.574,0.0),
     'find_grasp_front':                 (0.75,0.0,-0.10, 0.7071,0.,0.7071,0)
+    # 'find_grasp_front':                 (0.75,0.0,0.65, 1,0.,0.,0)
 }
 
 # Mapping from visual to depth data
@@ -407,7 +408,7 @@ class SemanticGrasper:
 
                 # ------------------------------------- USING BOSDYN STOCK PIXEL GRASP -----------------------------------------------------------------------------------
                 
-                # #Using FastGroundedSAM
+                #Using FastGroundedSAM
                 # seg_mask = fgs.predict_segmentation(image_path=self.images_loc+'live_hand.jpg', text = object_name).squeeze()
                 # pred_centroid = fgs.compute_mask_centroid(seg_mask)
 
@@ -459,6 +460,7 @@ class SemanticGrasper:
                 time.sleep(0.25)
                 status = close_gripper(clients)
                 time.sleep(1)
+                status = move_gripper(clients, ORIENTATION_MAP['find_grasp_front'], blocking = True, duration = 5, with_body=True)
 
                 grasp_result = True
 
@@ -541,6 +543,10 @@ if __name__ == "__main__":
 
     # sg.search_object_with_gripper("hose nozzle")
 
-    sg.orient_and_grasp('find_grasp_front', 'watering can')
+    # sg.orient_and_grasp('find_grasp_front', 'drill')
 
-    sg.put_down()
+    
+
+    # sg.put_down()
+
+    

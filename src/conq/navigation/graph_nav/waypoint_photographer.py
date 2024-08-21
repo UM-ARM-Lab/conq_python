@@ -59,7 +59,6 @@ class WaypointPhotographer:
         assert self._robot.is_powered_on(), 'Robot power on failed.'
 
         open_gripper(self.clients)
-        move_gripper(self.clients, (0.55,0.0,0.75, 0.819,0.0,0.574,0.0), blocking=True)
 
         self.ROTATION_ANGLE = {
                                 'back_fisheye_image':               0,

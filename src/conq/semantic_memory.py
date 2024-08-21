@@ -11,6 +11,7 @@ import json
 from decimal import Decimal, getcontext
 from dotenv import load_dotenv
 import os 
+import cv2
 import numpy as np
 
 from conq.perception_lib.custom_yolo import YOLOFarm
@@ -44,6 +45,9 @@ class SemanticMemory:
         self.memory_loc = os.getenv('OBJECT_MEMORY_JSON_PATH')
 
         self.memory = {} # stored as a dict with key object_name and value [waypoint, body_x, body_y, body_yaw]
+        file_path = "/home/adibalaji/Desktop/agrobots/conq_python/data/json/spot_object_memory.json"
+        with open(file_path, 'r') as file:
+                self.memory = json.load(file)
 
         self.handcam_K = np.array([
             [552.02910122, 0.0, 320],
@@ -109,6 +113,8 @@ class SemanticMemory:
         output_token_count = response["usage"]["completion_tokens"]
         update_chatgpt_log(input_tokens=input_token_count, output_tokens=output_token_count)
 
+        response = response["choices"][0]
+
         token_logprobs = []
 
         for chunk in response["logprobs"]["content"]:
@@ -127,7 +133,7 @@ class SemanticMemory:
 
         lang_score_dict = {}
 
-        for i, seen in enumerate(self.object_language_memory):
+        for seen, _ in self.memory.items():
 
             language_prob = Decimal(self.get_average_language_logprob(seen, target_obj)) 
 
@@ -140,44 +146,55 @@ class SemanticMemory:
 
         return sorted_objects_in_text # returns a list of object name strings sorted by confidence high to low for the specified target object
     
-    def rotate_se2_from_view_to_body(self, se2, view):
-        # Unpack the SE2 pose
-        x, y, yaw = se2
+    def se2_cam_to_body(self, se2, view):
+
+        def get_2d_rotation_matrix(theta):
+            return np.array([[np.cos(theta), np.sin(theta)],
+                             [-np.sin(theta), np.cos(theta)]])
         
-        # Define rotations in radians
-        rotate_90_deg_clockwise = -90
-        rotate_45_deg_clockwise = -45
-        rotate_45_deg_anticlockwise = -45
-        rotate_90_deg_anticlockwise = 90
+        body_x, body_y, body_yaw = None, None, None
+        
+        # Unpack the SE2 pose
+        cam_x, cam_y, cam_yaw = se2
+        cam_xy = np.array([cam_x, cam_y])
         
         # Apply transformations based on the view
         if view == "l":
-            # Rotate 90 degrees clockwise and translate
-            yaw -= rotate_90_deg_clockwise
-            x += 0.4
-            y += 0.25
+            body_xy = np.matmul(get_2d_rotation_matrix(math.radians(-90)), cam_xy)
+            body_xy = body_xy + np.array([0.4, 0.35])
+
+            body_x, body_y = body_xy[0], body_xy[1]
+            body_yaw = 90 + cam_yaw
+            
         elif view == "cl":
-            # Rotate 45 degrees clockwise and translate
-            yaw -= rotate_45_deg_clockwise
-            x += 0.5
-            y += 0.15
+            body_xy = np.matmul(get_2d_rotation_matrix(math.radians(-45)), cam_xy)
+            body_xy = body_xy + np.array([0.5, 0.15])
+
+            body_x, body_y = body_xy[0], body_xy[1]
+            body_yaw = 45 + cam_yaw
+
         elif view == "c":
-            # No rotation, just translate
-            x += 0.55
-            # No change in y
+            body_xy = np.matmul(get_2d_rotation_matrix(math.radians(0)), cam_xy) #no rotation
+            body_xy = body_xy + np.array([0.55, 0.0])
+
+            body_x, body_y = body_xy[0], body_xy[1]
+            body_yaw = 0 + cam_yaw
+
         elif view == "cr":
-            # Rotate 45 degrees anticlockwise and translate
-            yaw += rotate_45_deg_anticlockwise
-            x += 0.5
-            y -= 0.15
+            body_xy = np.matmul(get_2d_rotation_matrix(math.radians(45)), cam_xy)
+            body_xy = body_xy + np.array([0.5, -0.15])
+
+            body_x, body_y = body_xy[0], body_xy[1]
+            body_yaw = -45 + cam_yaw
         elif view == "r":
-            # Rotate 90 degrees anticlockwise and translate
-            yaw += rotate_90_deg_anticlockwise
-            x += 0.4
-            y -= 0.25
+            body_xy = np.matmul(get_2d_rotation_matrix(math.radians(90)), cam_xy)
+            body_xy = body_xy + np.array([0.4, -0.35])
+
+            body_x, body_y = body_xy[0], body_xy[1]
+            body_yaw = -90 + cam_yaw
 
         # Return the transformed SE2 pose
-        return [x, y, yaw]
+        return [body_x, body_y, body_yaw]
 
 
     
@@ -192,10 +209,9 @@ class SemanticMemory:
             start_index = img_path.find("waypoint_")
             end_index = img_path.find("_", start_index + len("waypoint_"))
             waypoint_str = img_path[start_index:end_index]
-
             viewpoint_str = img_path.split("/")[-1].split("_")[3]
 
-            objects = yolo_farm.get_object_centroids(image_path=f'{self.images_loc}/{img_path}')
+            objects = yolo_farm.get_object_centroids(image_path=f'{self.images_loc}/{img_path}', confidence_thresh=0.2)
 
             for obj_item in objects:
 
@@ -211,14 +227,15 @@ class SemanticMemory:
                 world_homogenous = np.matmul(self.handcam_K_inv, cam_homogenous)
                 world_homogenous[2] = cam_z * 0.001 # set z from depth to make true depth and convert mm to m
                 world_pose_cam = world_homogenous
+
                 se2_cam = [
                             world_pose_cam[2], 
-                           -world_pose_cam[1], 
-                           math.degrees(math.atan2((cam_x - self.handcam_K[0,2]), self.handcam_K[0,0]))
+                            world_pose_cam[1], 
+                            math.degrees(math.atan2((cam_x - self.handcam_K[0,2]), self.handcam_K[0,0]))
                            ]
                 
                 # !!!!!!!!!!! Needs work !!!!!!!!!!!!!!!!!
-                se2 = self.rotate_se2_from_view_to_body(se2_cam, viewpoint_str)
+                se2 = self.se2_cam_to_body(se2_cam, viewpoint_str)
 
                 waypoint_and_se2 = [waypoint_str, se2[0], se2[1], se2[2]]
 

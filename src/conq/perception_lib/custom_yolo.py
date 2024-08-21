@@ -51,7 +51,7 @@ class YOLOFarm:
 
         return image
     
-    def get_object_centroids(self, image_path, results = None):
+    def get_object_centroids(self, image_path, confidence_thresh=0.5, results = None):
 
         image_objects = []
         ignore_these_classes = ['person', 'chair', 'bench', 'couch', 'dining table']
@@ -66,7 +66,7 @@ class YOLOFarm:
             conf = result[0].boxes.conf[i]
             cls_name = self.model.names[int(cls)]
 
-            if conf < 0.6 or cls_name in ignore_these_classes:
+            if conf < confidence_thresh or cls_name in ignore_these_classes:
                 continue
 
             centroid = int(x1 + (x2 - x1)/2), int(y1 + (y2 - y1)/2)
