@@ -114,7 +114,7 @@ ORIENTATION_MAP = {
     'hand_search':                      (0.55,0.0,0.65, 0.819,0.0,0.574,0.0),
     'hand_search_forward':              (0.8,0.0,0.15, 0.819,0.0,0.574,0.0),
     'find_grasp_front':                 (0.75,0.0,-0.10, 0.7071,0.,0.7071,0)
-    # 'find_grasp_front':                 (0.75,0.0,0.65, 1,0.,0.,0)
+    # 'find_grasp_front':                 (0.75,0.0,0.25, 1,0.,0.,0)
 }
 
 # Mapping from visual to depth data
@@ -229,7 +229,7 @@ class SemanticGrasper:
 
     def walk_to_pixel(self, rgb_response, walk_x, walk_y):
             walk_vec = geometry_pb2.Vec2(x= walk_x, y=walk_y)
-            offset_distance = wrappers_pb2.FloatValue(value=0.75)
+            offset_distance = wrappers_pb2.FloatValue(value=1.0)
 
             # Build the proto
             walk_to = manipulation_api_pb2.WalkToObjectInImage(
@@ -438,7 +438,7 @@ class SemanticGrasper:
                 pointcloud.segment_xyz(seg_mask.squeeze())
 
                 pointcloud.save_pcd(path = PCD_PATH)
-                pointcloud.save_npy(path = NPY_PATH)
+                pointcloud.save_npy(path = NPY_PATH)    
                 
                 # Call Grasp detection Module
                 grasp_pose = get_best_grasp_pose(body_T_hand)
@@ -456,7 +456,7 @@ class SemanticGrasper:
                 gripper_open_percent = grasp_width_to_gripper_open_percent(local_grasp_width)
                 status = open_gripper(clients, open_percentage=gripper_open_percent + 15)
                 time.sleep(0.25)
-                status = move_gripper(clients, grasp_pose, blocking = True, duration = 5, with_body=True)
+                status = move_gripper(clients, grasp_pose, blocking = True, duration = 1, with_body=True)
                 time.sleep(0.25)
                 status = close_gripper(clients)
                 time.sleep(1)
@@ -543,7 +543,7 @@ if __name__ == "__main__":
 
     # sg.search_object_with_gripper("hose nozzle")
 
-    # sg.orient_and_grasp('find_grasp_front', 'drill')
+    sg.orient_and_grasp('find_grasp_front', 'yellow chisel')
 
     
 

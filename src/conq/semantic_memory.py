@@ -18,8 +18,8 @@ from conq.perception_lib.custom_yolo import YOLOFarm
 
 def update_chatgpt_log(input_tokens, output_tokens):
     
-    file_path = "/Users/adibalaji/Desktop/agrobots/playground/chatgpt_calls.json"
-    # file_path = "/home/adibalaji/Desktop/agrobots/chatgpt_calls.json"
+    # file_path = "/Users/adibalaji/Desktop/agrobots/playground/chatgpt_calls.json"
+    file_path = "/home/adibalaji/Desktop/agrobots/chatgpt_calls.json"
     
     with open(file_path, 'r') as file:
             data = json.load(file)
@@ -164,14 +164,14 @@ class SemanticMemory:
             body_xy = body_xy + np.array([0.4, 0.35])
 
             body_x, body_y = body_xy[0], body_xy[1]
-            body_yaw = 90 + cam_yaw
+            body_yaw = 90 - cam_yaw
             
         elif view == "cl":
             body_xy = np.matmul(get_2d_rotation_matrix(math.radians(-45)), cam_xy)
             body_xy = body_xy + np.array([0.5, 0.15])
 
             body_x, body_y = body_xy[0], body_xy[1]
-            body_yaw = 45 + cam_yaw
+            body_yaw = 45 - cam_yaw
 
         elif view == "c":
             body_xy = np.matmul(get_2d_rotation_matrix(math.radians(0)), cam_xy) #no rotation
@@ -185,13 +185,13 @@ class SemanticMemory:
             body_xy = body_xy + np.array([0.5, -0.15])
 
             body_x, body_y = body_xy[0], body_xy[1]
-            body_yaw = -45 + cam_yaw
+            body_yaw = 45 + cam_yaw
         elif view == "r":
             body_xy = np.matmul(get_2d_rotation_matrix(math.radians(90)), cam_xy)
             body_xy = body_xy + np.array([0.4, -0.35])
 
             body_x, body_y = body_xy[0], body_xy[1]
-            body_yaw = -90 + cam_yaw
+            body_yaw = 90 + cam_yaw
 
         # Return the transformed SE2 pose
         return [body_x, body_y, body_yaw]
@@ -210,7 +210,7 @@ class SemanticMemory:
             waypoint_str = img_path[start_index:end_index]
             viewpoint_str = img_path.split("/")[-1].split("_")[3]
 
-            objects = yolo_farm.get_object_centroids(image_path=f'{self.images_loc}/{img_path}', confidence_thresh=0.2)
+            objects = yolo_farm.get_object_centroids(image_path=f'{self.images_loc}/{img_path}', confidence_thresh=0.5)
 
             for obj_item in objects:
 
@@ -236,13 +236,28 @@ class SemanticMemory:
                 # !!!!!!!!!!! Needs work !!!!!!!!!!!!!!!!!
                 se2 = self.se2_cam_to_body(se2_cam, viewpoint_str)
 
-                waypoint_and_se2 = [waypoint_str, se2[0], se2[1], se2[2]]
+                waypoint_and_se2 = [waypoint_str, se2[0], se2[1], se2[2], viewpoint_str]
 
                 #Add to memory
-                if obj not in self.memory:
+                if obj in self.memory:
+                    curr_x, curr_y = self.memory[obj][1], self.memory[obj][1]
+                    if math.sqrt(curr_x**2 + curr_y**2) > math.sqrt(waypoint_and_se2[1]**2 + waypoint_and_se2[1]**2):
+                        self.memory[obj] = waypoint_and_se2
+                        print(f'se2 cam: {se2_cam}')
+                        print(f'Added {obj} at body frame pose {waypoint_and_se2}..\n')
+
+                        show_img = cv2.imread(f'{self.images_loc}/{img_path}')
+                        cv2.imshow('added obj', show_img)
+                        cv2.waitKey(0)
+
+                elif obj not in self.memory:
                     self.memory[obj] = waypoint_and_se2
                     print(f'se2 cam: {se2_cam}')
                     print(f'Added {obj} at body frame pose {waypoint_and_se2}..\n')
+
+                    show_img = cv2.imread(f'{self.images_loc}/{img_path}')
+                    cv2.imshow('added obj', show_img)
+                    cv2.waitKey(0)
 
         with open(self.memory_loc, 'w') as memory_json_file:
             json.dump(self.memory, memory_json_file, indent=4)
@@ -252,13 +267,5 @@ class SemanticMemory:
 if __name__ == "__main__":
 
     semantic_memory = SemanticMemory()
-    with open('/Users/adibalaji/Desktop/agrobots/conq_python/data/json/spot_object_memory.json', 'r') as file:
-        semantic_memory.memory = json.load(file)
-    # semantic_memory.dream()
-    hierarchy = semantic_memory.construct_semantic_search_ranking("book")
-    print(hierarchy)
-    print()
-
-    for obj in hierarchy:
-        print(f"{obj} : {semantic_memory.memory[obj]}")
+    semantic_memory.dream()
 

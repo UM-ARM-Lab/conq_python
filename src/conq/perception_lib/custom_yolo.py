@@ -34,6 +34,9 @@ class YOLOFarm:
         image = self.load_image(image_path)
         result = self.model(image, device=self.device)
         return result
+    
+    def run_inference_raw_image(self, image):
+        return self.model(image, device=self.device)
 
     def draw_boxes(self, image, result):
 

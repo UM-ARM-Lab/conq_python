@@ -133,7 +133,7 @@ class WaypointPhotographer:
             # Save the image
             cv2.imwrite(self.MEMORY_IMAGE_PATH + src + f"_{waypoint_str}_.jpg", image)    
 
-    def _take_hand_photo_at_waypoint(self, char_hand_pose, waypoint_str):
+    def _take_hand_photo_at_waypoint(self, char_hand_pose, waypoint_str, depth=True):
 
         DEPTH_PATH = os.getenv('MEMORY_DEPTH_IMAGE_PATH')
 
@@ -148,8 +148,9 @@ class WaypointPhotographer:
         cv2.imwrite(self.MEMORY_IMAGE_PATH + src + f"_{char_hand_pose}_{waypoint_str}_.jpg", image)    
 
         # Save depth
-        vision = Vision(image_client=self.image_client, sources=['hand_depth_in_hand_color_frame', 'hand_color_image'])
-        depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True, file_name=f"hand_color_image_{char_hand_pose}_{waypoint_str}_depth")
+        if depth:
+            vision = Vision(image_client=self.image_client, sources=['hand_depth_in_hand_color_frame', 'hand_color_image'])
+            depth = vision.get_latest_Depth(path = DEPTH_PATH, save = True, file_name=f"hand_color_image_{char_hand_pose}_{waypoint_str}_depth")
         
 
 
@@ -184,32 +185,32 @@ class WaypointPhotographer:
         ########################################################################################################################################################
 
         # Lower, angled straight out
-        move_gripper(self.clients, (0.40, 0.25, 0.4, 0.707, 0.0, 0.0, 0.707), blocking=True, duration=0.3)
+        move_gripper(self.clients, (0.50, 0.25, 0.0, 0.707, 0.0, 0.0, 0.707), blocking=True, duration=0.3)
         time.sleep(1)
         self._take_hand_photo_at_waypoint(char_hand_pose='l', waypoint_str=waypoint_name)
         
 
-        move_gripper(self.clients, (0.50, 0.15, 0.4, 0.924, 0.0, 0.0, 0.383), blocking=True, duration=0.3)
+        move_gripper(self.clients, (0.60, 0.15, 0.0, 0.924, 0.0, 0.0, 0.383), blocking=True, duration=0.3)
         time.sleep(1)
         self._take_hand_photo_at_waypoint(char_hand_pose='cl', waypoint_str=waypoint_name)
         
 
-        move_gripper(self.clients, (0.55, 0.0, 0.4, 1.0, 0.0, 0.0, 0.0), blocking=True, duration=0.3)
+        move_gripper(self.clients, (0.65, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0), blocking=True, duration=0.3)
         time.sleep(1)
         self._take_hand_photo_at_waypoint(char_hand_pose='c', waypoint_str=waypoint_name)
         
 
-        move_gripper(self.clients, (0.50, -0.15, 0.4, 0.924, 0.0, 0.0, -0.383), blocking=True, duration=0.3)
+        move_gripper(self.clients, (0.60, -0.15, 0.0, 0.924, 0.0, 0.0, -0.383), blocking=True, duration=0.3)
         time.sleep(1)
         self._take_hand_photo_at_waypoint(char_hand_pose='cr', waypoint_str=waypoint_name)
         
 
-        move_gripper(self.clients, (0.40, -0.25,0.4,  0.707, 0.0, 0.0, -0.707), blocking=True, duration=0.3)
+        move_gripper(self.clients, (0.50, -0.25,0.0,  0.707, 0.0, 0.0, -0.707), blocking=True, duration=0.3)
         time.sleep(1)
         self._take_hand_photo_at_waypoint(char_hand_pose='r', waypoint_str=waypoint_name)
         
 
-        move_gripper(self.clients, (0.55, 0.0, 0.4, 1.0, 0.0, 0.0, 0.0), blocking=True, duration=0.3)
+        move_gripper(self.clients, (0.65, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0), blocking=True, duration=0.3)
 
         # self._take_body_photos_at_waypoint(waypoint_str=waypoint_name)
         
